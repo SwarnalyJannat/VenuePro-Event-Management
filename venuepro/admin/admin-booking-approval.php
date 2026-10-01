@@ -1,0 +1,209 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('admin', 'admin-login.php');
+$db = getDBConnection();
+?>
+<?php
+$bookingId = (int)($_GET['booking_id'] ?? 0);
+$bookingDetail = null;
+if ($bookingId > 0) {
+    $stmtBD = $db->prepare("SELECT b.*, u.name AS customer_name, u.email AS customer_email, u.phone AS customer_phone, v.name AS venue_name, cp.title AS package_title FROM bookings b JOIN users u ON b.customer_id=u.id JOIN venues v ON b.venue_id=v.id LEFT JOIN catering_packages cp ON b.package_id=cp.id WHERE b.id=? LIMIT 1");
+    $stmtBD->execute([$bookingId]);
+    $bookingDetail = $stmtBD->fetch();
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro Admin – Approval Review</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <input type="checkbox" id="sidebar-toggle">
+  <div class="app-shell">
+    
+    
+    <aside class="sidebar" id="main-sidebar">
+      <div class="sidebar-logo">
+        <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
+          <div class="sidebar-logo-text">VenuePro</div>
+        <div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-label">Governance</div>
+        <a href="admin-dashboard.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Dashboard
+        </a>
+        <a href="admin-pending-bookings.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Bookings Approvals
+        </a>
+        <a href="venue-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Venue Catalog
+        </a>
+        <a href="admin-catering-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg> Catering Oversight
+        </a>
+        <a href="admin-staff-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Staff Directory
+        </a>
+        <a href="admin-reports.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Reports &amp; Analytics
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
+        </a>
+      </div>
+    </aside>
+
+    <div class="main-content">
+            <header class="topbar">
+        <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </label>
+        <div class="topbar-search">
+          <span class="topbar-search-icon">🔍</span>
+          <input type="text" placeholder="Search bookings, venues, staff, caterers...">
+        </div>
+        <div class="topbar-actions">
+                  <a href="admin-policy-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Legal &amp; Policies
+        </a>
+        <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
+            <span class="badge">8</span>
+            🔔
+          </a>
+          <div class="topbar-user">
+            <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+            <div class="user-info">
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main class="page-body">
+<div class="breadcrumb">
+  <a href="admin-pending-bookings.php">Bookings</a>
+  <span class="breadcrumb-sep">›</span>
+  <span class="breadcrumb-current">#BK-9021 Review</span>
+</div>
+
+<div class="flex-between mb-24">
+  <div>
+    <h1>Booking Approval Review – #BK-9021</h1>
+    <p>Submitted by Jane Doe Events on Sep 5, 2026</p>
+  </div>
+  <span class="pill pill-pending" style="font-size:0.85rem; padding:6px 14px;">STATUS: PENDING REVIEW</span>
+</div>
+
+<div class="grid-2" style="grid-template-columns: 2fr 1.2fr; gap:24px;">
+  <div>
+    <div class="card mb-24">
+      <h3 class="mb-16">Reservation Specifications</h3>
+      <div class="grid-2 gap-16 mb-16">
+        <div>
+          <div class="text-xs text-muted">Selected Venue</div>
+          <div class="font-bold text-base">Grand Emerald Ballroom</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted">Event Schedule</div>
+          <div class="font-bold text-base">October 12, 2026 • 12 Hours</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted">Attendance Count</div>
+          <div class="font-bold text-base">150 Attendees</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted">Catering Selection</div>
+          <div class="font-bold text-base">Platinum Gala Package</div>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--gray-200); padding-top:12px;" class="flex-between">
+        <span class="font-bold">Total Estimated Booking Value</span>
+        <span class="font-bold text-primary" style="font-size:1.3rem;">$5,809.32</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 class="mb-12">Client Profile</h3>
+      <div class="text-sm mb-4"><span class="text-muted">Entity:</span> <strong>Jane Doe Events Ltd.</strong></div>
+      <div class="text-sm mb-4"><span class="text-muted">Contact:</span> jane@jdoevents.com • +1 (555) 839-2910</div>
+      <div class="text-sm"><span class="text-muted">Previous Platform Bookings:</span> 4 successful events</div>
+    </div>
+  </div>
+
+  <div class="card" style="background:var(--gray-50);">
+    <h3 class="mb-16">Approval Decision</h3>
+    <form action="admin-approval-success.php">
+      <div class="form-group">
+        <label class="form-label">Internal Compliance Notes</label>
+        <textarea class="form-control" rows="3">A/V requirements and floor capacity verified with staff coordinator.</textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full mb-12" style="background:#16a34a; border-color:#16a34a;">✓ Approve & Confirm Booking</button>
+      <a href="booking-rejected.php" class="btn btn-danger btn-outline btn-full">✗ Reject Reservation</a>
+    </form>
+  </div>
+</div>
+</main>
+                        <footer class="page-footer">
+        <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
+        <div class="footer-links">
+          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
+        </div>
+      </footer>
+    </div>
+  </div>
+<script src="../js/app.js"></script>
+
+<script>
+async function approveBooking() {
+  const notes = document.getElementById('admin-notes') ? document.getElementById('admin-notes').value : '';
+  const bookingId = <?= $bookingId ?? 0 ?>;
+  if (!bookingId) return alert('No booking selected.');
+  if (!confirm('Approve booking #<?= $bookingDetail ? e($bookingDetail["booking_code"]) : "" ?>?')) return;
+  const res = await fetch('../api/bookings.php?action=update_status', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({booking_id: bookingId, status: 'confirmed', notes: notes})
+  });
+  const d = await res.json();
+  if (d.success) { alert('Booking approved!'); window.location.href = 'admin-approval-success.php?booking_id=' + bookingId; }
+  else alert('Error: ' + d.message);
+}
+async function rejectBooking() {
+  const bookingId = <?= $bookingId ?? 0 ?>;
+  const reason = document.getElementById('rejection-reason') ? document.getElementById('rejection-reason').value : '';
+  if (!reason.trim()) return alert('Please provide a rejection reason.');
+  if (!confirm('Reject this booking?')) return;
+  const res = await fetch('../api/bookings.php?action=update_status', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({booking_id: bookingId, status: 'rejected', notes: reason})
+  });
+  const d = await res.json();
+  if (d.success) { alert('Booking rejected.'); location.reload(); }
+  else alert('Error: ' + d.message);
+}
+// Wire buttons
+document.addEventListener('DOMContentLoaded', function() {
+  const approveBtn = document.querySelector('.btn-approve, .btn[onclick*="approve"], button.btn-success');
+  const rejectBtn  = document.querySelector('.btn-reject, .btn-danger, button.btn-outline.btn-danger');
+  if (approveBtn) approveBtn.addEventListener('click', function(e){ e.preventDefault(); approveBooking(); });
+  if (rejectBtn)  rejectBtn.addEventListener('click',  function(e){ e.preventDefault(); rejectBooking(); });
+
+  // Also find by text content
+  document.querySelectorAll('button, a.btn').forEach(function(el){
+    if (el.textContent.trim().toLowerCase().includes('approve')) el.addEventListener('click', function(e){ e.preventDefault(); approveBooking(); });
+    if (el.textContent.trim().toLowerCase().includes('reject'))  el.addEventListener('click', function(e){ e.preventDefault(); rejectBooking(); });
+  });
+});
+</script>
+
+</body>
+</html>

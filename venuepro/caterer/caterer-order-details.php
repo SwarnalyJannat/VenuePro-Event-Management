@@ -1,3 +1,46 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('caterer', 'caterer-login.php');
+$db = getDBConnection();
+?>
+<?php
+$catUser = $currentUser;
+$orderId = (int)($_GET['order_id'] ?? 0);
+$orderDetail = null; $singularItems = [];
+
+// Fetch all pending/in-progress orders for this caterer (for selector)
+$stmtOrds = $db->prepare(
+    "SELECT co.*, b.event_name, b.event_date, b.start_time, b.end_time, b.guest_count, b.total_amount,
+     v.name AS venue_name, cp.title AS package_title, cp.price_per_event AS package_cost,
+     u.name AS customer_name, u.email AS customer_email
+     FROM caterer_orders co
+     JOIN bookings b ON co.booking_id = b.id
+     JOIN venues v ON b.venue_id = v.id
+     LEFT JOIN catering_packages cp ON b.package_id = cp.id
+     JOIN users u ON b.customer_id = u.id
+     WHERE co.caterer_id = ?
+     ORDER BY b.event_date ASC"
+);
+$stmtOrds->execute([$catUser['id']]);
+$allOrders = $stmtOrds->fetchAll();
+
+if ($orderId > 0) {
+    foreach ($allOrders as $o) {
+        if ((int)$o['id'] === $orderId) { $orderDetail = $o; break; }
+    }
+}
+if (!$orderDetail && !empty($allOrders)) {
+    $orderDetail = $allOrders[0];
+    $orderId = (int)$orderDetail['id'];
+}
+if ($orderDetail) {
+    $stmtSI = $db->prepare("SELECT bsi.* FROM booking_singular_items bsi JOIN caterer_orders co ON bsi.booking_id = co.booking_id WHERE co.id = ?");
+    $stmtSI->execute([$orderId]);
+    $singularItems = $stmtSI->fetchAll();
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -225,29 +268,29 @@
       </div>
       <nav class="sidebar-nav">
         <div class="nav-label">Culinary Dashboard</div>
-        <a href="caterer-dashboard.html" class="nav-item">
+        <a href="caterer-dashboard.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           Kitchen Overview
         </a>
-        <a href="caterer-order-details.html" class="nav-item active">
+        <a href="caterer-order-details.php" class="nav-item active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
           Select an Order
         </a>
-        <a href="caterer-food-packages.html" class="nav-item">
+        <a href="caterer-food-packages.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
           Package Library
         </a>
-        <a href="caterer-menu-items.html" class="nav-item">
+        <a href="caterer-menu-items.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
           Singular Menu Items
         </a>
-        <a href="caterer-create-package-1.html" class="nav-item">
+        <a href="caterer-create-package-1.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           Create Package
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.html" class="nav-item" style="color:var(--gray-400);">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Log out
         </a>
@@ -264,15 +307,15 @@
           <input type="text" placeholder="Search kitchen orders, menus, packages...">
         </div>
         <div class="topbar-actions">
-          <a href="caterer-notifications.html" class="topbar-icon-btn" title="Notifications">
+          <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">5</span>
             🔔
           </a>
           <div class="topbar-user">
-            <div class="user-avatar" style="background:#059669;">AR</div>
+            <div class="user-avatar" style="background:#059669;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
-              <div class="user-name">Alex Rivera</div>
-              <div class="user-role">Caterer</div>
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
             </div>
           </div>
         </div>
@@ -280,7 +323,7 @@
 
       <main class="page-body">
         <div class="breadcrumb">
-          <a href="caterer-dashboard.html">Kitchen Overview</a>
+          <a href="caterer-dashboard.php">Kitchen Overview</a>
           <span class="breadcrumb-sep">›</span>
           <span class="breadcrumb-current">Order Inspection &amp; Item Approvals</span>
         </div>
@@ -290,7 +333,7 @@
             <h1 style="font-size:1.85rem; font-weight:800; margin-bottom:4px;">Order Approvals &amp; Specifications</h1>
             <p>Review incoming customer orders. Accept or reject catering packages and singular add-on items individually.</p>
           </div>
-          <a href="caterer-dashboard.html" class="btn btn-ghost btn-sm">← Back to Overview</a>
+          <a href="caterer-dashboard.php" class="btn btn-ghost btn-sm">← Back to Overview</a>
         </div>
 
         <!-- Order Number List Selector -->
@@ -1076,5 +1119,6 @@
       loadOrder('ORD-2045');
     });
   </script>
+<script src="../js/app.js"></script>
 </body>
 </html>

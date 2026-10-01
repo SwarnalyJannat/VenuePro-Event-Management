@@ -1,0 +1,146 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('staff', 'staff-login.php');
+$db = getDBConnection();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro Staff – Notifications</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .notif-item { display: flex; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--gray-100); background: #fff; align-items: flex-start; }
+    .notif-item.unread { background: #f0fdf4; border-left: 3px solid #16a34a; }
+    .notif-icon-box { width: 38px; height: 38px; border-radius: 50%; background: #eff6ff; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <input type="checkbox" id="sidebar-toggle">
+  <div class="app-shell">
+    
+    <aside class="sidebar" id="main-sidebar">
+      <div class="sidebar-logo">
+        <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
+          <div class="sidebar-logo-text">VenuePro</div>
+        <div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-label">Coordination</div>
+        <a href="staff-dashboard.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Staff Dashboard
+        </a>
+        <a href="staff-event-setup.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg> Event Setup Detail
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
+        </a>
+      </div>
+    </aside>
+
+    <div class="main-content">
+            <header class="topbar">
+        <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </label>
+        <div class="topbar-search">
+          <span class="topbar-search-icon">🔍</span>
+          <input type="text" placeholder="Search assigned tasks, venues, clients...">
+        </div>
+        <div class="topbar-actions">
+          <a href="staff-notifications.php" class="topbar-icon-btn" title="Notifications">
+            <span class="badge">4</span>
+            🔔
+          </a>
+          <a href="staff-chat.php" class="topbar-icon-btn" title="Customer Chat">
+            💬
+          </a>
+          <div class="topbar-user">
+            <div class="user-avatar" style="background:#7c3aed;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+            <div class="user-info">
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-body">
+        <div class="breadcrumb mb-16">
+          <a href="staff-dashboard.php">Dashboard</a>
+          <span class="breadcrumb-sep">›</span>
+          <span class="breadcrumb-current">Staff Notifications</span>
+        </div>
+
+        <div class="flex-between mb-24">
+          <div>
+            <h1>Staff Notifications &amp; Task Alerts</h1>
+            <p>Direct alerts for assigned event setups, customer chat inquiries, and schedule dispatches.</p>
+          </div>
+          <span class="text-xs text-muted">4 Unread Alerts</span>
+        </div>
+
+        <div class="card" style="padding:0; overflow:hidden;">
+          <div class="notif-item unread">
+            <div class="notif-icon-box" style="background:#eff6ff; color:#2563eb;">💬</div>
+            <div style="flex:1;">
+              <div class="flex-between mb-4">
+                <strong>New Message from Client Mahmud</strong>
+                <span class="text-xs text-muted">12:30 PM</span>
+              </div>
+              <p class="text-xs text-muted mb-8">"Could we ensure the wireless lapel microphones and podium sound system are fully tested by 5:00 PM today?"</p>
+              <a href="staff-chat.php" class="btn btn-primary btn-sm" style="font-size:0.75rem; padding:4px 10px;">Reply in Chat →</a>
+            </div>
+          </div>
+
+          <div class="notif-item unread">
+            <div class="notif-icon-box" style="background:#f0fdf4; color:#16a34a;">📋</div>
+            <div style="flex:1;">
+              <div class="flex-between mb-4">
+                <strong>New Task Assignment: Stage Illumination</strong>
+                <span class="text-xs text-muted">11:15 AM</span>
+              </div>
+              <p class="text-xs text-muted mb-8">Admin Alex Sterling assigned you to verify lighting presets for Grand Emerald Ballroom (#BK-9021).</p>
+              <a href="staff-event-setup.php" class="btn btn-outline btn-sm" style="font-size:0.75rem; padding:4px 10px;">Open Setup Checklist</a>
+            </div>
+          </div>
+
+          <div class="notif-item unread">
+            <div class="notif-icon-box" style="background:#fef3c7; color:#d97706;">⏱</div>
+            <div style="flex:1;">
+              <div class="flex-between mb-4">
+                <strong>Upcoming Event Soundcheck in 2 Hours</strong>
+                <span class="text-xs text-muted">10:00 AM</span>
+              </div>
+              <p class="text-xs text-muted">Skyline Vista Lounge (#BK-9045) soundcheck scheduled with A/V tech Marcus Vance.</p>
+            </div>
+          </div>
+
+          <div class="notif-item">
+            <div class="notif-icon-box" style="background:#f1f5f9; color:var(--gray-600);">✓</div>
+            <div style="flex:1;">
+              <div class="flex-between mb-4">
+                <strong>Catering Arrival Logged</strong>
+                <span class="text-xs text-muted">Yesterday</span>
+              </div>
+              <p class="text-xs text-muted">Artisan Kitchen team logged delivery confirmation for Grand Emerald Ballroom.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+            <footer class="page-footer">
+        <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+      </footer>
+    </div>
+  </div>
+<script src="../js/app.js"></script>
+</body>
+</html>

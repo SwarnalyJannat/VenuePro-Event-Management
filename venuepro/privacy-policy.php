@@ -1,0 +1,116 @@
+<?php
+require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/helpers.php';
+$currentUser = getCurrentUser();
+$db = getDBConnection();
+?>
+<?php
+$stmtPol = $db->prepare("SELECT * FROM site_policies WHERE policy_key = ? LIMIT 1");
+$stmtPol->execute(['privacy_policy']);
+$policyRow = $stmtPol->fetch();
+$policyTitle = $policyRow['title'] ?? 'Policy';
+$policyHtml = $policyRow['content'] ?? '<p>Policy information is being updated.</p>';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro – Privacy Policy</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .legal-container { max-width: 960px; margin: 0 auto; padding: 40px 24px 60px; }
+    .legal-header { margin-bottom: 28px; border-bottom: 1px solid var(--gray-200); padding-bottom: 20px; }
+    .legal-section { margin-bottom: 28px; }
+    .legal-section h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 10px; color: var(--gray-900); }
+    .legal-section p, .legal-section li { font-size: 0.95rem; line-height: 1.65; color: var(--gray-700); margin-bottom: 12px; }
+    .legal-section ul { padding-left: 24px; margin-bottom: 16px; }
+  </style>
+</head>
+<body style="background:#f8fafc;">
+
+  <!-- Header with ONLY Back Button -->
+  <header class="landing-header" style="display:flex; align-items:center; justify-content:space-between; padding:18px 48px; background:#fff; border-bottom:1px solid var(--gray-200); position:sticky; top:0; z-index:100;">
+    <div class="flex-center gap-12">
+      <a href="customer/customer-dashboard.php" style="text-decoration:none; display:flex; align-items:center; gap:12px;">
+        <img src="assets/logo.png" alt="VenuePro" class="header-logo-img">
+        <div>
+          <div style="font-size:1.2rem; font-weight:800; color:var(--gray-900);">VenuePro</div>
+          <div style="font-size:0.7rem; color:var(--gray-500); font-weight:500;">Customer Legal Portal</div>
+        </div>
+      </a>
+    </div>
+    <nav class="flex-center gap-12">
+      <button onclick="if(window.history.length > 1){window.history.back();}else{window.location.href='customer/customer-dashboard.php';}" class="btn btn-outline btn-sm flex-center gap-8" style="font-weight:700; cursor:pointer; padding:7px 16px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Back</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="legal-container">
+    <div class="legal-header">
+      <h1 style="font-size:2.2rem; font-weight:800; margin:10px 0 6px;">Privacy Policy</h1>
+      <p class="text-sm text-muted">Last Updated: September 6, 2026 · Effective for All Customer Reservations</p>
+    </div>
+
+    <div class="card mb-32" style="padding:28px;">
+      <div class="legal-section">
+        <h2>1. Commitment to Privacy &amp; Platform Security</h2>
+        <p>VenuePro Enterprise Event Management ("VenuePro", "we", "us", or "our") is dedicated to protecting the privacy, confidentiality, and data integrity of all users, including event organizers, guests, partner caterers, staffing personnel, and enterprise administrators.</p>
+        <p>This Privacy Policy describes how we collect, process, store, and safeguard your personal and enterprise information across our web applications, booking engines, and logistics services.</p>
+      </div>
+
+      <div class="legal-section">
+        <h2>2. Information We Collect from Customers</h2>
+        <p>We collect information necessary to coordinate events, process transactions, and guarantee safety:</p>
+        <ul>
+          <li><strong>Client &amp; Organizer Details:</strong> Name, corporate affiliation, contact phone, billing address, and government identification where required.</li>
+          <li><strong>Booking &amp; Event Parameters:</strong> Event dates, venue reservations, expected guest headcount, floor plans, and staging specifications.</li>
+          <li><strong>Culinary &amp; Dietary Specifications:</strong> Selected catering tiers, allergen restrictions, menu adjustments, and guest count revisions.</li>
+          <li><strong>Vendor &amp; Staff Credentials:</strong> Commercial kitchen permits, National ID (NID), curriculum vitae (CV), and security clearances for on-site staff.</li>
+          <li><strong>Transactional &amp; Payment Data:</strong> Invoice histories, payment method confirmations (tokenized via SSL/PCI-DSS certified processors), and settlement records.</li>
+        </ul>
+      </div>
+
+      <div class="legal-section">
+        <h2>3. How Information Is Utilized</h2>
+        <p>Your data is processed strictly for operational and governance purposes:</p>
+        <ul>
+          <li>Orchestrating venue reservations and verifying calendar availability without date conflicts.</li>
+          <li>Transmitting real-time order specifications to verified commercial catering partner kitchens.</li>
+          <li>Coordinating event setup checklists and staffing deployments for on-site event managers.</li>
+          <li>Issuing formal corporate tax invoices, receipts, and downloadable accounting statements.</li>
+          <li>Maintaining audit trails compliant with SOC-2 enterprise data governance standards.</li>
+        </ul>
+      </div>
+
+      <div class="legal-section">
+        <h2>4. Data Protection &amp; Encryption Standards</h2>
+        <p>All sensitive information transmitted through VenuePro is encrypted in transit using 256-bit TLS/SSL protocols. Server data storage incorporates AES-256 encryption at rest, role-based access controls (RBAC), and automated threat detection.</p>
+      </div>
+
+      <div class="legal-section">
+        <h2>5. Information Sharing &amp; Third-Party Disclosure</h2>
+        <p>VenuePro does not sell, lease, or monetize user data. Information is only disclosed to authorized parties directly involved in executing your reservation (e.g., the assigned caterer receiving meal count breakdowns or on-site security checking guest registries).</p>
+      </div>
+
+      <div class="legal-section">
+        <h2>6. Your Rights &amp; Data Management</h2>
+        <p>You retain the right to inspect, correct, or request the archival of your personal records. For compliance inquiries or data access requests, please contact our Data Protection Office via the <a href="contact-support.php" class="text-primary font-semibold">Contact Support</a> portal.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="page-footer">
+    <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+    <div class="footer-links">
+      <a href="privacy-policy.php">Privacy Policy</a>
+      <a href="terms-of-service.php">Terms of Service</a>
+      <a href="contact-support.php">Contact Support</a>
+    </div>
+  </footer>
+<script src="js/app.js"></script>
+</body>
+</html>

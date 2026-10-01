@@ -1,0 +1,172 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('admin', 'admin-login.php');
+$db = getDBConnection();
+?>
+<?php
+$stmtV = $db->prepare("SELECT v.*, COUNT(b.id) AS booking_count,
+    COALESCE(SUM(CASE WHEN b.booking_status IN ('confirmed','pending') THEN 1 ELSE 0 END),0) AS active_bookings
+    FROM venues v
+    LEFT JOIN bookings b ON v.id = b.venue_id
+    GROUP BY v.id ORDER BY v.id");
+$stmtV->execute();
+$venues = $stmtV->fetchAll();
+$totalVenues = count($venues);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro Admin – Venue Management</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <input type="checkbox" id="sidebar-toggle">
+  <div class="app-shell">
+    
+    
+    <aside class="sidebar" id="main-sidebar">
+      <div class="sidebar-logo">
+        <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
+          <div class="sidebar-logo-text">VenuePro</div>
+        <div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-label">Governance</div>
+        <a href="admin-dashboard.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Dashboard
+        </a>
+        <a href="admin-pending-bookings.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Bookings Approvals
+        </a>
+        <a href="venue-management.php" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Venue Catalog
+        </a>
+        <a href="admin-catering-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg> Catering Oversight
+        </a>
+        <a href="admin-staff-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Staff Directory
+        </a>
+        <a href="admin-reports.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Reports &amp; Analytics
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
+        </a>
+      </div>
+    </aside>
+
+    <div class="main-content">
+            <header class="topbar">
+        <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </label>
+        <div class="topbar-search">
+          <span class="topbar-search-icon">🔍</span>
+          <input type="text" placeholder="Search bookings, venues, staff, caterers...">
+        </div>
+        <div class="topbar-actions">
+                  <a href="admin-policy-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Legal &amp; Policies
+        </a>
+        <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
+            <span class="badge">8</span>
+            🔔
+          </a>
+          <div class="topbar-user">
+            <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+            <div class="user-info">
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main class="page-body">
+<div class="flex-between mb-24">
+  <div>
+    <h1>Venue Management Dashboard</h1>
+    <p>Manage all enterprise properties, pricing rules, and booking availability.</p>
+  </div>
+  <a href="add-new-venue.php" class="btn btn-primary">+ Add New Venue</a>
+</div>
+
+<div class="stats-grid mb-24">
+  <div class="stat-card">
+    <div class="stat-label">Total Properties</div>
+    <div class="stat-value"><?= $totalVenues ?></div>
+    <span class="stat-badge positive">All verified</span>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Active Bookings</div>
+    <div class="stat-value">34</div>
+    <span class="stat-badge positive">Current month</span>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">Average Occupancy</div>
+    <div class="stat-value">74.5%</div>
+    <span class="stat-badge positive">+6.2% vs last month</span>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Monthly Gross</div>
+    <div class="stat-value">$124.5k</div>
+    <span class="stat-badge neutral">September</span>
+  </div>
+</div>
+
+<div class="grid-2 gap-20">
+  <div class="card">
+    <div class="flex-between mb-12">
+      <div>
+        <span class="pill pill-confirmed mb-4">ACTIVE VENUE</span>
+        <h3>Grand Emerald Ballroom</h3>
+        <div class="text-xs text-muted">Downtown District • Max Capacity: 600 Guests</div>
+      </div>
+      <div class="text-right">
+        <div class="font-bold text-primary">$1,200.00 / day</div>
+        <div class="text-xs text-muted">Occupancy: 92%</div>
+      </div>
+    </div>
+    <div class="progress-bar mb-16"><div class="progress-fill" style="width:92%;"></div></div>
+    <div>
+      <a href="add-new-venue.php" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center;">Edit Properties</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex-between mb-12">
+      <div>
+        <span class="pill pill-confirmed mb-4">ACTIVE VENUE</span>
+        <h3>Skyline Vista Lounge</h3>
+        <div class="text-xs text-muted">North Waterfront District • Max Capacity: 200 Guests</div>
+      </div>
+      <div class="text-right">
+        <div class="font-bold text-primary">$2,450.00 / day</div>
+        <div class="text-xs text-muted">Occupancy: 78%</div>
+      </div>
+    </div>
+    <div class="progress-bar mb-16"><div class="progress-fill" style="width:78%;"></div></div>
+    <div>
+      <a href="add-new-venue.php" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center;">Edit Properties</a>
+    </div>
+  </div>
+</div>
+</main>
+                        <footer class="page-footer">
+        <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
+        <div class="footer-links">
+          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
+        </div>
+      </footer>
+    </div>
+  </div>
+<script src="../js/app.js"></script>
+</body>
+</html>

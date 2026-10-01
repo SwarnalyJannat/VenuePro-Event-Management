@@ -1,0 +1,540 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('caterer', 'caterer-login.php');
+$db = getDBConnection();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro Caterer – Singular Item Menu</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* CSS-only modal using :target */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 9999;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay:target { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: var(--radius); padding: 28px;
+      width: 100%; max-width: 520px; position: relative;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25); animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
+    .modal-close {
+      position: absolute; top: 16px; right: 16px;
+      font-size: 20px; font-weight: 700; color: var(--gray-500);
+      text-decoration: none; line-height: 1;
+    }
+    .modal-close:hover { color: var(--gray-900); }
+
+    /* Item Card Grid */
+    .item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+    .item-card {
+      border: 1.5px solid var(--gray-200); border-radius: var(--radius);
+      background: #fff; overflow: hidden; transition: all 0.2s;
+      display: flex; flex-direction: column;
+    }
+    .item-card:hover { border-color: #059669; box-shadow: 0 4px 16px rgba(5,150,105,0.12); transform: translateY(-2px); }
+    .item-card-img {
+      width: 100%; height: 140px; object-fit: cover; background: var(--gray-100);
+      display: flex; align-items: center; justify-content: center; font-size: 3rem;
+    }
+    .item-card-body { padding: 14px 16px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+    .item-card-actions { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--gray-100); }
+
+    /* CSS toggle for "remove" confirmation */
+    .remove-toggle { display: none; }
+    .remove-confirm { display: none; background: #fef2f2; border: 1px solid #fca5a5; border-radius: var(--radius-sm); padding: 10px 14px; margin: 8px 16px 12px; }
+    .remove-toggle:checked + label + .item-card-actions + .remove-confirm,
+    .remove-toggle:checked ~ .remove-confirm { display: block; }
+
+    .qty-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.72rem; font-weight: 700; padding: 2px 8px;
+      border-radius: 12px; background: #dcfce7; color: #166534;
+    }
+    .qty-badge.low { background: #fef3c7; color: #92400e; }
+    .qty-badge.out { background: #fee2e2; color: #991b1b; }
+
+    .filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .filter-tab-radio { display: none; }
+    .filter-tab-label {
+      padding: 6px 14px; border: 1.5px solid var(--gray-300); border-radius: 20px;
+      font-size: 0.8rem; font-weight: 600; cursor: pointer; color: var(--gray-600);
+      transition: all 0.15s;
+    }
+    #fAll:checked ~ .filter-tabs [for="fAll"],
+    #fFood:checked ~ .filter-tabs [for="fFood"],
+    #fDrink:checked ~ .filter-tabs [for="fDrink"],
+    #fDessert:checked ~ .filter-tabs [for="fDessert"] {
+      background: #059669; color: #fff; border-color: #059669;
+    }
+  </style>
+</head>
+<body>
+  <input type="checkbox" id="sidebar-toggle">
+  <div class="app-shell">
+
+    <!-- Caterer Sidebar -->
+    <aside class="sidebar" id="main-sidebar">
+      <div class="sidebar-logo">
+        <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
+        <div>
+          <div class="sidebar-logo-text">VenuePro</div>
+          <div class="sidebar-logo-sub" style="color:#10b981;">Kitchen Operations</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-label">Culinary Dashboard</div>
+        <a href="caterer-dashboard.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Kitchen Overview
+        </a>
+        <a href="caterer-order-details.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Select an Order
+        </a>
+        <a href="caterer-food-packages.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Package Library
+        </a>
+        <a href="caterer-menu-items.php" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+          Singular Menu Items
+        </a>
+        <a href="caterer-create-package-1.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Create Package
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Exit Kitchen Portal
+        </a>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </label>
+        <div class="topbar-search">
+          <span class="topbar-search-icon">🔍</span>
+          <input type="text" placeholder="Search menu items, prices, categories...">
+        </div>
+        <div class="topbar-actions">
+          <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
+            <span class="badge">5</span>
+            🔔
+          </a>
+          <a href="caterer-notifications.php" class="topbar-icon-btn" title="Order Inquiries">
+            💬
+          </a>
+          <div class="topbar-user">
+            <div class="user-avatar" style="background:#059669;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+            <div class="user-info">
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-body">
+        <div class="breadcrumb mb-16">
+          <a href="caterer-dashboard.php">Kitchen Overview</a>
+          <span class="breadcrumb-sep">›</span>
+          <span class="breadcrumb-current">Singular Menu Items</span>
+        </div>
+
+        <div class="flex-between mb-24">
+          <div>
+            <h1 style="font-size:1.85rem; font-weight:800; margin-bottom:4px;">Singular Menu Items</h1>
+            <p>Manage add-on items available for customers to order alongside their main catering packages.</p>
+          </div>
+          <a href="#modal-add-item" class="btn btn-primary font-bold flex-center gap-8">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add New Item
+          </a>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid mb-24">
+          <div class="stat-card">
+            <div class="stat-label">Total Items Listed</div>
+            <div class="stat-value">12</div>
+            <span class="stat-badge positive">Active &amp; Available</span>
+          </div>
+          <div class="stat-card orange">
+            <div class="stat-label">Low Stock Items</div>
+            <div class="stat-value">3</div>
+            <span class="stat-badge neutral">Reorder Needed</span>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-label">Item Orders This Week</div>
+            <div class="stat-value">47</div>
+            <span class="stat-badge positive">+12 vs last week</span>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Top Seller</div>
+            <div class="stat-value" style="font-size:1.1rem;">🍤 Shrimp</div>
+            <span class="stat-badge positive">18 orders</span>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-24" style="padding:16px 20px;">
+          <input type="radio" name="filter_cat" id="fAll" class="filter-tab-radio" checked>
+          <input type="radio" name="filter_cat" id="fFood" class="filter-tab-radio">
+          <input type="radio" name="filter_cat" id="fDrink" class="filter-tab-radio">
+          <input type="radio" name="filter_cat" id="fDessert" class="filter-tab-radio">
+          <div class="flex-between">
+            <div class="filter-tabs">
+              <label for="fAll" class="filter-tab-label">All Items (12)</label>
+              <label for="fFood" class="filter-tab-label">Food (7)</label>
+              <label for="fDrink" class="filter-tab-label">Drinks (3)</label>
+              <label for="fDessert" class="filter-tab-label">Desserts (2)</label>
+            </div>
+            <span class="text-xs text-muted">Click any card to edit • Prices are per unit</span>
+          </div>
+        </div>
+
+        <!-- Item Cards Grid -->
+        <div class="item-grid">
+
+          <!-- Item 1: Shrimp -->
+          <div class="item-card">
+            <div class="item-card-img" style="background:#fef3c7; font-size:3.5rem;">🍤</div>
+            <div class="item-card-body">
+              <div class="flex-between">
+                <div class="font-bold" style="font-size:1.05rem;">Grilled Tiger Shrimp</div>
+                <span class="qty-badge">48 left</span>
+              </div>
+              <div class="text-primary font-bold">$12.50 / piece</div>
+              <div class="text-xs text-muted">Category: Seafood • Min order: 2 pcs</div>
+              <div class="text-xs text-muted">Freshly grilled with garlic butter and lemon zest. GF friendly.</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                <span class="diet-tag diet-gf">Gluten-Free</span>
+              </div>
+            </div>
+            <div class="item-card-actions">
+              <a href="#modal-edit-item" class="btn btn-outline btn-sm" style="flex:1;">✎ Edit</a>
+              <a href="#modal-add-item" class="btn btn-ghost btn-sm" style="color:#dc2626; flex:1;">✕ Remove</a>
+            </div>
+          </div>
+
+          <!-- Item 2: Coke -->
+          <div class="item-card">
+            <div class="item-card-img" style="background:#fef2f2; font-size:3.5rem;">🥤</div>
+            <div class="item-card-body">
+              <div class="flex-between">
+                <div class="font-bold" style="font-size:1.05rem;">Premium Coca-Cola (Glass)</div>
+                <span class="qty-badge">120 left</span>
+              </div>
+              <div class="text-primary font-bold">$3.50 / bottle</div>
+              <div class="text-xs text-muted">Category: Drinks • Min order: 1</div>
+              <div class="text-xs text-muted">Chilled 330ml glass-bottle Coca-Cola, served on ice.</div>
+            </div>
+            <div class="item-card-actions">
+              <a href="#modal-edit-item" class="btn btn-outline btn-sm" style="flex:1;">✎ Edit</a>
+              <a href="#modal-add-item" class="btn btn-ghost btn-sm" style="color:#dc2626; flex:1;">✕ Remove</a>
+            </div>
+          </div>
+
+          <!-- Item 3: Yogurt -->
+          <div class="item-card">
+            <div class="item-card-img" style="background:#f0fdf4; font-size:3.5rem;">🍶</div>
+            <div class="item-card-body">
+              <div class="flex-between">
+                <div class="font-bold" style="font-size:1.05rem;">Greek Yogurt Parfait</div>
+                <span class="qty-badge low">6 left</span>
+              </div>
+              <div class="text-primary font-bold">$7.00 / cup</div>
+              <div class="text-xs text-muted">Category: Dairy • Min order: 1</div>
+              <div class="text-xs text-muted">Full-fat Greek yogurt with granola &amp; seasonal berries. Vegetarian.</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                <span class="diet-tag diet-veg">Vegetarian</span>
+              </div>
+            </div>
+            <div class="item-card-actions">
+              <a href="#modal-edit-item" class="btn btn-outline btn-sm" style="flex:1;">✎ Edit</a>
+              <a href="#modal-add-item" class="btn btn-ghost btn-sm" style="color:#dc2626; flex:1;">✕ Remove</a>
+            </div>
+          </div>
+
+          <!-- Item 4: Panna Cotta -->
+          <div class="item-card">
+            <div class="item-card-img" style="background:#fdf2f8; font-size:3.5rem;">🍮</div>
+            <div class="item-card-body">
+              <div class="flex-between">
+                <div class="font-bold" style="font-size:1.05rem;">Vanilla Panna Cotta</div>
+                <span class="qty-badge">32 left</span>
+              </div>
+              <div class="text-primary font-bold">$9.50 / serving</div>
+              <div class="text-xs text-muted">Category: Dessert • Min order: 1</div>
+              <div class="text-xs text-muted">Silky Italian panna cotta with mixed berry coulis and mint garnish.</div>
+            </div>
+            <div class="item-card-actions">
+              <a href="#modal-edit-item" class="btn btn-outline btn-sm" style="flex:1;">✎ Edit</a>
+              <a href="#modal-add-item" class="btn btn-ghost btn-sm" style="color:#dc2626; flex:1;">✕ Remove</a>
+            </div>
+          </div>
+
+          <!-- Item 5: Sparkling Water -->
+          <div class="item-card">
+            <div class="item-card-img" style="background:#eff6ff; font-size:3.5rem;">💧</div>
+            <div class="item-card-body">
+              <div class="flex-between">
+                <div class="font-bold" style="font-size:1.05rem;">San Pellegrino Sparkling</div>
+                <span class="qty-badge low">8 left</span>
+              </div>
+              <div class="text-primary font-bold">$4.50 / bottle</div>
+              <div class="text-xs text-muted">Category: Drinks • Min order: 1</div>
+              <div class="text-xs text-muted">Italian sparkling mineral water 500ml — premium table service.</div>
+            </div>
+            <div class="item-card-actions">
+              <a href="#modal-edit-item" class="btn btn-outline btn-sm" style="flex:1;">✎ Edit</a>
+              <a href="#modal-add-item" class="btn btn-ghost btn-sm" style="color:#dc2626; flex:1;">✕ Remove</a>
+            </div>
+          </div>
+
+          <!-- Item 6: Truffle Bruschetta -->
+          <div class="item-card">
+            <div class="item-card-img" style="background:#fefce8; font-size:3.5rem;">🥖</div>
+            <div class="item-card-body">
+              <div class="flex-between">
+                <div class="font-bold" style="font-size:1.05rem;">Truffle Bruschetta</div>
+                <span class="qty-badge">24 left</span>
+              </div>
+              <div class="text-primary font-bold">$6.00 / piece</div>
+              <div class="text-xs text-muted">Category: Appetizer • Min order: 2 pcs</div>
+              <div class="text-xs text-muted">Toasted sourdough with white truffle oil, sun-dried tomatoes, fresh basil.</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                <span class="diet-tag diet-veg">Vegetarian</span>
+              </div>
+            </div>
+            <div class="item-card-actions">
+              <a href="#modal-edit-item" class="btn btn-outline btn-sm" style="flex:1;">✎ Edit</a>
+              <a href="#modal-add-item" class="btn btn-ghost btn-sm" style="color:#dc2626; flex:1;">✕ Remove</a>
+            </div>
+          </div>
+
+          <!-- Item 7: Cheese Board -->
+          <div class="item-card">
+            <div class="item-card-img" style="background:#fef3c7; font-size:3.5rem;">🧀</div>
+            <div class="item-card-body">
+              <div class="flex-between">
+                <div class="font-bold" style="font-size:1.05rem;">Artisan Cheese Board</div>
+                <span class="qty-badge low">5 left</span>
+              </div>
+              <div class="text-primary font-bold">$18.00 / board</div>
+              <div class="text-xs text-muted">Category: Appetizer • Serves 4 persons</div>
+              <div class="text-xs text-muted">Selection of Brie, Gouda, Manchego with crackers, grapes, honey.</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                <span class="diet-tag diet-veg">Vegetarian</span>
+              </div>
+            </div>
+            <div class="item-card-actions">
+              <a href="#modal-edit-item" class="btn btn-outline btn-sm" style="flex:1;">✎ Edit</a>
+              <a href="#modal-add-item" class="btn btn-ghost btn-sm" style="color:#dc2626; flex:1;">✕ Remove</a>
+            </div>
+          </div>
+
+          <!-- Item 8: Macarons -->
+          <div class="item-card">
+            <div class="item-card-img" style="background:#fdf2f8; font-size:3.5rem;">🫐</div>
+            <div class="item-card-body">
+              <div class="flex-between">
+                <div class="font-bold" style="font-size:1.05rem;">French Macarons (Box/6)</div>
+                <span class="qty-badge">40 left</span>
+              </div>
+              <div class="text-primary font-bold">$14.00 / box</div>
+              <div class="text-xs text-muted">Category: Dessert • Min order: 1 box</div>
+              <div class="text-xs text-muted">Assorted French macarons: pistachio, raspberry, salted caramel, vanilla.</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                <span class="diet-tag diet-veg">Vegetarian</span>
+                <span class="diet-tag diet-gf">Gluten-Free</span>
+              </div>
+            </div>
+            <div class="item-card-actions">
+              <a href="#modal-edit-item" class="btn btn-outline btn-sm" style="flex:1;">✎ Edit</a>
+              <a href="#modal-add-item" class="btn btn-ghost btn-sm" style="color:#dc2626; flex:1;">✕ Remove</a>
+            </div>
+          </div>
+
+        </div><!-- /item-grid -->
+      </main>
+
+      <footer class="page-footer">
+        <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ======================== MODAL: ADD NEW ITEM ======================== -->
+  <div id="modal-add-item" class="modal-overlay">
+    <div class="modal-box">
+      <a href="#" class="modal-close" title="Close">✕</a>
+      <h2 style="font-size:1.25rem; font-weight:800; margin-bottom:4px;">Add Singular Menu Item</h2>
+      <p class="text-xs text-muted mb-20">Item will be visible to customers during checkout as an optional add-on.</p>
+
+      <div class="form-group mb-14">
+        <label class="form-label">Item Name</label>
+        <input type="text" class="form-control" placeholder="e.g. Grilled Tiger Shrimp, Coke, Yogurt Parfait">
+      </div>
+
+      <div class="form-row mb-14">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Price per Unit (USD)</label>
+          <input type="number" class="form-control" placeholder="e.g. 12.50" min="0" step="0.5">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Quantity Available</label>
+          <input type="number" class="form-control" placeholder="e.g. 50" min="1">
+        </div>
+      </div>
+
+      <div class="form-row mb-14">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Category</label>
+          <select class="form-control">
+            <option value="">Select category...</option>
+            <option>Food</option>
+            <option>Drinks</option>
+            <option>Dessert</option>
+            <option>Appetizer</option>
+            <option>Seafood</option>
+            <option>Dairy</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Minimum Order Quantity</label>
+          <input type="number" class="form-control" placeholder="e.g. 1" value="1" min="1">
+        </div>
+      </div>
+
+      <div class="form-group mb-14">
+        <label class="form-label">Short Description</label>
+        <textarea class="form-control" rows="2" placeholder="Describe the item, preparation style, ingredients..."></textarea>
+      </div>
+
+      <div class="form-group mb-14">
+        <label class="form-label">Dietary Tags</label>
+        <div class="flex gap-16 flex-wrap" style="margin-top:6px;">
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Vegetarian</label>
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Gluten-Free</label>
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Vegan</label>
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Halal</label>
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Nut-Free</label>
+        </div>
+      </div>
+
+      <div class="form-group mb-20">
+        <label class="form-label">Item Photo</label>
+        <div style="border: 2px dashed var(--gray-300); border-radius: var(--radius-sm); padding: 20px; text-align:center; cursor:pointer; background:var(--gray-50);">
+          <div style="font-size: 2rem; margin-bottom:6px;">📷</div>
+          <div class="text-xs text-muted">Click to upload or drag &amp; drop item photo</div>
+          <div class="text-xs text-muted">PNG, JPG up to 5MB — Recommended: 400x400px square</div>
+          <input type="file" accept="image/*" style="display:none;">
+        </div>
+      </div>
+
+      <div class="flex gap-12">
+        <a href="#" class="btn btn-outline" style="flex:1;">Cancel</a>
+        <a href="caterer-menu-items.php" class="btn btn-primary font-bold" style="flex:1;">✓ Save Item</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================== MODAL: EDIT ITEM ======================== -->
+  <div id="modal-edit-item" class="modal-overlay">
+    <div class="modal-box">
+      <a href="#" class="modal-close" title="Close">✕</a>
+      <h2 style="font-size:1.25rem; font-weight:800; margin-bottom:4px;">Edit Menu Item</h2>
+      <p class="text-xs text-muted mb-20">Modify item details. Changes apply immediately to customer checkout.</p>
+
+      <div class="form-group mb-14">
+        <label class="form-label">Item Name</label>
+        <input type="text" class="form-control" value="Grilled Tiger Shrimp">
+      </div>
+
+      <div class="form-row mb-14">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Price per Unit (USD)</label>
+          <input type="number" class="form-control" value="12.50" min="0" step="0.5">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Quantity Available</label>
+          <input type="number" class="form-control" value="48" min="0">
+        </div>
+      </div>
+
+      <div class="form-row mb-14">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Category</label>
+          <select class="form-control">
+            <option>Food</option>
+            <option selected>Seafood</option>
+            <option>Drinks</option>
+            <option>Dessert</option>
+            <option>Appetizer</option>
+            <option>Dairy</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Minimum Order Quantity</label>
+          <input type="number" class="form-control" value="2" min="1">
+        </div>
+      </div>
+
+      <div class="form-group mb-14">
+        <label class="form-label">Short Description</label>
+        <textarea class="form-control" rows="2">Freshly grilled with garlic butter and lemon zest. GF friendly.</textarea>
+      </div>
+
+      <div class="form-group mb-14">
+        <label class="form-label">Dietary Tags</label>
+        <div class="flex gap-16 flex-wrap" style="margin-top:6px;">
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Vegetarian</label>
+          <label class="flex-center gap-6 text-sm"><input type="checkbox" checked> Gluten-Free</label>
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Vegan</label>
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Halal</label>
+          <label class="flex-center gap-6 text-sm"><input type="checkbox"> Nut-Free</label>
+        </div>
+      </div>
+
+      <div class="form-group mb-20">
+        <label class="form-label">Replace Item Photo</label>
+        <div style="border: 2px dashed var(--gray-300); border-radius: var(--radius-sm); padding: 16px; text-align:center; cursor:pointer; background:var(--gray-50);">
+          <div style="font-size: 1.5rem; margin-bottom:4px;">🍤 Current: Grilled Tiger Shrimp Photo</div>
+          <div class="text-xs text-muted">Click to upload a replacement image</div>
+          <input type="file" accept="image/*" style="display:none;">
+        </div>
+      </div>
+
+      <div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:var(--radius-sm); padding:10px 14px; margin-bottom:16px;">
+        <div class="font-semibold text-xs" style="color:#dc2626; margin-bottom:6px;">⚠️ Danger Zone</div>
+        <div class="flex-between">
+          <div class="text-xs text-muted">Permanently remove this item from the menu and customer checkout.</div>
+          <a href="caterer-menu-items.php" class="btn btn-sm" style="background:#dc2626; color:#fff; font-size:0.75rem; padding:4px 10px;">✕ Delete Item</a>
+        </div>
+      </div>
+
+      <div class="flex gap-12">
+        <a href="#" class="btn btn-outline" style="flex:1;">Cancel</a>
+        <a href="caterer-menu-items.php" class="btn btn-primary font-bold" style="flex:1;">✓ Save Changes</a>
+      </div>
+    </div>
+  </div>
+
+<script src="../js/app.js"></script>
+</body>
+</html>

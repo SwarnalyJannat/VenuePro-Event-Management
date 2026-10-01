@@ -1,3 +1,10 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('customer', 'customer-login.php');
+$db = getDBConnection();
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -84,21 +91,21 @@
       </div>
       <nav class="sidebar-nav">
         <div class="nav-label">Main Menu</div>
-        <a href="customer-dashboard.html" class="nav-item">
+        <a href="customer-dashboard.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           Dashboard
         </a>
-        <a href="venue-listings.html" class="nav-item active">
+        <a href="venue-listings.php" class="nav-item active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           Bookings &amp; Venues
         </a>
-        <a href="customer-live-progress.html" class="nav-item">
+        <a href="customer-live-progress.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
           Live Progress
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.html" class="nav-item" style="color:var(--gray-400);">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Switch Role / Logout
         </a>
@@ -115,18 +122,18 @@
           <input type="text" placeholder="Search event venues, bookings, menus...">
         </div>
         <div class="topbar-actions">
-          <a href="customer-notifications.html" class="topbar-icon-btn" title="Notifications">
+          <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">3</span>
             🔔
           </a>
-          <a href="customer-chat.html" class="topbar-icon-btn" title="Contact Venue Staff">
+          <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
             💬
           </a>
           <div class="topbar-user">
-            <div class="user-avatar" style="background:#2563eb;">M</div>
+            <div class="user-avatar" style="background:#2563eb;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
-              <div class="user-name">Mahmud</div>
-              <div class="user-role">Customer</div>
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
             </div>
           </div>
         </div>
@@ -314,7 +321,7 @@
               </div>
               <p class="mb-24">Finalize your booking and catering transaction securely.</p>
 
-              <form action="booking-success.html" id="payment-form">
+              <form action="booking-success.php" id="payment-form">
                 <div class="form-group">
                   <label class="form-label">Cardholder Name</label>
                   <input type="text" class="form-control" value="Mahmud" placeholder="e.g. Mahmud" required>
@@ -445,9 +452,9 @@
       <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
         <div class="footer-links">
-          <a href="../privacy-policy.html">Privacy Policy</a>
-          <a href="../terms-of-service.html">Terms of Service</a>
-          <a href="../contact-support.html">Contact Support</a>
+          <a href="../privacy-policy.php">Privacy Policy</a>
+          <a href="../terms-of-service.php">Terms of Service</a>
+          <a href="../contact-support.php">Contact Support</a>
         </div>
       </footer>
     </div>
@@ -554,5 +561,39 @@
       document.getElementById('grand-total').textContent = '$' + grand.toFixed(2);
     }
   </script>
+<script src="../js/app.js"></script>
+<script>
+// Read booking params from sessionStorage (set during venue/date selection flow)
+var vpVenueId   = sessionStorage.getItem('vp_venue_id')   || '1';
+var vpPackageId = sessionStorage.getItem('vp_package_id') || '';
+var vpEventDate = sessionStorage.getItem('vp_event_date') || '';
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Inject hidden fields into payment form
+  var pf = document.getElementById('payment-form');
+  if (pf) {
+    function addHidden(name, val) {
+      var h = document.createElement('input');
+      h.type = 'hidden'; h.name = name; h.value = val;
+      pf.appendChild(h);
+    }
+    addHidden('venue_id',   vpVenueId);
+    addHidden('package_id', vpPackageId);
+    addHidden('event_date', vpEventDate);
+    addHidden('start_time', '18:00:00');
+    addHidden('end_time',   '22:00:00');
+    addHidden('guest_count','100');
+    addHidden('event_name', 'Event at Venue #' + vpVenueId);
+    addHidden('duration_hours','4');
+  }
+
+  // Clear session on successful booking
+  window.addEventListener('vpBookingComplete', function() {
+    sessionStorage.removeItem('vp_venue_id');
+    sessionStorage.removeItem('vp_package_id');
+    sessionStorage.removeItem('vp_event_date');
+  });
+});
+</script>
 </body>
 </html>

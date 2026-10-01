@@ -1,0 +1,170 @@
+<?php
+require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/helpers.php';
+$currentUser = getCurrentUser();
+$db = getDBConnection();
+?>
+<?php
+$stmtPol = $db->prepare("SELECT * FROM site_policies WHERE policy_key = ? LIMIT 1");
+$stmtPol->execute(['contact_support']);
+$policyRow = $stmtPol->fetch();
+$policyTitle = $policyRow['title'] ?? 'Policy';
+$policyHtml = $policyRow['content'] ?? '<p>Policy information is being updated.</p>';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro – Contact Support</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .contact-container { max-width: 1080px; margin: 0 auto; padding: 40px 24px 60px; }
+    .support-card { padding: 24px; border: 1px solid var(--gray-200); border-radius: var(--radius); background: #fff; text-align: center; }
+    .support-icon { width: 52px; height: 52px; border-radius: 50%; background: #eff6ff; color: var(--primary); font-size: 24px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+  </style>
+</head>
+<body style="background:#f8fafc;">
+
+  <!-- Header with ONLY Back Button -->
+  <header class="landing-header" style="display:flex; align-items:center; justify-content:space-between; padding:18px 48px; background:#fff; border-bottom:1px solid var(--gray-200); position:sticky; top:0; z-index:100;">
+    <div class="flex-center gap-12">
+      <a href="customer/customer-dashboard.php" style="text-decoration:none; display:flex; align-items:center; gap:12px;">
+        <img src="assets/logo.png" alt="VenuePro" class="header-logo-img">
+        <div>
+          <div style="font-size:1.2rem; font-weight:800; color:var(--gray-900);">VenuePro</div>
+          <div style="font-size:0.7rem; color:var(--gray-500); font-weight:500;">Customer Concierge Support</div>
+        </div>
+      </a>
+    </div>
+    <nav class="flex-center gap-12">
+      <button onclick="if(window.history.length > 1){window.history.back();}else{window.location.href='customer/customer-dashboard.php';}" class="btn btn-outline btn-sm flex-center gap-8" style="font-weight:700; cursor:pointer; padding:7px 16px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Back</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="contact-container">
+    <div class="mb-32 text-center">
+      <span class="stat-badge positive mb-8">24/7 CUSTOMER CONCIERGE</span>
+      <h1 style="font-size:2.4rem; font-weight:800; margin:12px 0 8px;">How Can We Help You?</h1>
+      <p class="text-muted" style="max-width:600px; margin:0 auto;">Dedicated assistance for venue bookings, culinary packages, kitchen operations, and event coordination.</p>
+    </div>
+
+    <!-- Contact Channels -->
+    <div class="grid-3 gap-20 mb-32">
+      <div class="support-card">
+        <div class="support-icon">📞</div>
+        <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:4px;">Direct Phone Line</h3>
+        <p class="text-xs text-muted mb-12">Immediate event day dispatch &amp; emergency support.</p>
+        <div class="font-bold text-primary" style="font-size:1.05rem;">+1 (800) 555-VENUE</div>
+        <span class="text-xs text-success">● Available 24/7</span>
+      </div>
+
+      <div class="support-card">
+        <div class="support-icon">✉️</div>
+        <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:4px;">Email Support</h3>
+        <p class="text-xs text-muted mb-12">Billing inquiries, contract reviews &amp; account setup.</p>
+        <div class="font-bold text-primary" style="font-size:1.05rem;">support@venuepro.internal</div>
+        <span class="text-xs text-muted">Response within 2 hours</span>
+      </div>
+
+      <div class="support-card">
+        <div class="support-icon">🏢</div>
+        <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:4px;">Executive Headquarters</h3>
+        <p class="text-xs text-muted mb-12">In-person consultations &amp; venue inspections.</p>
+        <div class="font-bold" style="font-size:0.95rem; color:var(--gray-800);">VenuePro Tower, Suite 400</div>
+        <span class="text-xs text-muted">Downtown District · 9 AM – 6 PM</span>
+      </div>
+    </div>
+
+    <!-- Support Form & FAQ -->
+    <div class="grid-2 gap-32" style="grid-template-columns:1.3fr 1fr; align-items:start;">
+      <!-- Ticket Form -->
+      <div class="card" style="padding:28px;">
+        <h2 style="font-size:1.3rem; font-weight:700; margin-bottom:6px;">Submit a Support Inquiry</h2>
+        <p class="text-xs text-muted mb-20">Fill out this ticket and our operations concierge will get back to you promptly.</p>
+
+        <form action="#inquiry-sent">
+          <div class="form-row mb-16">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">Full Name</label>
+              <input type="text" class="form-control" placeholder="e.g. Mahmud" value="Mahmud" required>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">Email Address</label>
+              <input type="email" class="form-control" placeholder="mahmud@enterprise.com" value="mahmud@client.internal" required>
+            </div>
+          </div>
+
+          <div class="form-row mb-16">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">Your Role</label>
+              <select class="form-control">
+                <option selected>Customer</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">Booking Reference (Optional)</label>
+              <input type="text" class="form-control" value="#BK-9021">
+            </div>
+          </div>
+
+          <div class="form-group mb-16">
+            <label class="form-label">Subject</label>
+            <input type="text" class="form-control" placeholder="Brief description of your question or issue" required>
+          </div>
+
+          <div class="form-group mb-20">
+            <label class="form-label">Detailed Message</label>
+            <textarea class="form-control" rows="4" placeholder="Provide any relevant event details, venue names, or date requirements..." required></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full font-bold">Submit Support Ticket →</button>
+        </form>
+
+        <div id="inquiry-sent" style="display:none; margin-top:16px; padding:12px; background:#dcfce7; border-radius:var(--radius-sm); color:#16a34a; font-size:0.85rem; text-align:center;">
+          ✓ Thank you! Your support ticket has been registered. An event concierge will contact you shortly.
+        </div>
+      </div>
+
+      <!-- FAQ Card -->
+      <div class="card" style="padding:28px;">
+        <h2 style="font-size:1.3rem; font-weight:700; margin-bottom:16px;">Frequently Asked Questions</h2>
+
+        <div class="mb-20">
+          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">📄 How can I download my event tax invoice?</div>
+          <p class="text-xs text-muted">You can download official receipts directly from the "Recent Activities" table on your <a href="customer/customer-dashboard.php" class="text-primary font-semibold">Customer Dashboard</a> or via the dedicated invoice view.</p>
+        </div>
+
+        <div class="mb-20">
+          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">🍴 Can I inspect live event setup and catering?</div>
+          <p class="text-xs text-muted">Yes! Use our unified <a href="customer/customer-live-progress.php" class="text-primary font-semibold">Live Progress Tracker</a> to select any booked venue and inspect milestones and kitchen progress simultaneously.</p>
+        </div>
+
+        <div class="mb-20">
+          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">💬 How do I communicate with venue staff?</div>
+          <p class="text-xs text-muted">Customers communicate directly and exclusively with assigned Venue Staff via the <a href="customer/customer-chat.php" class="text-primary font-semibold">Support Chat</a> portal.</p>
+        </div>
+
+        <div>
+          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">🔒 What happens if my date is booked?</div>
+          <p class="text-xs text-muted">If another event holds the calendar slot, our date-conflict system provides suggested alternative openings or allows you to request a waitlist notification.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="page-footer">
+    <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+    <div class="footer-links">
+      <a href="privacy-policy.php">Privacy Policy</a>
+      <a href="terms-of-service.php">Terms of Service</a>
+      <a href="contact-support.php">Contact Support</a>
+    </div>
+  </footer>
+<script src="js/app.js"></script>
+</body>
+</html>

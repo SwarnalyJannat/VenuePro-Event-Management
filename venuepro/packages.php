@@ -1,0 +1,235 @@
+<?php
+require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/helpers.php';
+$currentUser = getCurrentUser();
+$db = getDBConnection();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro – Catering Packages (Guest Mode)</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7);
+      display: none; align-items: center; justify-content: center; z-index: 1000;
+      backdrop-filter: blur(5px);
+    }
+    .modal-backdrop:target { display: flex; }
+    .modal-card {
+      background: #fff; border-radius: var(--radius); padding: 32px;
+      max-width: 460px; width: 90%; box-shadow: var(--shadow-xl);
+      text-align: center; position: relative; animation: modalPop 0.2s ease-out;
+    }
+    @keyframes modalPop {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .modal-icon {
+      width: 58px; height: 58px; border-radius: 50%;
+      background: #eff6ff; color: var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; margin: 0 auto 16px;
+    }
+    .modal-close {
+      position: absolute; top: 16px; right: 16px; text-decoration: none;
+      color: var(--gray-400); font-size: 1.2rem; font-weight: 700;
+      width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; background: var(--gray-100);
+    }
+    .modal-close:hover { background: var(--gray-200); color: var(--gray-800); }
+    
+    .guest-banner-bar {
+      background: #eff6ff; border-bottom: 1px solid #bfdbfe;
+      padding: 10px 48px; display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.85rem; color: var(--primary);
+    }
+
+    .public-page { max-width: 1240px; margin: 0 auto; padding: 32px 24px 60px; }
+    .packages-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; align-items: stretch;
+    }
+    @media (max-width: 1024px) { .packages-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) { .packages-grid { grid-template-columns: 1fr; } }
+
+    .package-card {
+      display: flex; flex-direction: column; justify-content: space-between;
+      height: 100%; padding: 24px; border-radius: var(--radius);
+      border: 2px solid var(--gray-200); background: #fff; transition: all 0.2s ease;
+    }
+    .package-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--primary); }
+    .package-card.highlight { border-color: var(--primary); background: #eff6ff; }
+    .package-card.custom-tier { border-color: #059669; background: #f0fdf4; }
+    .package-card.signature-tier { border-color: #8b5cf6; background: #faf5ff; }
+    .pkg-header { min-height: 110px; margin-bottom: 12px; }
+    .pkg-title { font-size: 1.3rem; font-weight: 800; margin-bottom: 6px; color: var(--gray-900); }
+    .pkg-price-block { margin-bottom: 12px; min-height: 48px; }
+    .pkg-price { font-size: 1.5rem; font-weight: 800; color: var(--primary); line-height: 1.1; }
+    .pkg-subprice { font-size: 0.75rem; color: var(--gray-500); margin-top: 3px; }
+    .pkg-desc { font-size: 0.8rem; color: var(--gray-600); line-height: 1.45; min-height: 52px; margin-bottom: 16px; }
+    .pkg-features { list-style: none; padding: 0; margin: 0 0 20px; flex-grow: 1; display: flex; flex-direction: column; gap: 8px; }
+    .pkg-features li { font-size: 0.78rem; color: var(--gray-700); line-height: 1.4; display: flex; align-items: flex-start; gap: 6px; }
+    .pkg-features li span { color: #16a34a; font-weight: 700; flex-shrink: 0; }
+  </style>
+</head>
+<body style="background:#f8fafc;">
+
+  <header class="landing-header" style="display:flex; align-items:center; justify-content:space-between; padding:18px 48px; background:#fff; border-bottom:1px solid var(--gray-200); position:sticky; top:0; z-index:100;">
+    <div class="flex-center gap-12">
+      <a href="index.php" style="text-decoration:none; display:flex; align-items:center; gap:12px;">
+        <img src="assets/logo.png" alt="VenuePro" class="header-logo-img">
+        <div>
+          <div style="font-size:1.2rem; font-weight:800; color:var(--gray-900);">VenuePro</div>
+          <div style="font-size:0.7rem; color:var(--gray-500); font-weight:500;">Enterprise Event Platform</div>
+        </div>
+      </a>
+    </div>
+    <nav class="flex-center gap-20">
+      <a href="venues.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Venues</a>
+      <a href="packages.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Catering Packages</a>
+      <a href="login-role.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
+      <a href="signup-role.php" class="btn btn-primary btn-sm" style="font-weight:600;">Sign Up</a>
+    </nav>
+  </header>
+
+  <div class="guest-banner-bar" style="justify-content:center;">
+    <div class="flex-center gap-8">
+      <span>👋</span>
+      <span><strong>Guest Browsing Mode:</strong> Explore our curated catering tiers and bespoke custom menus. Sign in to place orders.</span>
+    </div>
+    
+  </div>
+
+  <main class="public-page">
+    <div class="flex-between mb-24">
+      <div>
+        <h1 style="font-size:2.2rem; font-weight:800; margin-bottom:6px;">Catering Packages &amp; Menus</h1>
+        <p>Pre-configured dining tiers and bespoke custom packages prepared by our certified commercial partner kitchens.</p>
+      </div>
+      <a href="venues.php" class="btn btn-outline btn-sm">Explore Venues →</a>
+    </div>
+
+    <div class="packages-grid mb-32">
+      <!-- Card 1 -->
+      <div class="package-card">
+        <div>
+          <div class="pkg-header">
+            <span class="stat-badge neutral mb-8">CLASSIC TIER</span>
+            <div class="pkg-title">Gold Package</div>
+            <div class="pkg-price-block">
+              <div class="pkg-price">$1,200 <small class="text-muted" style="font-size:0.8rem; font-weight:500;">/ event</small></div>
+              <div class="pkg-subprice">$24.00 per guest · Min 30 guests</div>
+            </div>
+          </div>
+          <div class="pkg-desc">Perfect for daytime corporate seminars, executive luncheons, and symposium sessions.</div>
+          <ul class="pkg-features">
+            <li><span>✓</span> 2-Course Gourmet Plated Lunch</li>
+            <li><span>✓</span> Artisanal Coffee &amp; Herbal Tea Lounge</li>
+            <li><span>✓</span> Passed Seasonal Finger Foods &amp; Canapés</li>
+            <li><span>✓</span> Standard Banquet Table Settings &amp; Linens</li>
+          </ul>
+        </div>
+        <div>
+          <a href="#signin-modal" class="btn btn-outline btn-full btn-sm font-semibold">🔒 Sign In to Order</a>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="package-card highlight">
+        <div>
+          <div class="pkg-header">
+            <span class="stat-badge positive mb-8">MOST REQUESTED</span>
+            <div class="pkg-title">Platinum Package</div>
+            <div class="pkg-price-block">
+              <div class="pkg-price">$1,850 <small class="text-muted" style="font-size:0.8rem; font-weight:500;">/ event</small></div>
+              <div class="pkg-subprice">$37.00 per guest · Min 50 guests</div>
+            </div>
+          </div>
+          <div class="pkg-desc">Full gala dining experience with open bar mixology, table service, and sommelier curation.</div>
+          <ul class="pkg-features">
+            <li><span>✓</span> 3-Course Fine Dining Plated Dinner</li>
+            <li><span>✓</span> 4-Hour Premium Open Bar &amp; Wine Curation</li>
+            <li><span>✓</span> Executive Chef's Signature Dessert Trio</li>
+            <li><span>✓</span> VIP Green Room Cocktail &amp; Canapés Service</li>
+          </ul>
+        </div>
+        <div>
+          <a href="#signin-modal" class="btn btn-primary btn-full btn-sm font-semibold">🔒 Sign In to Order</a>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="package-card signature-tier">
+        <div>
+          <div class="pkg-header">
+            <span class="stat-badge neutral mb-8" style="background:#ede9fe; color:#6d28d9;">CHEF'S TASTING</span>
+            <div class="pkg-title">Custom Signature</div>
+            <div class="pkg-price-block">
+              <div class="pkg-price">$2,400 <small class="text-muted" style="font-size:0.8rem; font-weight:500;">/ event</small></div>
+              <div class="pkg-subprice">$48.00 per guest · Min 40 guests</div>
+            </div>
+          </div>
+          <div class="pkg-desc">Fixed 5-course private tasting banquet curated and orchestrated by Master Chef Alex Rivera.</div>
+          <ul class="pkg-features">
+            <li><span>✓</span> 5-Course Wine-Paired Fine Dining Menu</li>
+            <li><span>✓</span> Executive Head Chef Live at Captain's Table</li>
+            <li><span>✓</span> Midnight Savory Bites &amp; Nightcap Station</li>
+            <li><span>✓</span> Artisanal Organic Farmstead Ingredients</li>
+          </ul>
+        </div>
+        <div>
+          <a href="#signin-modal" class="btn btn-outline btn-full btn-sm font-semibold" style="border-color:#8b5cf6; color:#6d28d9;">🔒 Sign In to Order</a>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="package-card custom-tier">
+        <div>
+          <div class="pkg-header">
+            <span class="stat-badge neutral mb-8" style="background:#dcfce7; color:#15803d;">BESPOKE BUILDER</span>
+            <div class="pkg-title">Custom Package</div>
+            <div class="pkg-price-block">
+              <div class="pkg-price">Flexible <small class="text-muted" style="font-size:0.8rem; font-weight:500;">/ per head</small></div>
+              <div class="pkg-subprice">Custom guest count · Tailored pricing</div>
+            </div>
+          </div>
+          <div class="pkg-desc">Build your dream menu from scratch: choose global cuisines, multi-course dishes, and dietary specs.</div>
+          <ul class="pkg-features">
+            <li><span>✓</span> Choose from 6 World-Class Culinary Cuisines</li>
+            <li><span>✓</span> Hand-Pick Each Appetizer, Entrée &amp; Dessert</li>
+            <li><span>✓</span> Halal, Vegan, Celiac &amp; Nut Allergy Protocols</li>
+            <li><span>✓</span> Dynamic Live Cost Calculator &amp; Stepper</li>
+          </ul>
+        </div>
+        <div>
+          <a href="#signin-modal" class="btn btn-primary btn-full btn-sm font-semibold" style="background:#059669; border-color:#059669;">🔒 Sign In to Customize</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Sign In Required Modal (for Guest Mode) -->
+  <div id="signin-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <a href="#" class="modal-close">✕</a>
+      <div class="modal-icon">🔒</div>
+      <h3 style="font-size:1.35rem; font-weight:800; margin-bottom:8px; color:var(--gray-900);">Sign In Required</h3>
+      <p class="text-sm text-muted mb-20">You are browsing in <strong>Guest Mode</strong>. You can view all venues, inspect high-resolution photo galleries, and explore catering menus freely.<br><br>To place a reservation or order catering, please sign in to your account.</p>
+      <div class="flex gap-12 mb-12">
+        <a href="login-role.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
+        <a href="signup-role.php" class="btn btn-outline btn-full font-semibold">Create Account</a>
+      </div>
+      <div class="text-xs text-muted">Authorized access for Customers, Staff, Caterers &amp; Admins.</div>
+    </div>
+  </div>
+
+        <footer class="page-footer">
+    <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+  </footer>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('customer', 'customer-login.php');
+$db = getDBConnection();
+?>
+<?php
+$venueId = (int)($_GET['venue_id'] ?? 1);
+$stmtVD = $db->prepare("SELECT * FROM venues WHERE id = ? LIMIT 1");
+$stmtVD->execute([$venueId]);
+$venueData = $stmtVD->fetch();
+if (!$venueData) {
+    // fallback to first venue
+    $stmtVD2 = $db->query("SELECT * FROM venues WHERE status='active' LIMIT 1");
+    $venueData = $stmtVD2->fetch();
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro – Booking Step 1</title>
+  <link rel="stylesheet" href="../css/style.css">
+  
+</head>
+<body>
+  <input type="checkbox" id="sidebar-toggle">
+  <div class="app-shell">
+    <!-- Sidebar -->
+    
+    
+    <aside class="sidebar" id="main-sidebar">
+      <div class="sidebar-logo">
+        <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
+          <div class="sidebar-logo-text">VenuePro</div>
+        <div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-label">Main Menu</div>
+        <a href="customer-dashboard.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Dashboard
+        </a>
+        <a href="venue-listings.php" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> Bookings &amp; Venues
+        </a>
+        <a href="customer-live-progress.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Live Progress
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+            <header class="topbar">
+        <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </label>
+        <div class="topbar-search">
+          <span class="topbar-search-icon">🔍</span>
+          <input type="text" placeholder="Search event venues, bookings, menus...">
+        </div>
+        <div class="topbar-actions">
+          <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
+            <span class="badge">3</span>
+            🔔
+          </a>
+          <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
+            💬
+          </a>
+          <div class="topbar-user">
+            <div class="user-avatar" style="background:#2563eb;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+            <div class="user-info">
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-body">
+        
+<div class="steps">
+  <div class="step active">
+    <div class="step-circle">1</div>
+    <div class="step-label">Venue & Logistics</div>
+  </div>
+  <div class="step-line"></div>
+  <div class="step">
+    <div class="step-circle">2</div>
+    <div class="step-label">Catering</div>
+  </div>
+  <div class="step-line"></div>
+  <div class="step">
+    <div class="step-circle">3</div>
+    <div class="step-label">Payment</div>
+  </div>
+</div>
+
+<div class="grid-2" style="max-width:960px; margin:0 auto; gap:28px;">
+  <div class="card">
+    <h2 class="mb-4">Select Date & Guests</h2>
+    <p class="mb-24">Configure the timeframe and attendance for Grand Emerald Ballroom.</p>
+
+    <form action="booking-catering-packages.php">
+      <div class="form-group">
+        <label class="form-label">Event Date</label>
+        <input type="date" class="form-control" value="2026-11-20" required>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Start Time</label>
+          <input type="time" class="form-control" value="10:00" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Time</label>
+          <input type="time" class="form-control" value="22:00" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Expected Guest Count</label>
+        <input type="number" class="form-control" value="150" min="20" max="600" required>
+        <small class="form-hint">Maximum venue capacity is 600 attendees.</small>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Event Format</label>
+        <select class="form-control">
+          <option>Corporate Summit / Conference</option>
+          <option>Gala Dinner & Awards</option>
+          <option>Product Launch & Reception</option>
+          <option>Private Celebration</option>
+        </select>
+      </div>
+
+      <div class="flex gap-12 mt-24">
+        <a href="venue-details.php" class="btn btn-ghost" style="flex:1;">Back to Details</a>
+        <button type="submit" class="btn btn-primary" style="flex:2;">Continue to Catering →</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="background:var(--gray-50);">
+    <h3 class="mb-16">Booking Summary</h3>
+    <div class="flex gap-12 mb-16">
+      <div style="width:70px; height:70px; border-radius:var(--radius-sm); background:url('https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=300&q=80') center/cover;"></div>
+      <div>
+        <div class="font-bold">Grand Emerald Ballroom</div>
+        <div class="text-xs text-muted">Downtown District</div>
+        <div class="text-xs font-semibold text-primary mt-4">$1,200.00 / day base</div>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--gray-200); padding-top:14px;">
+      <div class="flex-between text-sm mb-8"><span class="text-muted">Selected Tier</span><span class="font-semibold">Enterprise</span></div>
+      <div class="flex-between text-sm mb-8"><span class="text-muted">Estimated Guests</span><span class="font-semibold">150 people</span></div>
+      <div class="flex-between text-sm mb-8"><span class="text-muted">Estimated Duration</span><span class="font-semibold">12 Hours</span></div>
+    </div>
+  </div>
+</div>
+
+      </main>
+
+                        <footer class="page-footer">
+        <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+        <div class="footer-links">
+          <a href="../privacy-policy.php">Privacy Policy</a>
+          <a href="../terms-of-service.php">Terms of Service</a>
+          <a href="../contact-support.php">Contact Support</a>
+        </div>
+      </footer>
+    </div>
+  </div>
+<script src="../js/app.js"></script>
+<script>
+// Store venue_id from URL for booking flow
+var vpVenueId = new URLSearchParams(window.location.search).get('venue_id') || '1';
+sessionStorage.setItem('vp_venue_id', vpVenueId);
+
+// Wire availability check button
+document.addEventListener('DOMContentLoaded', function() {
+  var checkBtn = document.querySelector('.btn-check-avail, button[class*="btn"]');
+  var dateInput = document.querySelector('input[type="date"], input[type="text"][placeholder*="mm/dd"]');
+  var timeSelect = document.querySelector('select[id*="duration"], select');
+
+  document.querySelectorAll('button, a.btn').forEach(function(btn) {
+    if (btn.textContent.toLowerCase().includes('check availability') || btn.textContent.toLowerCase().includes('check avail')) {
+      btn.addEventListener('click', async function(e) {
+        e.preventDefault();
+        var dateVal = dateInput ? dateInput.value : '';
+        if (!dateVal) { alert('Please select a date first.'); return; }
+        // Convert MM/DD/YYYY to YYYY-MM-DD if needed
+        if (dateVal.includes('/')) {
+          var parts = dateVal.split('/');
+          dateVal = parts[2] + '-' + parts[0].padStart(2,'0') + '-' + parts[1].padStart(2,'0');
+        }
+        try {
+          var res = await fetch('../api/bookings.php?action=check_availability&venue_id=' + vpVenueId + '&date=' + dateVal + '&start_time=18:00:00&end_time=22:00:00');
+          var d = await res.json();
+          if (d.data && d.data.available) {
+            alert('Date is available! Proceed to select catering package.');
+            sessionStorage.setItem('vp_event_date', dateVal);
+            window.location.href = 'booking-catering-packages.php?venue_id=' + vpVenueId + '&date=' + dateVal;
+          } else {
+            // Show conflict visually
+            var existing = document.querySelector('.conflict-alert');
+            if (!existing) {
+              var alertDiv = document.createElement('div');
+              alertDiv.className = 'conflict-alert';
+              alertDiv.style.cssText = 'background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:16px;margin-top:16px;color:#92400e;';
+              alertDiv.innerHTML = '<strong>Date Conflict Detected</strong><br>' + (d.message || 'This venue is already booked on the selected date/time.');
+              dateInput.parentNode.insertBefore(alertDiv, dateInput.nextSibling);
+            } else {
+              existing.innerHTML = '<strong>Date Conflict Detected</strong><br>' + (d.message || 'This venue is already booked on the selected date/time.');
+            }
+          }
+        } catch(err) {
+          console.error(err);
+        }
+      });
+    }
+  });
+
+  // "Book Now" / Continue buttons
+  document.querySelectorAll('a[href*="booking-catering"], a[href*="booking-summary"]').forEach(function(a) {
+    a.addEventListener('click', function(e) {
+      if (dateInput && dateInput.value) {
+        sessionStorage.setItem('vp_event_date', dateInput.value);
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>

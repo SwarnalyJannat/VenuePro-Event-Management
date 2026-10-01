@@ -1,0 +1,330 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('customer', 'customer-login.php');
+$db = getDBConnection();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro – Book a Venue</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* CSS step wizard using radio buttons */
+    .wizard-radio { display:none; }
+    #ws1:checked ~ .wizard-body .wizard-step-1 { display:block; }
+    #ws2:checked ~ .wizard-body .wizard-step-2 { display:block; }
+    #ws3:checked ~ .wizard-body .wizard-step-3 { display:block; }
+    .wizard-step-1,.wizard-step-2,.wizard-step-3 { display:none; }
+
+    #ws1:checked ~ .step-indicators .si1,
+    #ws2:checked ~ .step-indicators .si2,
+    #ws3:checked ~ .step-indicators .si3 {
+      background:var(--primary); color:#fff; border-color:var(--primary);
+    }
+    .step-indicators { display:flex; align-items:center; justify-content:center; gap:0; margin-bottom:32px; }
+    .si { width:36px; height:36px; border-radius:50%; border:2px solid var(--gray-300); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.875rem; color:var(--gray-400); background:#fff; }
+    .step-line2 { flex:1; height:2px; background:var(--gray-200); max-width:80px; }
+    .si-label { font-size:.8rem; font-weight:600; color:var(--gray-500); margin-left:6px; }
+
+    /* Package select cards */
+    .pkg-radio { display:none; }
+    .pkg-sel-card { border:2px solid var(--gray-200); border-radius:var(--radius); padding:16px; cursor:pointer; transition:all .15s; }
+    .pkg-radio:checked + .pkg-sel-card { border-color:var(--primary); background:#eff6ff; }
+    .pkg-sel-card:hover { border-color:var(--primary); }
+
+    /* Guest counter display */
+    .guest-display { font-size:2rem; font-weight:800; text-align:center; color:var(--primary); min-width:60px; }
+  </style>
+</head>
+<body>
+  <input type="checkbox" id="sidebar-toggle">
+  <div class="app-shell">
+    
+    
+    <aside class="sidebar" id="main-sidebar">
+      <div class="sidebar-logo">
+        <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
+          <div class="sidebar-logo-text">VenuePro</div>
+        <div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-label">Main Menu</div>
+        <a href="customer-dashboard.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Dashboard
+        </a>
+        <a href="venue-listings.php" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> Bookings &amp; Venues
+        </a>
+        <a href="customer-live-progress.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Live Progress
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
+        </a>
+      </div>
+    </aside>
+    <div class="main-content">
+            <header class="topbar">
+        <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </label>
+        <div class="topbar-search">
+          <span class="topbar-search-icon">🔍</span>
+          <input type="text" placeholder="Search event venues, bookings, menus...">
+        </div>
+        <div class="topbar-actions">
+          <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
+            <span class="badge">3</span>
+            🔔
+          </a>
+          <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
+            💬
+          </a>
+          <div class="topbar-user">
+            <div class="user-avatar" style="background:#2563eb;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+            <div class="user-info">
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main class="page-body">
+
+<div class="flex-between mb-8">
+  <div>
+    <h1>Book a Venue Event</h1>
+    <p>Grand Emerald Ballroom — Downtown District</p>
+  </div>
+  <a href="venue-listings.php" class="btn btn-ghost btn-sm">← Back to Listings</a>
+</div>
+
+<!-- Wizard with CSS steps -->
+<input type="radio" class="wizard-radio" name="wizard" id="ws1" checked>
+<input type="radio" class="wizard-radio" name="wizard" id="ws2">
+<input type="radio" class="wizard-radio" name="wizard" id="ws3">
+
+<!-- Step indicator labels (visual only) -->
+<div class="step-indicators">
+  <div class="si si1">1</div>
+  <span class="si-label" style="margin-right:8px;">Date &amp; Guests</span>
+  <div class="step-line2"></div>
+  <div class="si si2">2</div>
+  <span class="si-label" style="margin-right:8px;">Catering Package</span>
+  <div class="step-line2"></div>
+  <div class="si si3">3</div>
+  <span class="si-label">Review &amp; Pay</span>
+</div>
+
+<div class="wizard-body">
+  <!-- STEP 1: Venue date + guest count -->
+  <div class="wizard-step-1">
+    <div class="grid-2" style="gap:28px; align-items:start;">
+      <div class="card">
+        <h2 class="mb-4">Step 1 — Event Date &amp; Guests</h2>
+        <p class="mb-20">Select your event date, duration and expected attendance.</p>
+        <div class="form-group">
+          <label class="form-label">Event Date *</label>
+          <input type="date" class="form-control" value="2026-11-20" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Start Time</label>
+            <input type="time" class="form-control" value="10:00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">End Time</label>
+            <input type="time" class="form-control" value="22:00">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Expected Guest Count *</label>
+          <div class="flex-center gap-12">
+            <button type="button" class="btn btn-ghost btn-sm" style="width:40px;">−</button>
+            <div class="guest-display">150</div>
+            <button type="button" class="btn btn-ghost btn-sm" style="width:40px;">+</button>
+          </div>
+          <div class="form-hint text-center">Maximum capacity: 600 guests</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Event Type</label>
+          <select class="form-control">
+            <option>Corporate Summit / Conference</option>
+            <option>Gala Dinner &amp; Awards</option>
+            <option>Product Launch &amp; Reception</option>
+            <option selected>Wedding &amp; Private Celebration</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Special Requirements (Optional)</label>
+          <textarea class="form-control" rows="2" placeholder="ADA accessibility needs, staging requirements, custom AV setup..."></textarea>
+        </div>
+
+        <label for="ws2" class="btn btn-primary btn-full" style="cursor:pointer; margin-top:16px;">
+          Continue to Select Catering Package →
+        </label>
+      </div>
+
+      <!-- Summary sidebar -->
+      <div class="card" style="background:var(--gray-50);">
+        <h3 class="mb-12">Booking Summary</h3>
+        <div style="width:100%; height:120px; border-radius:var(--radius-sm); background:url('https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=600&q=80') center/cover; margin-bottom:12px;"></div>
+        <div class="font-bold mb-4">Grand Emerald Ballroom</div>
+        <div class="text-xs text-muted mb-16">Downtown District · Enterprise Tier · $1,200/day base</div>
+        <div class="text-sm mb-4"><span class="text-muted">Selected Date:</span> <strong>Nov 20, 2026</strong></div>
+        <div class="text-sm mb-4"><span class="text-muted">Duration:</span> <strong>12 Hours</strong></div>
+        <div class="text-sm mb-16"><span class="text-muted">Guest Count:</span> <strong>150 attendees</strong></div>
+        <div style="border-top:1px solid var(--gray-200); padding-top:12px;" class="flex-between">
+          <span class="text-muted text-sm">Venue Est.</span>
+          <span class="font-bold text-primary">$4,800.00</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: Catering Package selection -->
+  <div class="wizard-step-2">
+    <div class="grid-2" style="grid-template-columns: 2fr 1fr; gap:28px; align-items:start;">
+      <div class="card">
+        <h2 class="mb-4">Step 2 — Select Catering Package</h2>
+        <p class="mb-20">Choose a catering package or select venue-only booking.</p>
+
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+          <input type="radio" class="pkg-radio" name="pkg" id="pkg-none" checked>
+          <label class="pkg-sel-card" for="pkg-none">
+            <div class="flex-between">
+              <div class="font-bold">No Catering (Venue Only)</div>
+              <span class="text-sm text-muted">+$0.00</span>
+            </div>
+            <div class="text-xs text-muted">I will arrange external catering independently.</div>
+          </label>
+
+          <input type="radio" class="pkg-radio" name="pkg" id="pkg-gold">
+          <label class="pkg-sel-card" for="pkg-gold">
+            <div class="flex-between mb-4">
+              <div class="font-bold">🥇 Gold Luncheon Package</div>
+              <span class="font-bold text-primary">+$1,200.00</span>
+            </div>
+            <div class="text-xs text-muted mb-4">Per head: $24.00 · 30–80 guests</div>
+            <div class="text-xs">2-course plated lunch · Coffee &amp; tea station · Seasonal salads</div>
+          </label>
+
+          <input type="radio" class="pkg-radio" name="pkg" id="pkg-plat">
+          <label class="pkg-sel-card" for="pkg-plat" style="border-color:#059669;">
+            <div class="flex-between mb-4">
+              <div class="font-bold">🏆 Platinum Evening Banquet <span class="stat-badge positive" style="margin-left:6px; font-size:.6rem;">MOST POPULAR</span></div>
+              <span class="font-bold text-primary">+$1,850.00</span>
+            </div>
+            <div class="text-xs text-muted mb-4">Per head: $37.00 · 50–200 guests</div>
+            <div class="text-xs">3-course dinner · 4h open bar · Sommelier service · Passed canapés</div>
+          </label>
+
+          <input type="radio" class="pkg-radio" name="pkg" id="pkg-custom">
+          <label class="pkg-sel-card" for="pkg-custom">
+            <div class="flex-between mb-4">
+              <div class="font-bold">✨ Chef's Signature Tasting (Bespoke)</div>
+              <span class="font-bold text-primary">+$2,400.00</span>
+            </div>
+            <div class="text-xs text-muted mb-4">Per head: $80.00 · 20–60 guests</div>
+            <div class="text-xs mb-4">5-course tasting menu · Private sommelier · Chef's table experience</div><a href="caterer-custom-package.php" class="text-xs font-semibold text-primary">✨ Open Custom Package Builder →</a>
+          </label>
+        </div>
+
+        <div class="flex gap-12">
+          <label for="ws1" class="btn btn-ghost" style="flex:1; cursor:pointer;">← Back</label>
+          <label for="ws3" class="btn btn-primary" style="flex:2; cursor:pointer;">Review &amp; Proceed to Payment →</label>
+        </div>
+      </div>
+
+      <div class="card" style="background:var(--gray-50);">
+        <h3 class="mb-12">Running Total</h3>
+        <div class="text-sm mb-8"><span class="text-muted">Venue (Grand Emerald):</span> <span class="font-bold">$4,800.00</span></div>
+        <div class="text-sm mb-8"><span class="text-muted">Catering Package:</span> <span class="font-bold">TBC</span></div>
+        <div class="text-sm mb-8"><span class="text-muted">Guest Count:</span> <span class="font-bold">150</span></div>
+        <div style="border-top:1px solid var(--gray-200); padding-top:12px; margin-top:8px;" class="flex-between">
+          <span class="text-muted text-sm">Subtotal Est.</span>
+          <span class="font-bold text-primary" style="font-size:1.1rem;">$4,800+</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: Review & Pay -->
+  <div class="wizard-step-3">
+    <div class="grid-2" style="gap:32px; align-items:start;">
+      <div class="card">
+        <h2 class="mb-4">Step 3 — Review &amp; Secure Payment</h2>
+        <p class="mb-20">Confirm your booking details and complete payment.</p>
+
+        <div class="card mb-20" style="background:var(--gray-50);">
+          <div class="font-bold text-sm mb-12">Booking Confirmation Summary</div>
+          <div class="flex-between text-sm mb-6"><span class="text-muted">Venue</span><span class="font-bold">Grand Emerald Ballroom</span></div>
+          <div class="flex-between text-sm mb-6"><span class="text-muted">Date &amp; Duration</span><span class="font-bold">Nov 20, 2026 · 12h</span></div>
+          <div class="flex-between text-sm mb-6"><span class="text-muted">Guests</span><span class="font-bold">150 attendees</span></div>
+          <div class="flex-between text-sm mb-6"><span class="text-muted">Catering</span><span class="font-bold">Platinum Evening Banquet</span></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Cardholder Name</label>
+          <input type="text" class="form-control" value="Mahmud Rahman" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Card Number</label>
+          <input type="text" class="form-control" value="•••• •••• •••• 4242">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Expiry</label>
+            <input type="text" class="form-control" value="12/28">
+          </div>
+          <div class="form-group">
+            <label class="form-label">CVC</label>
+            <input type="password" class="form-control" value="•••">
+          </div>
+        </div>
+
+        <div class="flex gap-12 mt-16">
+          <label for="ws2" class="btn btn-ghost" style="flex:1; cursor:pointer;">← Back</label>
+          <a href="booking-success.php" class="btn btn-primary" style="flex:2;">🔒 Confirm &amp; Pay $6,650.00</a>
+        </div>
+        <div class="text-xs text-center text-muted mt-8">🔒 Secured by Stripe · End-to-end encrypted</div>
+      </div>
+
+      <div class="card">
+        <h3 class="mb-16">Final Cost Breakdown</h3>
+        <div class="flex-between text-sm mb-8"><span class="text-muted">Grand Emerald Ballroom (12h)</span><span>$4,800.00</span></div>
+        <div class="flex-between text-sm mb-8"><span class="text-muted">Platinum Catering Package</span><span>$1,850.00</span></div>
+        <div class="flex-between" style="background:#eff6ff; padding:14px; border-radius:var(--radius-sm);">
+          <span class="font-bold">TOTAL AMOUNT</span>
+          <span class="font-bold text-primary" style="font-size:1.5rem;">$6,650.00</span>
+        </div>
+        <div class="text-xs text-muted mt-8">Free cancellation within 48h. Refund in 5–10 business days.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+      </main>
+                        <footer class="page-footer">
+        <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+        <div class="footer-links">
+          <a href="../privacy-policy.php">Privacy Policy</a>
+          <a href="../terms-of-service.php">Terms of Service</a>
+          <a href="../contact-support.php">Contact Support</a>
+        </div>
+      </footer>
+    </div>
+  </div>
+<script src="../js/app.js"></script>
+</body>
+</html>

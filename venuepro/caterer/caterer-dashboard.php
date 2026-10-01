@@ -1,0 +1,260 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/helpers.php';
+$currentUser = requireRole('caterer', 'caterer-login.php');
+$db = getDBConnection();
+?>
+<?php
+$catUser = $currentUser;
+$stmtCO = $db->prepare(
+    "SELECT co.*, b.event_name, b.event_date, b.start_time, b.end_time, b.guest_count,
+     v.name AS venue_name, cp.title AS package_title
+     FROM caterer_orders co
+     JOIN bookings b ON co.booking_id = b.id
+     JOIN venues v ON b.venue_id = v.id
+     LEFT JOIN catering_packages cp ON b.package_id = cp.id
+     WHERE co.caterer_id = ? AND co.preparation_status != 'Delivered'
+     ORDER BY b.event_date ASC LIMIT 10"
+);
+$stmtCO->execute([$catUser['id']]);
+$activeOrders = $stmtCO->fetchAll();
+
+// Recent orders (last 10)
+$stmtRO = $db->prepare(
+    "SELECT co.*, b.event_name, b.event_date, v.name AS venue_name, cp.title AS package_title
+     FROM caterer_orders co
+     JOIN bookings b ON co.booking_id = b.id
+     JOIN venues v ON b.venue_id = v.id
+     LEFT JOIN catering_packages cp ON b.package_id = cp.id
+     WHERE co.caterer_id = ?
+     ORDER BY co.created_at DESC LIMIT 8"
+);
+$stmtRO->execute([$catUser['id']]);
+$recentOrders = $stmtRO->fetchAll();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VenuePro Caterer – Kitchen Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .sidebar-logo-sub { color:#10b981; }
+    /* Order row selection */
+    .order-radio { display:none; }
+    .order-row label {
+      display:grid; grid-template-columns:24px 60px 1fr 100px 110px;
+      gap:0 12px; align-items:center; padding:13px 16px;
+      border-bottom:1px solid var(--gray-100); cursor:pointer; transition:background .15s;
+    }
+    .order-row label:hover { background:var(--gray-50); }
+    .order-radio:checked ~ label { background:#f0fdf4; border-left:3px solid #059669; }
+    .order-dot { width:16px; height:16px; border-radius:50%; border:2px solid var(--gray-400); }
+    .order-radio:checked ~ label .order-dot { background:#059669; border-color:#059669; }
+    /* Live dot */
+    .live-dot { width:7px; height:7px; border-radius:50%; background:#16a34a; display:inline-block; animation:pulse 1.5s infinite; }
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    /* Order detail panel */
+    .order-detail { background:#f0fdf4; border:1px solid #86efac; border-radius:var(--radius); padding:20px; }
+  </style>
+</head>
+<body>
+  <input type="checkbox" id="sidebar-toggle">
+  <div class="app-shell">
+    
+    
+    <aside class="sidebar" id="main-sidebar">
+      <div class="sidebar-logo">
+        <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
+          <div class="sidebar-logo-text">VenuePro</div>
+        <div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-label">Culinary Dashboard</div>
+        <a href="caterer-dashboard.php" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Kitchen Overview
+        </a>
+        <a href="caterer-order-details.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Select an Order
+        </a>
+        <a href="caterer-food-packages.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Package Library
+        </a>
+                <a href="caterer-menu-items.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+          Singular Menu Items
+        </a>
+        <a href="caterer-create-package-1.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Create Package
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
+        </a>
+      </div>
+    </aside>
+    <div class="main-content">
+            <header class="topbar">
+        <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </label>
+        <div class="topbar-search">
+          <span class="topbar-search-icon">🔍</span>
+          <input type="text" placeholder="Search kitchen orders, menus, packages...">
+        </div>
+        <div class="topbar-actions">
+          <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
+            <span class="badge">5</span>
+            🔔
+          </a>
+          <div class="topbar-user">
+            <div class="user-avatar" style="background:#059669;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+            <div class="user-info">
+              <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main class="page-body">
+
+<div class="flex-between mb-24">
+  <div>
+    <h1>Kitchen Operations Center</h1>
+    <p>Live order queue — select any order to inspect details and update preparation status.</p>
+  </div>
+  <span style="font-size:.8rem; font-weight:600; display:flex; align-items:center; gap:6px;"><span class="live-dot"></span> Live Kitchen Feed</span>
+</div>
+
+<div class="stats-grid mb-24">
+  <div class="stat-card green"><div class="stat-label">Active Orders</div><div class="stat-value">3</div></div>
+  <div class="stat-card"><div class="stat-label">Ready for Dispatch</div><div class="stat-value">1</div></div>
+  <div class="stat-card orange"><div class="stat-label">Upcoming Today</div><div class="stat-value">2</div></div>
+  <div class="stat-card"><div class="stat-label">Completed This Week</div><div class="stat-value">18</div></div>
+</div>
+
+<!-- Selectable Order Queue -->
+<div class="card mb-24">
+  <div class="card-header">
+    <div class="card-title">Active Kitchen Queue</div>
+  </div>
+
+  <!-- Table header -->
+  <div style="display:grid; grid-template-columns:24px 60px 1fr 100px 110px; gap:0 12px; padding:8px 16px; border-bottom:2px solid var(--gray-200);">
+    <span></span>
+    <span class="text-xs font-bold text-muted">ORDER</span>
+    <span class="text-xs font-bold text-muted">EVENT &amp; VENUE</span>
+    <span class="text-xs font-bold text-muted">PACKAGE</span>
+    <span class="text-xs font-bold text-muted">STATUS</span>
+  </div>
+
+  <div class="order-row">
+    <input type="radio" class="order-radio" name="order-sel" id="o1" checked>
+    <label for="o1">
+      <span class="order-dot"></span>
+      <span class="font-bold text-primary text-sm">#942</span>
+      <div>
+        <div class="font-semibold text-sm">Grand Gala Dinner</div>
+        <div class="text-xs text-muted">Ballroom A — 150 guests</div>
+      </div>
+      <span class="pill" style="background:#fef9c3;color:#92400e;">Gold</span>
+      <span class="pill pill-in-progress">Preparing</span>
+    </label>
+  </div>
+
+  <div class="order-row">
+    <input type="radio" class="order-radio" name="order-sel" id="o2">
+    <label for="o2">
+      <span class="order-dot"></span>
+      <span class="font-bold text-primary text-sm">#938</span>
+      <div>
+        <div class="font-semibold text-sm">Tech Summit Lunch</div>
+        <div class="text-xs text-muted">Roof Garden — 200 guests</div>
+      </div>
+      <span class="pill pill-confirmed">Platinum</span>
+      <span class="pill pill-confirmed">Delivering</span>
+    </label>
+  </div>
+
+  <div class="order-row">
+    <input type="radio" class="order-radio" name="order-sel" id="o3">
+    <label for="o3">
+      <span class="order-dot"></span>
+      <span class="font-bold text-primary text-sm">#945</span>
+      <div>
+        <div class="font-semibold text-sm">Private Wedding Reception</div>
+        <div class="text-xs text-muted">Lakeside Manor — 80 guests</div>
+      </div>
+      <span class="pill pill-inquiry">Custom</span>
+      <span class="pill pill-in-progress">Preparing</span>
+    </label>
+  </div>
+
+  <div class="order-row">
+    <input type="radio" class="order-radio" name="order-sel" id="o4">
+    <label for="o4">
+      <span class="order-dot"></span>
+      <span class="font-bold text-primary text-sm">#950</span>
+      <div>
+        <div class="font-semibold text-sm">Corporate Board Luncheon</div>
+        <div class="text-xs text-muted">Executive Suite — 40 guests</div>
+      </div>
+      <span class="pill" style="background:#fef9c3;color:#92400e;">Gold</span>
+      <span class="pill pill-in-progress">Preparing</span>
+    </label>
+  </div>
+</div>
+
+<!-- Order Detail Panel -->
+<div class="grid-2" style="gap:24px; align-items:start;">
+  <div class="order-detail">
+    <div class="flex-between mb-16">
+      <div>
+        <div class="text-xs text-muted mb-2">SELECTED ORDER</div>
+        <h3>Order #942 — Grand Gala Dinner</h3>
+        <div class="text-sm text-muted">Ballroom A, Grand Emerald • 150 Guests • Gold Package</div>
+      </div>
+      <span class="pill pill-in-progress">Preparing</span>
+    </div>
+
+    <div class="mb-16">
+      <div class="font-bold text-sm mb-8">Preparation Milestones</div>
+      <div class="progress-bar mb-4"><div class="progress-fill" style="width:65%;"></div></div>
+      <div class="flex-between text-xs text-muted">
+        <span>Mise en Place ✓ · Pre-cook ✓ · Plating → · Service ○</span>
+        <span class="font-bold">65%</span>
+      </div>
+    </div>
+
+    <div class="grid-2 gap-8">
+      <a href="caterer-order-details.php" class="btn btn-outline btn-sm">📋 View Full Order Spec</a>
+      <a href="caterer-order-details.php" class="btn btn-primary btn-sm" style="background:#059669; border-color:#059669;">✓ Mark as Ready for Dispatch</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">Package Performance</div></div>
+    <div class="mb-16">
+      <div class="flex-between text-sm mb-4"><span class="font-semibold">Gold Luncheon Tier</span><span class="font-bold">42%</span></div>
+      <div class="progress-bar mb-12"><div class="progress-fill orange" style="width:42%;"></div></div>
+      <div class="flex-between text-sm mb-4"><span class="font-semibold">Platinum Evening Gala</span><span class="font-bold">35%</span></div>
+      <div class="progress-bar mb-12"><div class="progress-fill" style="width:35%;"></div></div>
+      <div class="flex-between text-sm mb-4"><span class="font-semibold">Custom Bespoke</span><span class="font-bold">23%</span></div>
+      <div class="progress-bar"><div class="progress-fill gray" style="width:23%;"></div></div>
+    </div>
+  </div>
+</div>
+
+      </main>
+                        <footer class="page-footer">
+        <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+      </footer>
+    </div>
+  </div>
+<script src="../js/app.js"></script>
+</body>
+</html>
