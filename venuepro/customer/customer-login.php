@@ -35,7 +35,7 @@ if (isLoggedIn()) {
         <label class="form-label">Email address</label>
         <div class="input-wrap">
           <span class="input-icon">✉️</span>
-          <input type="email" class="form-control with-icon" value="mahmud@enterprise.com" placeholder="name@company.com" required>
+          <input type="email" class="form-control with-icon" placeholder="name@company.com" required>
         </div>
       </div>
 

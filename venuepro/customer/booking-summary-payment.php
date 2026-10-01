@@ -324,7 +324,7 @@ $db = getDBConnection();
               <form action="booking-success.php" id="payment-form">
                 <div class="form-group">
                   <label class="form-label">Cardholder Name</label>
-                  <input type="text" class="form-control" value="Mahmud" placeholder="e.g. Mahmud" required>
+                  <input type="text" class="form-control" value="<?= e($currentUser['name'] ?? '') ?>" placeholder="e.g. <?= e($currentUser['name'] ?? 'Alex Thompson') ?>" required>
                 </div>
 
                 <div class="form-group">

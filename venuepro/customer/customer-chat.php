@@ -95,58 +95,59 @@ $db = getDBConnection();
 
         <div class="card" style="padding:0; overflow:hidden;">
           <div class="chat-layout">
+<?php
+$stmtStaff = $db->query("SELECT u.id, u.name, u.email, u.avatar_text, u.avatar_bg, sp.department, sp.staff_code FROM users u JOIN staff_profiles sp ON u.id = sp.user_id WHERE u.role = 'staff' AND u.status = 'active' ORDER BY u.id ASC");
+$staffMembers = $stmtStaff->fetchAll();
+
+$activeStaffId = (int)($_GET['staff_id'] ?? ($staffMembers[0]['id'] ?? 3));
+$activeStaff = null;
+foreach ($staffMembers as $sm) {
+    if ((int)$sm['id'] === $activeStaffId) {
+        $activeStaff = $sm;
+        break;
+    }
+}
+if (!$activeStaff && !empty($staffMembers)) {
+    $activeStaff = $staffMembers[0];
+    $activeStaffId = (int)$activeStaff['id'];
+}
+
+$stmtMsgs = $db->prepare("SELECT cm.*, u.name as sender_name, u.avatar_text FROM chat_messages cm JOIN users u ON cm.sender_id = u.id WHERE (cm.sender_id = ? AND cm.receiver_id = ?) OR (cm.sender_id = ? AND cm.receiver_id = ?) ORDER BY cm.created_at ASC");
+$stmtMsgs->execute([$currentUser['id'], $activeStaffId, $activeStaffId, $currentUser['id']]);
+$chatMessages = $stmtMsgs->fetchAll();
+?>
             <!-- Staff Contacts List (Venue Staff ONLY) -->
             <div class="chat-list">
               <div style="padding:14px 16px; border-bottom:1px solid var(--gray-200); background:var(--gray-50);">
                 <div class="font-bold text-xs text-muted mb-6">ASSIGNED VENUE STAFF</div>
-                <input type="text" class="form-control" placeholder="Search staff members..." style="font-size:0.8rem; padding:6px 10px;">
               </div>
 
-              <!-- Contact 1: Lead Coordinator -->
-              <a href="#" class="chat-item active">
-                <div class="user-avatar" style="background:#7c3aed;">SJ</div>
+              <?php if (empty($staffMembers)): ?>
+              <div style="padding:20px; text-align:center; color:var(--gray-400); font-size:0.85rem;">No staff coordinators online.</div>
+              <?php else: foreach ($staffMembers as $sm): 
+                $isActive = (int)$sm['id'] === $activeStaffId;
+              ?>
+              <a href="customer-chat.php?staff_id=<?= $sm['id'] ?>" class="chat-item <?= $isActive ? 'active' : '' ?>">
+                <div class="user-avatar" style="background:<?= e($sm['avatar_bg'] ?? '#7c3aed') ?>;"><?= e($sm['avatar_text'] ?? 'ST') ?></div>
                 <div style="flex:1; overflow:hidden;">
                   <div class="flex-between">
-                    <span class="font-bold text-sm">Sarah Jenkins</span>
-                    <span class="text-xs text-muted">12:32 PM</span>
+                    <span class="font-bold text-sm"><?= e($sm['name']) ?></span>
+                    <span class="text-xs text-muted"><?= e($sm['staff_code']) ?></span>
                   </div>
-                  <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">Lead Coordinator · Grand Emerald</div>
+                  <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;"><?= e($sm['department']) ?></div>
                 </div>
               </a>
-
-              <!-- Contact 2: A/V Technical Staff -->
-              <a href="#" class="chat-item">
-                <div class="user-avatar" style="background:#0284c7;">MV</div>
-                <div style="flex:1; overflow:hidden;">
-                  <div class="flex-between">
-                    <span class="font-bold text-sm">Marcus Vance</span>
-                    <span class="text-xs text-muted">10:15 AM</span>
-                  </div>
-                  <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">AV Logistics · Skyline Vista Lounge</div>
-                </div>
-              </a>
-
-              <!-- Contact 3: Operations Staff -->
-              <a href="#" class="chat-item">
-                <div class="user-avatar" style="background:#9333ea;">ER</div>
-                <div style="flex:1; overflow:hidden;">
-                  <div class="flex-between">
-                    <span class="font-bold text-sm">Elena Rostova</span>
-                    <span class="text-xs text-muted">Oct 5</span>
-                  </div>
-                  <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">Operations Staff · The Glass Pavillion</div>
-                </div>
-              </a>
+              <?php endforeach; endif; ?>
             </div>
 
             <!-- Active Chat View -->
             <div class="chat-main">
               <div class="chat-header">
                 <div class="flex-center gap-12">
-                  <div class="user-avatar" style="background:#7c3aed;">SJ</div>
+                  <div class="user-avatar" style="background:<?= e($activeStaff['avatar_bg'] ?? '#7c3aed') ?>;"><?= e($activeStaff['avatar_text'] ?? 'ST') ?></div>
                   <div>
-                    <div class="font-bold text-sm">Sarah Jenkins <span class="pill pill-confirmed" style="font-size:0.7rem; margin-left:6px;">Staff</span></div>
-                    <div class="text-xs text-success">● On-Site Lead Coordinator · Grand Emerald Ballroom (#BK-9021)</div>
+                    <div class="font-bold text-sm"><?= e($activeStaff['name'] ?? 'Venue Staff') ?> <span class="pill pill-confirmed" style="font-size:0.7rem; margin-left:6px;">Staff</span></div>
+                    <div class="text-xs text-success">● <?= e($activeStaff['department'] ?? 'Event Operations') ?> (Direct Channel)</div>
                   </div>
                 </div>
                 <div class="flex gap-8">
@@ -154,30 +155,30 @@ $db = getDBConnection();
                 </div>
               </div>
 
-              <div class="chat-messages">
+              <div class="chat-messages" id="customer-chat-container">
                 <div style="text-align:center; margin-bottom:8px;">
                   <span class="text-xs text-muted" style="background:#e2e8f0; padding:3px 14px; border-radius:12px;">🛡️ Dedicated Venue Staff Channel: Direct communication for logistics, hall staging &amp; A/V setups</span>
                 </div>
 
-                <div class="msg-bubble msg-in">
-                  Hello Mahmud! I am Sarah Jenkins, your assigned Venue Staff Coordinator for the Grand Emerald Ballroom. Our staff team has verified the stage configuration and 15 banquet tables. How can we assist you with setup?
-                  <div class="text-xs text-muted" style="text-align:right; margin-top:4px;">12:28 PM</div>
+                <?php if (empty($chatMessages)): ?>
+                <div style="text-align:center; padding:40px; color:var(--gray-400);">
+                  <div style="font-size:2.5rem; margin-bottom:8px;">💬</div>
+                  <p class="text-sm">No messages yet with <?= e($activeStaff['name'] ?? 'this coordinator') ?>.<br>Send a message below to begin coordination!</p>
                 </div>
-
-                <div class="msg-bubble msg-out">
-                  Hi Sarah! Thanks for reaching out. Could we ensure the wireless lapel microphones and podium sound system are fully tested by 5:00 PM today?
-                  <div class="text-xs" style="color:rgba(255,255,255,0.7); text-align:right; margin-top:4px;">12:30 PM</div>
+                <?php else: foreach ($chatMessages as $msg): 
+                  $isMe = (int)$msg['sender_id'] === (int)$currentUser['id'];
+                  $timeStr = date('g:i A', strtotime($msg['created_at']));
+                ?>
+                <div class="msg-bubble <?= $isMe ? 'msg-out' : 'msg-in' ?>">
+                  <?= nl2br(e($msg['message'])) ?>
+                  <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;"><?= $timeStr ?></div>
                 </div>
-
-                <div class="msg-bubble msg-in">
-                  Absolutely Mahmud! Marcus from our technical staff has scheduled the Bose audio rig soundcheck for 4:30 PM. I will personally inspect the lapel mics and backup batteries prior to 5:00 PM.
-                  <div class="text-xs text-muted" style="text-align:right; margin-top:4px;">12:32 PM</div>
-                </div>
+                <?php endforeach; endif; ?>
               </div>
 
               <div class="chat-input-bar">
-                <input type="text" class="form-control" placeholder="Type your message to venue coordinator Sarah..." style="flex:1;">
-                <button type="button" class="btn btn-primary font-bold">Send Message →</button>
+                <input type="text" id="chat-input-field" class="form-control" placeholder="Type your message to venue coordinator <?= e($activeStaff['name'] ?? 'Staff') ?>..." style="flex:1;">
+                <button type="button" id="chat-send-action" class="btn btn-primary font-bold">Send Message →</button>
               </div>
             </div>
           </div>
@@ -194,6 +195,43 @@ $db = getDBConnection();
       </footer>
     </div>
   </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const input = document.getElementById('chat-input-field');
+  const btn = document.getElementById('chat-send-action');
+  const container = document.getElementById('customer-chat-container');
+
+  async function sendMsg() {
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const b = document.createElement('div');
+    b.className = 'msg-bubble msg-out';
+    b.innerHTML = text.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '<div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;">Just now</div>';
+    container.appendChild(b);
+    container.scrollTop = container.scrollHeight;
+    input.value = '';
+
+    try {
+      await fetch('../api/chat.php?action=send', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          receiver_id: <?= (int)$activeStaffId ?>,
+          message: text
+        })
+      });
+    } catch(e) {
+      console.error(e);
+    }
+  }
+
+  btn && btn.addEventListener('click', sendMsg);
+  input && input.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); sendMsg(); }
+  });
+});
+</script>
 <script src="../js/app.js"></script>
 </body>
 </html>

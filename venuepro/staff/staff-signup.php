@@ -34,7 +34,7 @@ if (isLoggedIn()) {
       </div>
       <div class="form-group">
         <label class="form-label">Full Legal Name</label>
-        <input type="text" class="form-control" placeholder="Sarah Jenkins" required>
+        <input type="text" class="form-control" placeholder="e.g. Jane Doe" required>
       </div>
       <div class="form-group">
         <label class="form-label">Assigned Work Email</label>

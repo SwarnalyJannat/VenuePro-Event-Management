@@ -79,60 +79,49 @@ $db = getDBConnection();
           <span class="breadcrumb-current">Staff Notifications</span>
         </div>
 
+<?php
+$stmtN = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 40");
+$stmtN->execute([$currentUser['id']]);
+$notifRows = $stmtN->fetchAll();
+$unreadCount = 0;
+foreach ($notifRows as $n) { if (!$n['is_read']) $unreadCount++; }
+$typeIcons  = ['booking'=>'📋','payment'=>'💳','message'=>'💬','system'=>'⏱','caterer'=>'🍽️'];
+$typeColors = ['booking'=>'#eff6ff; color:#2563eb','payment'=>'#eff6ff; color:#2563eb','message'=>'#f0fdf4; color:#16a34a','system'=>'#fef3c7; color:#d97706','caterer'=>'#f1f5f9; color:var(--gray-600)'];
+?>
         <div class="flex-between mb-24">
           <div>
             <h1>Staff Notifications &amp; Task Alerts</h1>
             <p>Direct alerts for assigned event setups, customer chat inquiries, and schedule dispatches.</p>
           </div>
-          <span class="text-xs text-muted">4 Unread Alerts</span>
+          <span class="text-xs text-muted"><?= $unreadCount ?> Unread Alert<?= $unreadCount == 1 ? '' : 's' ?></span>
         </div>
 
         <div class="card" style="padding:0; overflow:hidden;">
-          <div class="notif-item unread">
-            <div class="notif-icon-box" style="background:#eff6ff; color:#2563eb;">💬</div>
+          <?php if (empty($notifRows)): ?>
+          <div style="padding:48px; text-align:center; color:var(--gray-400);">
+            <div style="font-size:3rem; margin-bottom:12px;">🔔</div>
+            <p>No new notifications at this time.</p>
+          </div>
+          <?php else: foreach ($notifRows as $notif): 
+            $icon = $typeIcons[$notif['type']] ?? '🔔';
+            $colorStyle = $typeColors[$notif['type']] ?? '#eff6ff; color:#2563eb';
+            $isUnread = !$notif['is_read'];
+            $timeStr = date('M j, g:i A', strtotime($notif['created_at']));
+          ?>
+          <div class="notif-item <?= $isUnread ? 'unread' : '' ?>" data-notif-id="<?= $notif['id'] ?>">
+            <div class="notif-icon-box" style="background:<?= $colorStyle ?>"><?= $icon ?></div>
             <div style="flex:1;">
               <div class="flex-between mb-4">
-                <strong>New Message from Client Mahmud</strong>
-                <span class="text-xs text-muted">12:30 PM</span>
+                <strong><?= e($notif['title']) ?></strong>
+                <span class="text-xs text-muted"><?= $timeStr ?></span>
               </div>
-              <p class="text-xs text-muted mb-8">"Could we ensure the wireless lapel microphones and podium sound system are fully tested by 5:00 PM today?"</p>
-              <a href="staff-chat.php" class="btn btn-primary btn-sm" style="font-size:0.75rem; padding:4px 10px;">Reply in Chat →</a>
+              <p class="text-xs text-muted mb-8"><?= e($notif['message']) ?></p>
+              <?php if (!empty($notif['link_url'])): ?>
+              <a href="<?= e($notif['link_url']) ?>" class="btn btn-primary btn-sm" style="font-size:0.75rem; padding:4px 10px;">View Task →</a>
+              <?php endif; ?>
             </div>
           </div>
-
-          <div class="notif-item unread">
-            <div class="notif-icon-box" style="background:#f0fdf4; color:#16a34a;">📋</div>
-            <div style="flex:1;">
-              <div class="flex-between mb-4">
-                <strong>New Task Assignment: Stage Illumination</strong>
-                <span class="text-xs text-muted">11:15 AM</span>
-              </div>
-              <p class="text-xs text-muted mb-8">Admin Alex Sterling assigned you to verify lighting presets for Grand Emerald Ballroom (#BK-9021).</p>
-              <a href="staff-event-setup.php" class="btn btn-outline btn-sm" style="font-size:0.75rem; padding:4px 10px;">Open Setup Checklist</a>
-            </div>
-          </div>
-
-          <div class="notif-item unread">
-            <div class="notif-icon-box" style="background:#fef3c7; color:#d97706;">⏱</div>
-            <div style="flex:1;">
-              <div class="flex-between mb-4">
-                <strong>Upcoming Event Soundcheck in 2 Hours</strong>
-                <span class="text-xs text-muted">10:00 AM</span>
-              </div>
-              <p class="text-xs text-muted">Skyline Vista Lounge (#BK-9045) soundcheck scheduled with A/V tech Marcus Vance.</p>
-            </div>
-          </div>
-
-          <div class="notif-item">
-            <div class="notif-icon-box" style="background:#f1f5f9; color:var(--gray-600);">✓</div>
-            <div style="flex:1;">
-              <div class="flex-between mb-4">
-                <strong>Catering Arrival Logged</strong>
-                <span class="text-xs text-muted">Yesterday</span>
-              </div>
-              <p class="text-xs text-muted">Artisan Kitchen team logged delivery confirmation for Grand Emerald Ballroom.</p>
-            </div>
-          </div>
+          <?php endforeach; endif; ?>
         </div>
       </main>
 

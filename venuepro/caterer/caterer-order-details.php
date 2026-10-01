@@ -35,10 +35,45 @@ if (!$orderDetail && !empty($allOrders)) {
     $orderDetail = $allOrders[0];
     $orderId = (int)$orderDetail['id'];
 }
-if ($orderDetail) {
-    $stmtSI = $db->prepare("SELECT bsi.* FROM booking_singular_items bsi JOIN caterer_orders co ON bsi.booking_id = co.booking_id WHERE co.id = ?");
-    $stmtSI->execute([$orderId]);
-    $singularItems = $stmtSI->fetchAll();
+$jsOrderStore = [];
+foreach ($allOrders as $ord) {
+    $code = $ord['order_code'];
+    $stmtItems = $db->prepare("SELECT * FROM booking_singular_items WHERE booking_id = ?");
+    $stmtItems->execute([$ord['booking_id']]);
+    $bItems = $stmtItems->fetchAll();
+
+    $singItems = [];
+    foreach ($bItems as $bi) {
+        $singItems[] = [
+            'id' => (int)$bi['id'],
+            'name' => $bi['item_name'],
+            'emoji' => $bi['emoji'] ?? '🍽️',
+            'diet' => $bi['dietary_tag'] ?? '',
+            'qty' => (int)$bi['quantity'],
+            'unitPrice' => (float)$bi['unit_price'],
+            'note' => $bi['notes'] ?? '',
+            'status' => $bi['item_status'] ?? 'Pending'
+        ];
+    }
+
+    $jsOrderStore[$code] = [
+        'id' => '#' . $code,
+        'orderDbId' => (int)$ord['id'],
+        'bookingId' => (int)$ord['booking_id'],
+        'event' => $ord['event_name'],
+        'venue' => $ord['venue_name'],
+        'date' => date('M j, Y', strtotime($ord['event_date'])),
+        'time' => substr($ord['start_time'],0,5) . ' – ' . substr($ord['end_time'],0,5),
+        'guests' => $ord['guest_count'] . ' Guests',
+        'package' => $ord['package_title'] ?? 'Custom Package',
+        'coversText' => ($ord['package_title'] ?? 'Custom Package') . ' — ' . $ord['covers_count'] . ' covers',
+        'status' => $ord['preparation_status'] ?? 'Preparing',
+        'total' => 'Total: $' . number_format($ord['total_amount'], 2),
+        'packageDecision' => $ord['package_decision'] ?? 'Pending',
+        'packagePrice' => '$' . number_format($ord['package_cost'] ?? 1200, 2),
+        'packageDesc' => 'Package dining service and presentation for ' . $ord['guest_count'] . ' guests.',
+        'singularItems' => $singItems
+    ];
 }
 ?>
 <!DOCTYPE html>
@@ -342,50 +377,23 @@ if ($orderDetail) {
             Active Orders (Click any order to load specifications and accept/reject requests):
           </div>
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
-            <div id="ocard-ORD-2045" class="order-select-card active" onclick="loadOrder('ORD-2045')">
+            <?php if (empty($allOrders)): ?>
+            <div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--gray-400);">No orders assigned to your kitchen at this time.</div>
+            <?php else: foreach ($allOrders as $idx => $ord): 
+              $code = $ord['order_code'];
+              $isFirst = $idx === 0;
+            ?>
+            <div id="ocard-<?= e($code) ?>" class="order-select-card <?= $isFirst ? 'active' : '' ?>" onclick="loadOrder('<?= e($code) ?>')">
               <div class="flex-between mb-2">
-                <span class="font-bold text-primary" style="font-size:1.05rem;">#ORD-2045</span>
-                <span id="olist-badge-ORD-2045" class="pill pill-inquiry" style="font-size:0.65rem;">Action Needed</span>
+                <span class="font-bold text-primary" style="font-size:1.05rem;">#<?= e($code) ?></span>
+                <span id="olist-badge-<?= e($code) ?>" class="pill pill-<?= $ord['package_decision']==='Accepted' ? 'confirmed' : 'inquiry' ?>" style="font-size:0.65rem;">
+                  <?= $ord['package_decision']==='Accepted' ? 'Accepted' : 'Action Needed' ?>
+                </span>
               </div>
-              <div class="font-semibold text-xs" style="color:var(--navy-900);">Annual Gala Night</div>
-              <div class="text-xs text-muted">Grand Ballroom • 320 Guests</div>
+              <div class="font-semibold text-xs" style="color:var(--navy-900);"><?= e($ord['event_name']) ?></div>
+              <div class="text-xs text-muted"><?= e($ord['venue_name']) ?> • <?= (int)$ord['guest_count'] ?> Guests</div>
             </div>
-
-            <div id="ocard-ORD-942" class="order-select-card" onclick="loadOrder('ORD-942')">
-              <div class="flex-between mb-2">
-                <span class="font-bold text-primary" style="font-size:1.05rem;">#ORD-942</span>
-                <span id="olist-badge-ORD-942" class="pill pill-inquiry" style="font-size:0.65rem;">Action Needed</span>
-              </div>
-              <div class="font-semibold text-xs" style="color:var(--navy-900);">Grand Gala Dinner</div>
-              <div class="text-xs text-muted">Ballroom A • 150 Guests</div>
-            </div>
-
-            <div id="ocard-ORD-938" class="order-select-card" onclick="loadOrder('ORD-938')">
-              <div class="flex-between mb-2">
-                <span class="font-bold text-primary" style="font-size:1.05rem;">#ORD-938</span>
-                <span id="olist-badge-ORD-938" class="pill pill-confirmed" style="font-size:0.65rem;">Accepted</span>
-              </div>
-              <div class="font-semibold text-xs" style="color:var(--navy-900);">Tech Summit Lunch</div>
-              <div class="text-xs text-muted">Roof Garden • 200 Guests</div>
-            </div>
-
-            <div id="ocard-ORD-945" class="order-select-card" onclick="loadOrder('ORD-945')">
-              <div class="flex-between mb-2">
-                <span class="font-bold text-primary" style="font-size:1.05rem;">#ORD-945</span>
-                <span id="olist-badge-ORD-945" class="pill pill-inquiry" style="font-size:0.65rem;">Action Needed</span>
-              </div>
-              <div class="font-semibold text-xs" style="color:var(--navy-900);">Private Wedding Reception</div>
-              <div class="text-xs text-muted">Lakeside Manor • 80 Guests</div>
-            </div>
-
-            <div id="ocard-ORD-950" class="order-select-card" onclick="loadOrder('ORD-950')">
-              <div class="flex-between mb-2">
-                <span class="font-bold text-primary" style="font-size:1.05rem;">#ORD-950</span>
-                <span id="olist-badge-ORD-950" class="pill pill-inquiry" style="font-size:0.65rem;">Action Needed</span>
-              </div>
-              <div class="font-semibold text-xs" style="color:var(--navy-900);">Corporate Board Luncheon</div>
-              <div class="text-xs text-muted">Executive Suite • 40 Guests</div>
-            </div>
+            <?php endforeach; endif; ?>
           </div>
         </div>
 
@@ -598,273 +606,9 @@ if ($orderDetail) {
   </div>
 
   <script>
-    // Master data store with package decision and singular items orders
-    const orderStore = {
-      "ORD-2045": {
-        id: "#ORD-2045",
-        event: "Annual Gala Night",
-        venue: "Grand Ballroom, Floor 3",
-        date: "Sep 14, 2026",
-        time: "7:00 PM – 11:00 PM",
-        guests: "320 Guests",
-        package: "Gold Package",
-        coversText: "Gold Package — 320 covers",
-        status: "Preparing",
-        total: "Total: $13,260.00",
-        packageDecision: "Pending", // "Pending" | "Accepted" | "Rejected"
-        packagePrice: "$13,260.00",
-        packageDesc: "Gold 2-course plated banquet for 320 covers, standard linens, passed finger foods.",
-        singularItems: [
-          {
-            name: "Grilled Tiger Shrimp",
-            emoji: "🍤",
-            diet: "GF",
-            qty: 24,
-            unitPrice: 12.50,
-            note: "Serve with lemon-garlic butter glaze",
-            status: "Pending" // "Pending" | "Accepted" | "Rejected"
-          },
-          {
-            name: "Premium Coca-Cola (Glass)",
-            emoji: "🥤",
-            diet: "",
-            qty: 60,
-            unitPrice: 3.50,
-            note: "Chilled on ice, lime wedges on the side",
-            status: "Accepted"
-          },
-          {
-            name: "Greek Yogurt Parfait",
-            emoji: "🍶",
-            diet: "Veg",
-            qty: 15,
-            unitPrice: 7.00,
-            note: "Gluten-free granola on top",
-            status: "Pending"
-          },
-          {
-            name: "French Macarons (Box/6)",
-            emoji: "🫐",
-            diet: "Veg",
-            qty: 10,
-            unitPrice: 14.00,
-            note: "VIP captain table dessert gift boxes",
-            status: "Pending"
-          }
-        ],
-        items: [
-          { name: "Grilled Salmon Fillet", diet: "GF", qty: 120, note: "Served with lemon-dill sauce", price: "$18.50" },
-          { name: "Beef Wellington Medallion", diet: "", qty: 100, note: "Medium-rare, mushroom duxelles", price: "$24.00" },
-          { name: "Wild Mushroom Risotto", diet: "Veg", qty: 100, note: "Vegan option available", price: "$14.00" },
-          { name: "Assorted Dinner Rolls", diet: "Veg", qty: 320, note: "Butter included per setting", price: "$2.00" },
-          { name: "Chocolate Fondant Dessert", diet: "", qty: 320, note: "Warm, with vanilla crème", price: "$8.00" },
-          { name: "Open Bar — Premium Spirits", diet: "", qty: 1, note: "4-hour service window", price: "$1,800.00" }
-        ]
-      },
-
-      "ORD-942": {
-        id: "#ORD-942",
-        event: "Grand Gala Dinner",
-        venue: "Ballroom A, Grand Emerald",
-        date: "Sep 15, 2026",
-        time: "6:30 PM – 10:30 PM",
-        guests: "150 Guests",
-        package: "Gold Package",
-        coversText: "Gold Package — 150 covers",
-        status: "Preparing",
-        total: "Total: $3,600.00",
-        packageDecision: "Pending",
-        packagePrice: "$3,600.00",
-        packageDesc: "Gold 2-course plated banquet for 150 covers with organic garden salad & poultry service.",
-        singularItems: [
-          {
-            name: "Truffle Bruschetta",
-            emoji: "🥖",
-            diet: "Veg",
-            qty: 30,
-            unitPrice: 6.00,
-            note: "Passed canapé during arrivals",
-            status: "Pending"
-          },
-          {
-            name: "Premium Coca-Cola (Glass)",
-            emoji: "🥤",
-            diet: "",
-            qty: 40,
-            unitPrice: 3.50,
-            note: "Chilled table service",
-            status: "Pending"
-          },
-          {
-            name: "Vanilla Panna Cotta",
-            emoji: "🍮",
-            diet: "",
-            qty: 20,
-            unitPrice: 9.50,
-            note: "Mixed berry coulis and fresh mint",
-            status: "Pending"
-          }
-        ],
-        items: [
-          { name: "Organic Garden Salad", diet: "Veg", qty: 150, note: "Lemon vinaigrette dressing", price: "$6.00" },
-          { name: "Pan-Seared Herb Chicken", diet: "GF", qty: 100, note: "Roasted baby potatoes", price: "$16.00" },
-          { name: "Vegetable Wellington", diet: "Veg", qty: 50, note: "Spinach & mushroom reduction", price: "$14.00" },
-          { name: "Artisanal Coffee & Tea Station", diet: "", qty: 150, note: "Whole event service", price: "$4.00" }
-        ]
-      },
-
-      "ORD-938": {
-        id: "#ORD-938",
-        event: "Tech Summit Lunch",
-        venue: "Roof Garden Terrace",
-        date: "Sep 16, 2026",
-        time: "12:00 PM – 2:30 PM",
-        guests: "200 Guests",
-        package: "Platinum Package",
-        coversText: "Platinum Package — 200 covers",
-        status: "Delivering",
-        total: "Total: $7,400.00",
-        packageDecision: "Accepted",
-        packagePrice: "$7,400.00",
-        packageDesc: "Platinum 3-course gala dining with open bar mixology and sommelier curation.",
-        singularItems: [
-          {
-            name: "Grilled Tiger Shrimp",
-            emoji: "🍤",
-            diet: "GF",
-            qty: 50,
-            unitPrice: 12.50,
-            note: "High-protein appetizer request",
-            status: "Accepted"
-          },
-          {
-            name: "San Pellegrino Sparkling Water",
-            emoji: "💧",
-            diet: "",
-            qty: 40,
-            unitPrice: 4.50,
-            note: "500ml glass bottle service",
-            status: "Accepted"
-          },
-          {
-            name: "Artisan Cheese Board",
-            emoji: "🧀",
-            diet: "Veg",
-            qty: 8,
-            unitPrice: 18.00,
-            note: "Speaker lounge hospitality",
-            status: "Accepted"
-          }
-        ],
-        items: [
-          { name: "Lobster Roll Canapé", diet: "", qty: 200, note: "Brioche bun, tarragon mayo", price: "$12.00" },
-          { name: "Pan-Seared Halibut", diet: "GF", qty: 140, note: "Caper berry butter sauce", price: "$20.00" },
-          { name: "Truffle Gnocchi", diet: "Veg", qty: 60, note: "Brown butter sage", price: "$18.00" },
-          { name: "Artisan Macaron Towers", diet: "", qty: 200, note: "Assorted French flavours", price: "$5.50" }
-        ]
-      },
-
-      "ORD-945": {
-        id: "#ORD-945",
-        event: "Private Wedding Reception",
-        venue: "Lakeside Manor Pavilion",
-        date: "Sep 18, 2026",
-        time: "5:00 PM – 11:00 PM",
-        guests: "80 Guests",
-        package: "Custom Signature",
-        coversText: "Custom Signature — 80 covers",
-        status: "Preparing",
-        total: "Total: $6,400.00",
-        packageDecision: "Pending",
-        packagePrice: "$6,400.00",
-        packageDesc: "Custom 5-course private tasting banquet personally overseen by Master Chef Alex Rivera.",
-        singularItems: [
-          {
-            name: "Artisan Cheese Board",
-            emoji: "🧀",
-            diet: "Veg",
-            qty: 6,
-            unitPrice: 18.00,
-            note: "Bridal suite pre-reception",
-            status: "Pending"
-          },
-          {
-            name: "French Macarons (Box/6)",
-            emoji: "🫐",
-            diet: "Veg",
-            qty: 12,
-            unitPrice: 14.00,
-            note: "Favors for close family tables",
-            status: "Pending"
-          },
-          {
-            name: "Vanilla Panna Cotta",
-            emoji: "🍮",
-            diet: "",
-            qty: 25,
-            unitPrice: 9.50,
-            note: "Late-night dessert enhancement",
-            status: "Pending"
-          }
-        ],
-        items: [
-          { name: "Bespoke Bridal Canapés", diet: "", qty: 80, note: "Chef Marcus curation", price: "$15.00" },
-          { name: "Dry-Aged Wagyu Medallions", diet: "GF", qty: 80, note: "Truffle jus & pomme purée", price: "$45.00" },
-          { name: "Layered Wedding Cake Service", diet: "", qty: 80, note: "Champagne pairing service", price: "$20.00" }
-        ]
-      },
-
-      "ORD-950": {
-        id: "#ORD-950",
-        event: "Corporate Board Luncheon",
-        venue: "Executive Suite 400",
-        date: "Sep 20, 2026",
-        time: "1:00 PM – 3:30 PM",
-        guests: "40 Guests",
-        package: "Gold Package",
-        coversText: "Gold Package — 40 covers",
-        status: "Preparing",
-        total: "Total: $1,920.00",
-        packageDecision: "Pending",
-        packagePrice: "$1,920.00",
-        packageDesc: "Executive seated luncheon with chilled seafood course and sous-vide duck breast.",
-        singularItems: [
-          {
-            name: "Greek Yogurt Parfait",
-            emoji: "🍶",
-            diet: "Veg",
-            qty: 20,
-            unitPrice: 7.00,
-            note: "Morning breakout snack",
-            status: "Pending"
-          },
-          {
-            name: "San Pellegrino Sparkling Water",
-            emoji: "💧",
-            diet: "",
-            qty: 20,
-            unitPrice: 4.50,
-            note: "Chilled, boardroom tables",
-            status: "Pending"
-          },
-          {
-            name: "Truffle Bruschetta",
-            emoji: "🥖",
-            diet: "Veg",
-            qty: 15,
-            unitPrice: 6.00,
-            note: "Light savory appetizer",
-            status: "Pending"
-          }
-        ],
-        items: [
-          { name: "Chilled Seafood Platter", diet: "GF", qty: 40, note: "Jumbo prawns & crab claws", price: "$22.00" },
-          { name: "Sous-Vide Duck Breast", diet: "", qty: 40, note: "Cherry reduction", price: "$26.00" }
-        ]
-      }
-    };
-
-    let activeOrderKey = "ORD-2045";
+    // Master data store populated dynamically from MySQL database
+    const orderStore = <?= json_encode($jsOrderStore, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    let activeOrderKey = Object.keys(orderStore)[0] || "";
 
     // -------------------------------------------------------------
     // LOAD ORDER FUNCTION

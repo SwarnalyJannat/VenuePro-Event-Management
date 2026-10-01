@@ -88,99 +88,147 @@ $db = getDBConnection();
           <span class="breadcrumb-current">Customer Coordination Chat</span>
         </div>
 
+<?php
+$stmtCust = $db->query("SELECT DISTINCT u.id, u.name, u.email, u.avatar_text, u.avatar_bg, b.id as booking_id, b.booking_code, b.event_name, v.name as venue_name
+FROM users u
+LEFT JOIN bookings b ON b.customer_id = u.id
+LEFT JOIN venues v ON b.venue_id = v.id
+WHERE u.role = 'customer' AND u.status = 'active'
+GROUP BY u.id
+ORDER BY u.id ASC");
+$customers = $stmtCust->fetchAll();
+
+$activeCustomerId = (int)($_GET['customer_id'] ?? ($customers[0]['id'] ?? 1));
+$activeCustomer = null;
+foreach ($customers as $c) {
+    if ((int)$c['id'] === $activeCustomerId) {
+        $activeCustomer = $c;
+        break;
+    }
+}
+if (!$activeCustomer && !empty($customers)) {
+    $activeCustomer = $customers[0];
+    $activeCustomerId = (int)$activeCustomer['id'];
+}
+
+$stmtMsgs = $db->prepare("SELECT cm.*, u.name as sender_name, u.avatar_text FROM chat_messages cm JOIN users u ON cm.sender_id = u.id WHERE (cm.sender_id = ? AND cm.receiver_id = ?) OR (cm.sender_id = ? AND cm.receiver_id = ?) ORDER BY cm.created_at ASC");
+$stmtMsgs->execute([$currentUser['id'], $activeCustomerId, $activeCustomerId, $currentUser['id']]);
+$chatMessages = $stmtMsgs->fetchAll();
+?>
         <div class="card" style="padding:0; overflow:hidden;">
           <div class="chat-layout">
             <!-- Customer Conversations List -->
             <div class="chat-list">
               <div style="padding:14px 16px; border-bottom:1px solid var(--gray-200); background:var(--gray-50);">
                 <div class="font-bold text-xs text-muted mb-6">EVENT CLIENTS (ASSIGNED)</div>
-                <input type="text" class="form-control" placeholder="Search clients..." style="font-size:0.8rem; padding:6px 10px;">
               </div>
               
-              <a href="#" class="chat-item active">
-                <div class="user-avatar" style="background:#2563eb;">M</div>
+              <?php if (empty($customers)): ?>
+              <div style="padding:20px; text-align:center; color:var(--gray-400); font-size:0.85rem;">No clients registered.</div>
+              <?php else: foreach ($customers as $cust): 
+                $isActive = (int)$cust['id'] === $activeCustomerId;
+                $evTitle = !empty($cust['venue_name']) ? $cust['venue_name'] : 'Client Account';
+              ?>
+              <a href="staff-chat.php?customer_id=<?= $cust['id'] ?>" class="chat-item <?= $isActive ? 'active' : '' ?>">
+                <div class="user-avatar" style="background:<?= e($cust['avatar_bg'] ?? '#2563eb') ?>;"><?= e($cust['avatar_text'] ?? 'CU') ?></div>
                 <div style="flex:1; overflow:hidden;">
                   <div class="flex-between">
-                    <span class="font-bold text-sm">Mahmud</span>
-                    <span class="text-xs text-muted">12:32 PM</span>
+                    <span class="font-bold text-sm"><?= e($cust['name']) ?></span>
+                    <span class="text-xs text-muted"><?= $cust['booking_code'] ?? '' ?></span>
                   </div>
-                  <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">Grand Emerald · Lapel mics ready?</div>
+                  <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;"><?= e($evTitle) ?></div>
                 </div>
               </a>
-
-              <a href="#" class="chat-item">
-                <div class="user-avatar" style="background:#059669;">DC</div>
-                <div style="flex:1; overflow:hidden;">
-                  <div class="flex-between">
-                    <span class="font-bold text-sm">David Chen</span>
-                    <span class="text-xs text-muted">Yesterday</span>
-                  </div>
-                  <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">Skyline Vista · Projector tested</div>
-                </div>
-              </a>
-
-              <a href="#" class="chat-item">
-                <div class="user-avatar" style="background:#db2777;">AO</div>
-                <div style="flex:1; overflow:hidden;">
-                  <div class="flex-between">
-                    <span class="font-bold text-sm">Amara Okonjo</span>
-                    <span class="text-xs text-muted">Oct 4</span>
-                  </div>
-                  <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">Riverside Suite · Seating chart ok</div>
-                </div>
-              </a>
+              <?php endforeach; endif; ?>
             </div>
 
             <!-- Chat Main -->
             <div class="chat-main">
               <div class="chat-header">
                 <div class="flex-center gap-12">
-                  <div class="user-avatar" style="background:#2563eb;">M</div>
+                  <div class="user-avatar" style="background:<?= e($activeCustomer['avatar_bg'] ?? '#2563eb') ?>;"><?= e($activeCustomer['avatar_text'] ?? 'CU') ?></div>
                   <div>
-                    <div class="font-bold">Mahmud <span class="pill pill-confirmed" style="font-size:0.7rem; margin-left:6px;">Customer</span></div>
-                    <div class="text-xs text-muted">Event: Wedding at Grand Emerald Ballroom (#BK-9021 · Dec 14)</div>
+                    <div class="font-bold"><?= e($activeCustomer['name'] ?? 'Client') ?> <span class="pill pill-confirmed" style="font-size:0.7rem; margin-left:6px;">Customer</span></div>
+                    <div class="text-xs text-muted">Event: <?= e($activeCustomer['event_name'] ?? 'Active Event Reservation') ?> (<?= e($activeCustomer['booking_code'] ?? 'Booking Reference') ?>)</div>
                   </div>
                 </div>
                 <div class="flex gap-8">
-                  <a href="staff-event-setup.php" class="btn btn-outline btn-sm">Inspect Setup Checklist</a>
+                  <a href="staff-event-setup.php<?= !empty($activeCustomer['booking_id']) ? '?booking_id='.$activeCustomer['booking_id'] : '' ?>" class="btn btn-outline btn-sm">Inspect Setup Checklist</a>
                 </div>
               </div>
 
-              <div class="chat-messages">
+              <div class="chat-messages" id="staff-chat-container">
                 <div style="text-align:center; margin-bottom:8px;">
                   <span class="text-xs text-muted" style="background:#e2e8f0; padding:3px 12px; border-radius:12px;">🛡️ Direct Customer Channel: Venue Staff &amp; Client Coordination</span>
                 </div>
 
-                <div class="msg msg-out">
-                  Hello Mahmud! I am Sarah Jenkins, your assigned Venue Staff Coordinator for the Grand Emerald Ballroom. Our staff team has verified the stage configuration and 15 banquet tables. How can we assist you with setup?
-                  <div class="text-xs" style="color:rgba(255,255,255,0.7); text-align:right; margin-top:4px;">12:28 PM</div>
+                <?php if (empty($chatMessages)): ?>
+                <div style="text-align:center; padding:40px; color:var(--gray-400);">
+                  <div style="font-size:2.5rem; margin-bottom:8px;">💬</div>
+                  <p class="text-sm">No messages yet with <?= e($activeCustomer['name'] ?? 'this client') ?>.<br>Send a greeting below!</p>
                 </div>
-
-                <div class="msg msg-in">
-                  Hi Sarah! Thanks for reaching out. Could we ensure the wireless lapel microphones and podium sound system are fully tested by 5:00 PM today?
-                  <div class="text-xs text-muted" style="text-align:right; margin-top:4px;">12:30 PM</div>
+                <?php else: foreach ($chatMessages as $msg): 
+                  $isMe = (int)$msg['sender_id'] === (int)$currentUser['id'];
+                  $timeStr = date('g:i A', strtotime($msg['created_at']));
+                ?>
+                <div class="msg <?= $isMe ? 'msg-out' : 'msg-in' ?>">
+                  <?= nl2br(e($msg['message'])) ?>
+                  <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;"><?= $timeStr ?></div>
                 </div>
-
-                <div class="msg msg-out">
-                  Absolutely Mahmud! Marcus from our technical staff has scheduled the Bose audio rig soundcheck for 4:30 PM. I will personally inspect the lapel mics and backup batteries prior to 5:00 PM.
-                  <div class="text-xs" style="color:rgba(255,255,255,0.7); text-align:right; margin-top:4px;">12:32 PM</div>
-                </div>
+                <?php endforeach; endif; ?>
               </div>
 
               <div class="chat-input-bar">
-                <input type="text" class="form-control" placeholder="Reply to customer Mahmud..." style="flex:1;">
-                <button type="button" class="btn btn-primary font-bold">Send Message →</button>
+                <input type="text" id="staff-chat-input" class="form-control" placeholder="Reply to customer <?= e($activeCustomer['name'] ?? 'Client') ?>..." style="flex:1;">
+                <button type="button" id="staff-chat-send" class="btn btn-primary font-bold">Send Message →</button>
               </div>
             </div>
           </div>
         </div>
       </main>
 
-            <footer class="page-footer">
+      <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
       </footer>
     </div>
   </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const input = document.getElementById('staff-chat-input');
+  const btn = document.getElementById('staff-chat-send');
+  const container = document.getElementById('staff-chat-container');
+
+  async function sendMsg() {
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const b = document.createElement('div');
+    b.className = 'msg msg-out';
+    b.innerHTML = text.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '<div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;">Just now</div>';
+    container.appendChild(b);
+    container.scrollTop = container.scrollHeight;
+    input.value = '';
+
+    try {
+      await fetch('../api/chat.php?action=send', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          receiver_id: <?= (int)$activeCustomerId ?>,
+          message: text
+        })
+      });
+    } catch(e) {
+      console.error(e);
+    }
+  }
+
+  btn && btn.addEventListener('click', sendMsg);
+  input && input.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); sendMsg(); }
+  });
+});
+</script>
 <script src="../js/app.js"></script>
 </body>
 </html>

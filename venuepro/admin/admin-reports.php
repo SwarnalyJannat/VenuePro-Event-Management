@@ -15,6 +15,25 @@ $avgBkVal = (float)$stmtAvg->fetchColumn();
 $stmtVTop = $db->query("SELECT v.name, COUNT(b.id) AS bk_count, COALESCE(SUM(b.total_amount),0) AS revenue
     FROM venues v LEFT JOIN bookings b ON v.id = b.venue_id GROUP BY v.id ORDER BY revenue DESC LIMIT 5");
 $topVenues = $stmtVTop->fetchAll();
+
+$stmtStaffPerf = $db->query("SELECT u.name, sp.department, COUNT(sa.id) as event_count 
+FROM users u 
+JOIN staff_profiles sp ON u.id = sp.user_id 
+LEFT JOIN staff_assignments sa ON u.id = sa.staff_id 
+WHERE u.role = 'staff' 
+GROUP BY u.id 
+ORDER BY event_count DESC LIMIT 5");
+$staffPerf = $stmtStaffPerf->fetchAll();
+
+$stmtCatContrib = $db->query("SELECT cp.business_name, u.name as owner_name, COUNT(co.id) as order_count, COALESCE(SUM(b.package_cost + b.addons_cost), 0) as total_cat_rev 
+FROM users u 
+JOIN caterer_profiles cp ON u.id = cp.user_id 
+LEFT JOIN caterer_orders co ON u.id = co.caterer_id 
+LEFT JOIN bookings b ON co.booking_id = b.id 
+WHERE u.role = 'caterer' 
+GROUP BY u.id 
+ORDER BY total_cat_rev DESC LIMIT 5");
+$catererContrib = $stmtCatContrib->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -284,24 +303,16 @@ $topVenues = $stmtVTop->fetchAll();
     <table>
       <thead><tr><th>STAFF</th><th>ROLE</th><th>EVENTS</th><th>ACTION</th></tr></thead>
       <tbody>
+        <?php if (empty($staffPerf)): ?>
+        <tr><td colspan="4" style="text-align:center; padding:16px; color:var(--gray-400);">No staff records found.</td></tr>
+        <?php else: foreach ($staffPerf as $sp): ?>
         <tr>
-          <td class="font-semibold">Sarah Jenkins</td>
-          <td>Lead Coordinator</td>
-          <td>14 events</td>
+          <td class="font-semibold"><?= e($sp['name']) ?></td>
+          <td><?= e($sp['department'] ?: 'Event Staff') ?></td>
+          <td><?= (int)$sp['event_count'] ?> event<?= (int)$sp['event_count'] === 1 ? '' : 's' ?></td>
           <td><a href="admin-staff-management.php" class="btn btn-ghost btn-sm">View Details</a></td>
         </tr>
-        <tr>
-          <td class="font-semibold">David Chen</td>
-          <td>AV Engineer</td>
-          <td>11 events</td>
-          <td><a href="admin-staff-management.php" class="btn btn-ghost btn-sm">View Details</a></td>
-        </tr>
-        <tr>
-          <td class="font-semibold">Rachel Miller</td>
-          <td>Logistics Coord.</td>
-          <td>9 events</td>
-          <td><a href="admin-staff-management.php" class="btn btn-ghost btn-sm">View Details</a></td>
-        </tr>
+        <?php endforeach; endif; ?>
       </tbody>
     </table>
   </div>
@@ -313,24 +324,16 @@ $topVenues = $stmtVTop->fetchAll();
     <table>
       <thead><tr><th>CATERER</th><th>ORDERS</th><th>REVENUE</th><th>ACTION</th></tr></thead>
       <tbody>
+        <?php if (empty($catererContrib)): ?>
+        <tr><td colspan="4" style="text-align:center; padding:16px; color:var(--gray-400);">No caterer records found.</td></tr>
+        <?php else: foreach ($catererContrib as $cc): ?>
         <tr>
-          <td class="font-semibold">Artisan Catering</td>
-          <td>42</td>
-          <td class="font-bold text-success">$77,700</td>
-          <td><a href="admin-review-caterer.php" class="btn btn-ghost btn-sm">View Details</a></td>
+          <td class="font-semibold"><?= e($cc['business_name'] ?: $cc['owner_name']) ?></td>
+          <td><?= (int)$cc['order_count'] ?></td>
+          <td class="font-bold text-success">$<?= number_format($cc['total_cat_rev'], 2) ?></td>
+          <td><a href="admin-catering-management.php" class="btn btn-ghost btn-sm">View Details</a></td>
         </tr>
-        <tr>
-          <td class="font-semibold">Epicurean Events</td>
-          <td>28</td>
-          <td class="font-bold text-success">$51,800</td>
-          <td><a href="admin-review-caterer.php" class="btn btn-ghost btn-sm">View Details</a></td>
-        </tr>
-        <tr>
-          <td class="font-semibold">Boutique Bites</td>
-          <td>18</td>
-          <td class="font-bold text-success">$17,100</td>
-          <td><a href="admin-review-caterer.php" class="btn btn-ghost btn-sm">View Details</a></td>
-        </tr>
+        <?php endforeach; endif; ?>
       </tbody>
     </table>
   </div>

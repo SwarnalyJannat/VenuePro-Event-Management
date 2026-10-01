@@ -14,6 +14,11 @@ if ($bookingId > 0) {
     $stmtTL->execute([$bookingId, $currentUser['id']]);
     $bookingTL = $stmtTL->fetch();
 }
+if (!$bookingTL) {
+    $stmtTL = $db->prepare("SELECT b.*, v.name AS venue_name, v.address AS venue_address, cp.title AS package_title FROM bookings b JOIN venues v ON b.venue_id=v.id LEFT JOIN catering_packages cp ON b.package_id=cp.id WHERE b.customer_id=? ORDER BY b.created_at DESC LIMIT 1");
+    $stmtTL->execute([$currentUser['id']]);
+    $bookingTL = $stmtTL->fetch();
+}
 if ($bookingTL) {
     $status = strtolower($bookingTL['booking_status']);
     $timelineSteps = [
@@ -98,64 +103,64 @@ if ($bookingTL) {
         </div>
       </header>
       <main class="page-body">
+<?php if (!$bookingTL): ?>
+<div class="card" style="text-align:center; padding:60px 20px;">
+  <div style="font-size:3rem; margin-bottom:16px;">📅</div>
+  <h2>No Active Bookings Found</h2>
+  <p class="text-muted mb-24">You do not have any active bookings to track yet.</p>
+  <a href="venue-listings.php" class="btn btn-primary">Browse Venues & Book Now</a>
+</div>
+<?php else: 
+  $statusClass = strtolower($bookingTL['booking_status']);
+  $statusUpper = strtoupper($bookingTL['booking_status']);
+  $eventDateF  = date('F j, Y', strtotime($bookingTL['event_date']));
+?>
 <div class="breadcrumb">
   <a href="customer-dashboard.php">Dashboard</a>
   <span class="breadcrumb-sep">›</span>
-  <span class="breadcrumb-current">#BK-9021 Status Timeline</span>
+  <span class="breadcrumb-current"><?= e($bookingTL['booking_code']) ?> Status Timeline</span>
 </div>
 
 <div class="flex-between mb-24">
   <div>
     <h1>Booking Status Timeline</h1>
-    <p>Wedding at Grand Emerald • Booking Ref #BK-9021</p>
+    <p><?= e($bookingTL['event_name']) ?> • Booking Ref <strong><?= e($bookingTL['booking_code']) ?></strong></p>
   </div>
-  <span class="pill pill-confirmed" style="font-size:0.85rem; padding:6px 14px;">CONFIRMED & SCHEDULED</span>
+  <span class="pill pill-<?= $statusClass ?>" style="font-size:0.85rem; padding:6px 14px;"><?= $statusUpper ?></span>
 </div>
 
 <div class="grid-2" style="grid-template-columns: 2fr 1fr; gap:28px;">
   <div class="card">
     <div class="timeline">
-      <div class="timeline-item done">
-        <div class="timeline-dot">✓</div>
-        <div class="timeline-title">Booking Requested & Deposit Authorised</div>
-        <div class="timeline-meta">Oct 5, 2026 • 10:30 AM — Mahmud (Client)</div>
+      <?php foreach ($timelineSteps as $idx => $step): 
+        $itemClass = !empty($step['cancelled']) ? 'cancelled' : (!empty($step['done']) ? 'done' : 'pending');
+        $dot = !empty($step['cancelled']) ? '✕' : (!empty($step['done']) ? '✓' : '○');
+      ?>
+      <div class="timeline-item <?= $itemClass ?>">
+        <div class="timeline-dot"><?= $dot ?></div>
+        <div class="timeline-title"><?= e($step['label']) ?></div>
+        <?php if (!empty($step['date'])): ?>
+        <div class="timeline-meta"><?= e($step['date']) ?></div>
+        <?php endif; ?>
       </div>
-
-      <div class="timeline-item done">
-        <div class="timeline-dot">✓</div>
-        <div class="timeline-title">Administrative Compliance Check Completed</div>
-        <div class="timeline-meta">Oct 5, 2026 • 2:15 PM — Alex Sterling (Admin)</div>
-      </div>
-
-      <div class="timeline-item done">
-        <div class="timeline-dot">✓</div>
-        <div class="timeline-title">Catering Partner Kitchen Order Confirmed</div>
-        <div class="timeline-meta">Oct 6, 2026 • 9:45 AM — Chef Alex Rivera (Artisan Catering)</div>
-      </div>
-
-      <div class="timeline-item active">
-        <div class="timeline-dot">●</div>
-        <div class="timeline-title">Floor Setup & Coordinator Assignment</div>
-        <div class="timeline-meta">Current Stage • Sarah Jenkins assigned as Lead Coordinator</div>
-      </div>
-
-      <div class="timeline-item">
-        <div class="timeline-dot">○</div>
-        <div class="timeline-title">Event Day Execution & Sound Check</div>
-        <div class="timeline-meta">Scheduled: Oct 14, 2026 • 14:00</div>
-      </div>
+      <?php endforeach; ?>
     </div>
   </div>
 
   <div class="card" style="background:var(--gray-50);">
     <h3 class="mb-16">Reservation Info</h3>
-    <div class="text-sm mb-8"><span class="text-muted">Property:</span> <strong>Grand Emerald Ballroom</strong></div>
-    <div class="text-sm mb-8"><span class="text-muted">Date:</span> <strong>October 14, 2026</strong></div>
-    <div class="text-sm mb-16"><span class="text-muted">Total Paid:</span> <strong class="text-primary">$5,809.32</strong></div>
-    <a href="client-invoice.php" class="btn btn-outline btn-full btn-sm mb-8">View Tax Invoice</a>
+    <div class="text-sm mb-8"><span class="text-muted">Property:</span> <strong><?= e($bookingTL['venue_name']) ?></strong></div>
+    <div class="text-sm mb-8"><span class="text-muted">Date:</span> <strong><?= $eventDateF ?></strong></div>
+    <div class="text-sm mb-8"><span class="text-muted">Time Slot:</span> <strong><?= substr($bookingTL['start_time'],0,5) ?> – <?= substr($bookingTL['end_time'],0,5) ?></strong></div>
+    <?php if (!empty($bookingTL['package_title'])): ?>
+    <div class="text-sm mb-8"><span class="text-muted">Catering:</span> <strong><?= e($bookingTL['package_title']) ?></strong></div>
+    <?php endif; ?>
+    <div class="text-sm mb-16"><span class="text-muted">Total Paid:</span> <strong class="text-primary">$<?= number_format($bookingTL['total_amount'], 2) ?></strong></div>
+    <a href="client-invoice.php?booking_id=<?= $bookingTL['id'] ?>" class="btn btn-outline btn-full btn-sm mb-8">View Tax Invoice</a>
     <a href="customer-chat.php" class="btn btn-primary btn-full btn-sm">Chat with Coordinator</a>
   </div>
 </div>
+<?php endif; ?>
 </main>
                         <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>

@@ -4,6 +4,15 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('customer', 'customer-login.php');
 $db = getDBConnection();
+
+$catererProfile = $db->query("SELECT cp.*, u.name as owner_name FROM caterer_profiles cp JOIN users u ON cp.user_id = u.id WHERE cp.approval_status = 'approved' LIMIT 1")->fetch();
+$catererBizName = $catererProfile['business_name'] ?? 'Artisan Catering Co.';
+$catererChefName = $catererProfile['owner_name'] ?? 'Executive Culinary Chef';
+
+$latestBooking = $db->prepare("SELECT b.*, v.name as venue_name FROM bookings b JOIN venues v ON b.venue_id = v.id WHERE b.customer_id = ? ORDER BY b.id DESC LIMIT 1");
+$latestBooking->execute([$currentUser['id']]);
+$userBooking = $latestBooking->fetch();
+$summaryVenue = $userBooking ? ($userBooking['venue_name'] . ' · ' . date('M j, Y', strtotime($userBooking['event_date']))) : 'Grand Emerald Ballroom · Upcoming Event';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -611,9 +620,9 @@ $db = getDBConnection();
 
               <div class="card mb-16" style="background:var(--gray-50); border:1px solid var(--gray-200); padding:12px;">
                 <div class="text-xs text-muted">Culinary Partner</div>
-                <div class="font-bold text-sm">Artisan Catering Co.</div>
-                <div class="text-xs text-primary">Chef Alex Rivera</div>
-                <div class="text-xs text-muted mt-4">Venue: Grand Emerald Ballroom · Nov 20, 2026</div>
+                <div class="font-bold text-sm"><?= e($catererBizName) ?></div>
+                <div class="text-xs text-primary"><?= e($catererChefName) ?></div>
+                <div class="text-xs text-muted mt-4">Venue: <?= e($summaryVenue) ?></div>
               </div>
 
               <!-- Cost breakdown -->

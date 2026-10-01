@@ -95,16 +95,9 @@ if ($bookingId > 0) {
   <div class="card" style="padding:48px 36px;">
     <div style="width:72px; height:72px; border-radius:50%; background:#dcfce7; color:#16a34a; display:flex; align-items:center; justify-content:center; font-size:36px; margin:0 auto 20px;">✓</div>
     <h1 style="font-size:2rem; font-weight:800; margin-bottom:8px;">Booking Confirmed!</h1>
-    <p class="text-muted mb-24">Reference: <strong class="text-primary"><?= $booking ? e($booking['booking_code']) : '#BK-XXXXX' ?></strong> • Confirmation emailed to mahmud@enterprise.com</p>
+    <p class="text-muted mb-24">Reference: <strong class="text-primary"><?= $booking ? e($booking['booking_code']) : '#BK-XXXXX' ?></strong> • Confirmation receipt emailed to <strong><?= e($currentUser['email'] ?? 'your account email') ?></strong></p>
 
-    <div class="card mb-24" style="background:var(--gray-50); text-align:left;">
-      <div class="flex-between text-sm mb-8"><span class="text-muted">Venue Reserved</span><span class="font-bold">Grand Emerald Ballroom</span></div>
-      <div class="flex-between text-sm mb-8"><span class="text-muted">Reserved Date</span><span class="font-bold">November 20, 2026</span></div>
-      <div class="flex-between text-sm mb-8"><span class="text-muted">Catering Plan</span><span class="font-bold">Platinum Package (150 Guests)</span></div>
-      <div class="flex-between text-sm" style="border-top:1px solid var(--gray-200); padding-top:8px;"><span class="font-bold">Total Paid</span><span class="font-bold text-primary">$5,809.32</span></div>
-    </div>
-
-    <div class="flex gap-12">
+    <div class="flex gap-12" style="flex-direction:column;">
       <?php if ($booking): ?>
 <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:20px;margin:20px 0;text-align:left;">
   <div style="font-size:0.85rem;color:#166534;margin-bottom:8px;font-weight:600;">📋 Booking Summary</div>
@@ -121,10 +114,11 @@ if ($bookingId > 0) {
   </table>
 </div>
 <?php endif; ?>
-<a href="client-invoice.php<?= $booking ? '?booking_id=' . $booking['id'] : '' ?>" class="btn btn-outline" style="flex:1;">View & Download Invoice</a>
-      <a href="customer-dashboard.php" class="btn btn-primary" style="flex:1;">Return to Dashboard</a>
-    </div>
-  </div>
+<div style="display:flex; gap:12px; margin-top:16px;">
+  <a href="client-invoice.php<?= $booking ? '?booking_id=' . $booking['id'] : '' ?>" class="btn btn-outline" style="flex:1;">View & Download Invoice</a>
+  <a href="customer-dashboard.php" class="btn btn-primary" style="flex:1;">Return to Dashboard</a>
+</div>
+</div>
 </div>
 
       </main>

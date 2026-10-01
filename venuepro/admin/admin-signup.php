@@ -27,22 +27,22 @@ if (isLoggedIn()) {
   </div>
 
   <div class="auth-card">
-    <form action="../registration-successful.php">
+    <form id="register-form" action="admin-signup.php" method="POST">
       <div class="form-group">
         <label class="form-label">Enterprise Security Master Token</label>
-        <input type="password" class="form-control" placeholder="••••••••••••••••" required>
+        <input type="password" name="access_code" class="form-control" placeholder="Access Code (VENUEPRO2026)" required>
       </div>
       <div class="form-group">
         <label class="form-label">Full Name</label>
-        <input type="text" class="form-control" placeholder="Alex Sterling" required>
+        <input type="text" name="name" class="form-control" placeholder="e.g. System Administrator" required>
       </div>
       <div class="form-group">
         <label class="form-label">Corporate Email</label>
-        <input type="email" class="form-control" placeholder="alex.sterling@venuepro.internal" required>
+        <input type="email" name="email" class="form-control" placeholder="admin@enterprise.internal" required>
       </div>
       <div class="form-group">
         <label class="form-label">Set Passphrase</label>
-        <input type="password" class="form-control" placeholder="••••••••••••" required>
+        <input type="password" name="password" class="form-control" placeholder="••••••••••••" required>
       </div>
       <button type="submit" class="btn btn-primary btn-full" style="background:#0f172a; border-color:#0f172a;">Provision Account →</button>
     </form>

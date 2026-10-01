@@ -80,40 +80,53 @@ $db = getDBConnection();
         </div>
       </header>
       <main class="page-body">
+<?php
+$stmtN = $db->prepare("SELECT * FROM notifications WHERE user_id = ? OR type IN ('booking','system') ORDER BY created_at DESC LIMIT 40");
+$stmtN->execute([$currentUser['id']]);
+$notifRows = $stmtN->fetchAll();
+$unreadCount = 0;
+foreach ($notifRows as $n) { if (!$n['is_read']) $unreadCount++; }
+$typeIcons  = ['booking'=>'📋','payment'=>'💳','message'=>'💬','system'=>'🔔','caterer'=>'🍴'];
+$typeColors = ['booking'=>'#2563eb','payment'=>'#2563eb','message'=>'#7c3aed','system'=>'#d97706','caterer'=>'#059669'];
+?>
 <div class="flex-between mb-24">
   <div>
     <h1>Administrative Notification Center</h1>
     <p>Incoming booking approvals, compliance alerts, and staff scheduling updates.</p>
   </div>
-  <button class="btn btn-ghost btn-sm">Mark All as Read</button>
+  <button class="btn btn-ghost btn-sm" id="admin-mark-all-read">Mark All as Read</button>
 </div>
 
 <div class="card">
-  <div class="notif-item unread">
-    <div class="notif-dot"></div>
-    <div class="notif-avatar" style="background:#2563eb;">📋</div>
+  <?php if (empty($notifRows)): ?>
+  <div style="text-align:center; padding:48px; color:var(--gray-400);">
+    <div style="font-size:3rem; margin-bottom:12px;">🔔</div>
+    <p>No administrative alerts at this time.</p>
+  </div>
+  <?php else: foreach ($notifRows as $notif): 
+    $icon = $typeIcons[$notif['type']] ?? '🔔';
+    $color = $typeColors[$notif['type']] ?? '#2563eb';
+    $isUnread = !$notif['is_read'];
+    $diff = time() - strtotime($notif['created_at']);
+    if ($diff < 3600) $timeAgo = floor($diff/60) . ' mins ago';
+    elseif ($diff < 86400) $timeAgo = floor($diff/3600) . ' hours ago';
+    else $timeAgo = date('M j, Y', strtotime($notif['created_at']));
+  ?>
+  <div class="notif-item <?= $isUnread ? 'unread' : '' ?>" data-notif-id="<?= $notif['id'] ?>">
+    <?php if ($isUnread): ?><div class="notif-dot"></div><?php else: ?><div style="width:8px;"></div><?php endif; ?>
+    <div class="notif-avatar" style="background:<?= $color ?>;"><?= $icon ?></div>
     <div style="flex:1;">
       <div class="flex-between mb-4">
-        <span class="font-bold text-sm">New Booking Request #BK-9021</span>
-        <span class="text-xs text-muted">15 mins ago</span>
+        <span class="font-bold text-sm"><?= e($notif['title']) ?></span>
+        <span class="text-xs text-muted"><?= $timeAgo ?></span>
       </div>
-      <p class="text-sm">Jane Doe Events submitted a full-day ballroom reservation ($5,809.32).</p>
-      <div class="mt-8"><a href="admin-booking-approval.php" class="btn btn-primary btn-sm">Review Now</a></div>
+      <p class="text-sm"><?= e($notif['message']) ?></p>
+      <?php if (!empty($notif['link_url'])): ?>
+      <div class="mt-8"><a href="<?= e($notif['link_url']) ?>" class="btn btn-outline btn-sm">Inspect Alert →</a></div>
+      <?php endif; ?>
     </div>
   </div>
-
-  <div class="notif-item unread">
-    <div class="notif-dot"></div>
-    <div class="notif-avatar" style="background:#059669;">🍴</div>
-    <div style="flex:1;">
-      <div class="flex-between mb-4">
-        <span class="font-bold text-sm">New Caterer Application</span>
-        <span class="text-xs text-muted">2 hours ago</span>
-      </div>
-      <p class="text-sm">Epicurean Events Co. uploaded commercial license documentation for review.</p>
-      <div class="mt-8"><a href="admin-review-caterer.php" class="btn btn-outline btn-sm">Inspect Application</a></div>
-    </div>
-  </div>
+  <?php endforeach; endif; ?>
 </div>
 </main>
                         <footer class="page-footer">
@@ -124,6 +137,28 @@ $db = getDBConnection();
       </footer>
     </div>
   </div>
+<script>
+document.getElementById('admin-mark-all-read') && document.getElementById('admin-mark-all-read').addEventListener('click', async function(e) {
+  e.preventDefault();
+  const res = await fetch('../api/notifications.php?action=mark_all_read');
+  const d = await res.json();
+  if (d.success) {
+    document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
+    document.querySelectorAll('.notif-dot').forEach(el => el.style.visibility = 'hidden');
+  }
+});
+document.querySelectorAll('.notif-item[data-notif-id]').forEach(function(item) {
+  item.addEventListener('click', function() {
+    const id = this.dataset.notifId;
+    if (this.classList.contains('unread')) {
+      fetch('../api/notifications.php?action=mark_read&id=' + id);
+      this.classList.remove('unread');
+      const dot = this.querySelector('.notif-dot');
+      if (dot) dot.style.visibility = 'hidden';
+    }
+  });
+});
+</script>
 <script src="../js/app.js"></script>
 </body>
 </html>

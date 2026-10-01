@@ -117,7 +117,8 @@
 
         const nameInput = form.querySelector('input[name="name"], input[placeholder*="Name" i], input[placeholder*="Full" i]');
         const emailInput = form.querySelector('input[type="email"]');
-        const passInputs = form.querySelectorAll('input[type="password"]');
+        const accessCodeInput = form.querySelector('input[name="access_code"], input[placeholder*="Access Code" i], input[placeholder*="Token" i]');
+        const passInputs = Array.from(form.querySelectorAll('input[type="password"]')).filter(p => p !== accessCodeInput);
         const pass = passInputs[0] ? passInputs[0].value : '';
         const confirmPass = passInputs[1] ? passInputs[1].value : pass;
 
@@ -137,7 +138,6 @@
         const bizNameInput = form.querySelector('input[placeholder*="Business" i]');
         const kitchenAddrInput = form.querySelector('input[placeholder*="Address" i], textarea[placeholder*="Address" i]');
         const staffIdInput = form.querySelector('input[placeholder*="Staff ID" i], input[placeholder*="Code" i]');
-        const accessCodeInput = form.querySelector('input[placeholder*="Access Code" i]');
 
         try {
           const res = await fetch(API_BASE + 'auth.php?action=register', {

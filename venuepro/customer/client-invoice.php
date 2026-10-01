@@ -68,8 +68,8 @@ $totalAmount  = $booking ? (float)$booking['total_amount'] : 0;
       </div>
       <div style="text-align:right;">
         <div style="font-size:1.6rem; font-weight:900; letter-spacing:0.05em;">TAX INVOICE</div>
-        <div style="font-size:0.9rem; font-weight:600; color:#60a5fa;">#INV-2024-0847</div>
-        <div style="font-size:0.75rem; opacity:0.8; margin-top:4px;">Date: Oct 06, 2026</div>
+        <div style="font-size:0.9rem; font-weight:600; color:#60a5fa;">#<?= e($invoiceCode) ?></div>
+        <div style="font-size:0.75rem; opacity:0.8; margin-top:4px;">Date: <?= e($issueDate) ?></div>
       </div>
     </div>
 
@@ -77,15 +77,16 @@ $totalAmount  = $booking ? (float)$booking['total_amount'] : 0;
       <div class="grid-2 mb-24">
         <div>
           <div class="text-xs text-muted font-bold mb-4">BILLED TO</div>
-          <div class="font-bold">Mahmud & Enterprise Partners Ltd.</div>
-          <div class="text-xs text-muted">742 Evergreen Corporate Center, Suite 900</div>
-          <div class="text-xs text-muted">mahmud@enterprise.com</div>
+          <div class="font-bold"><?= e($currentUser['name']) ?></div>
+          <div class="text-xs text-muted"><?= e($currentUser['email']) ?></div>
+          <div class="text-xs text-muted"><?= e($currentUser['phone'] ?? 'Client ID: #' . $currentUser['id']) ?></div>
         </div>
         <div>
           <div class="text-xs text-muted font-bold mb-4">EVENT RESERVATION</div>
-          <div class="font-bold">Grand Emerald Ballroom</div>
-          <div class="text-xs text-muted">Date of Execution: Nov 20, 2026</div>
-          <div class="text-xs text-muted">Ref: Booking #BK-9847</div>
+          <div class="font-bold"><?= $booking ? e($booking['venue_name']) : 'Venue Reservation' ?></div>
+          <div class="text-xs text-muted">Date of Execution: <?= $booking ? date('F j, Y', strtotime($booking['event_date'])) : 'N/A' ?></div>
+          <div class="text-xs text-muted">Time: <?= $booking ? substr($booking['start_time'],0,5) . ' – ' . substr($booking['end_time'],0,5) : 'N/A' ?></div>
+          <div class="text-xs text-muted">Ref: Booking <strong><?= $booking ? e($booking['booking_code']) : '#BK-XXXX' ?></strong></div>
         </div>
       </div>
 
@@ -99,42 +100,73 @@ $totalAmount  = $booking ? (float)$booking['total_amount'] : 0;
           </tr>
         </thead>
         <tbody>
+          <?php if ($booking): ?>
           <tr>
             <td>
-              <div class="font-bold">Grand Emerald Ballroom - 12h Session</div>
-              <div class="text-xs text-muted">Full facility access including audio rig and breakout suites</div>
+              <div class="font-bold"><?= e($booking['venue_name']) ?> – <?= (int)($booking['duration_hours'] ?? 4) ?>h Session</div>
+              <div class="text-xs text-muted"><?= e($booking['venue_address'] ?? 'Full facility access and amenities') ?></div>
             </td>
             <td>1</td>
-            <td>$2,400.00</td>
-            <td class="font-bold">$2,400.00</td>
+            <td>$<?= number_format($booking['venue_cost'], 2) ?></td>
+            <td class="font-bold">$<?= number_format($booking['venue_cost'], 2) ?></td>
           </tr>
+          <?php if (!empty($booking['package_title']) && $booking['package_cost'] > 0): ?>
           <tr>
             <td>
-              <div class="font-bold">Catering: Platinum Evening Gala Package</div>
-              <div class="text-xs text-muted">150 Guests • 3-Course Plated Dinner • 4h Open Bar</div>
+              <div class="font-bold">Catering: <?= e($booking['package_title']) ?></div>
+              <div class="text-xs text-muted"><?= (int)$booking['guest_count'] ?> Guests · Curated Culinary Tier</div>
             </td>
-            <td>150</td>
-            <td>$12.33</td>
-            <td class="font-bold">$1,850.00</td>
+            <td><?= (int)$booking['guest_count'] ?></td>
+            <td>$<?= number_format($booking['package_cost'] / max(1, $booking['guest_count']), 2) ?></td>
+            <td class="font-bold">$<?= number_format($booking['package_cost'], 2) ?></td>
           </tr>
+          <?php endif; ?>
+          <?php if (!empty($booking['staffing_cost']) && $booking['staffing_cost'] > 0): ?>
           <tr>
             <td>
               <div class="font-bold">Professional Event Logistics Staff</div>
-              <div class="text-xs text-muted">4 Waitstaff, 2 Mixologists, 1 Lead Logistics Coordinator</div>
+              <div class="text-xs text-muted">Lead Event Coordinator, Waitstaff & Setup Crew</div>
             </td>
             <td>1</td>
-            <td>$640.00</td>
-            <td class="font-bold">$640.00</td>
+            <td>$<?= number_format($booking['staffing_cost'], 2) ?></td>
+            <td class="font-bold">$<?= number_format($booking['staffing_cost'], 2) ?></td>
+          </tr>
+          <?php endif; ?>
+          <?php foreach ($singularItems as $si): ?>
+          <tr>
+            <td>
+              <div class="font-bold"><?= e($si['emoji'] ?? '🍽️') ?> <?= e($si['item_name']) ?></div>
+              <div class="text-xs text-muted"><?= !empty($si['notes']) ? e($si['notes']) : 'À-la-carte culinary add-on' ?></div>
+            </td>
+            <td><?= (int)$si['quantity'] ?></td>
+            <td>$<?= number_format($si['unit_price'], 2) ?></td>
+            <td class="font-bold">$<?= number_format($si['subtotal'], 2) ?></td>
+          </tr>
+          <?php endforeach; ?>
+          <tr style="border-top:1px solid var(--gray-200);">
+            <td colspan="3" style="text-align:right; font-weight:600;">Subtotal:</td>
+            <td class="font-semibold">$<?= number_format($subtotal, 2) ?></td>
+          </tr>
+          <tr>
+            <td colspan="3" style="text-align:right; font-size:0.85rem; color:var(--gray-500);">Service Fee (10%):</td>
+            <td style="font-size:0.85rem; color:var(--gray-500);">$<?= number_format($serviceFee, 2) ?></td>
+          </tr>
+          <tr>
+            <td colspan="3" style="text-align:right; font-size:0.85rem; color:var(--gray-500);">Taxes & VAT (8%):</td>
+            <td style="font-size:0.85rem; color:var(--gray-500);">$<?= number_format($vatTax, 2) ?></td>
           </tr>
           <tr class="invoice-total-row">
             <td colspan="3" style="text-align:right; padding-right:16px;">TOTAL AMOUNT PAID:</td>
-            <td>$4,890.00</td>
+            <td>$<?= number_format($totalAmount, 2) ?></td>
           </tr>
+          <?php else: ?>
+          <tr><td colspan="4" style="text-align:center; padding:24px; color:var(--gray-400);">No invoice records found.</td></tr>
+          <?php endif; ?>
         </tbody>
       </table>
 
       <div class="card mb-24" style="background:var(--gray-50); padding:16px;">
-        <div class="text-xs text-muted">Payment status: <strong class="text-success">PAID IN FULL via VISA ending in 4242</strong> on Oct 06, 2026. Authorized by Stripe Enterprise.</div>
+        <div class="text-xs text-muted">Payment status: <strong class="text-success">PAID IN FULL via <?= e(!empty($booking['payment_card_last4']) ? 'Card ending in ' . $booking['payment_card_last4'] : 'Online Card Authorization') ?></strong> on <?= e($issueDate) ?>. Transaction authorized by VenuePro Gateway.</div>
       </div>
 
       <div class="flex-between">

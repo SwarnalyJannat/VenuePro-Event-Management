@@ -276,7 +276,7 @@ $db = getDBConnection();
 
         <div class="form-group">
           <label class="form-label">Cardholder Name</label>
-          <input type="text" class="form-control" value="Mahmud Rahman" required>
+          <input type="text" class="form-control" value="<?= e($currentUser['name'] ?? '') ?>" placeholder="e.g. <?= e($currentUser['name'] ?? 'Cardholder Name') ?>" required>
         </div>
         <div class="form-group">
           <label class="form-label">Card Number</label>

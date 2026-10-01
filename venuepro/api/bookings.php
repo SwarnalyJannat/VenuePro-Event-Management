@@ -176,22 +176,43 @@ switch ($action) {
             }
 
             // 3. Create Caterer Order if catering requested
+            $catererId = null;
             if ($packageId || !empty($itemsToInsert)) {
-                $catererId = 2; // Default master caterer Alex Rivera
+                if ($packageId) {
+                    $stmtPkgCat = $db->prepare("SELECT caterer_id FROM catering_packages WHERE id = ? LIMIT 1");
+                    $stmtPkgCat->execute([$packageId]);
+                    $catererId = $stmtPkgCat->fetchColumn();
+                }
+                if (!$catererId) {
+                    $stmtCatFirst = $db->query("SELECT user_id FROM caterer_profiles WHERE approval_status = 'approved' LIMIT 1");
+                    $catererId = $stmtCatFirst ? $stmtCatFirst->fetchColumn() : null;
+                }
+                if (!$catererId) {
+                    $stmtUserCat = $db->query("SELECT id FROM users WHERE role = 'caterer' LIMIT 1");
+                    $catererId = $stmtUserCat ? $stmtUserCat->fetchColumn() : 2;
+                }
+
                 $orderCode = 'ORD-' . rand(2000, 3999);
                 $stmtOrd = $db->prepare("INSERT INTO caterer_orders (order_code, booking_id, caterer_id, covers_count, preparation_status, package_decision) VALUES (?, ?, ?, ?, 'Preparing', 'Pending')");
                 $stmtOrd->execute([$orderCode, $bookingId, $catererId, $guestCount]);
             }
 
-            // 4. Assign default lead coordinator (Sarah Jenkins)
+            // 4. Assign lead coordinator from active staff
+            $stmtStaffMember = $db->query("SELECT user_id FROM staff_profiles WHERE active_status = 'active' LIMIT 1");
+            $staffUserId = $stmtStaffMember ? $stmtStaffMember->fetchColumn() : null;
+            if (!$staffUserId) {
+                $stmtStaffUser = $db->query("SELECT id FROM users WHERE role = 'staff' LIMIT 1");
+                $staffUserId = $stmtStaffUser ? $stmtStaffUser->fetchColumn() : 3;
+            }
+
             $defaultChecklist = json_encode([
                 "Banquet Tables & High-Tops Arranged ✓",
                 "Stage & Audio-Visual Acoustics Tested ✓",
                 "Catering Service Kitchen Station Briefed ○",
                 "Emergency Exits & Security Briefed ○"
             ]);
-            $stmtStaff = $db->prepare("INSERT INTO staff_assignments (booking_id, staff_id, role_title, shift_time, setup_status, checklist_json) VALUES (?, 3, 'Lead Event Coordinator', '15:00 - 23:00', 'in_progress', ?)");
-            $stmtStaff->execute([$bookingId, $defaultChecklist]);
+            $stmtStaff = $db->prepare("INSERT INTO staff_assignments (booking_id, staff_id, role_title, shift_time, setup_status, checklist_json) VALUES (?, ?, 'Lead Event Coordinator', '15:00 - 23:00', 'in_progress', ?)");
+            $stmtStaff->execute([$bookingId, $staffUserId, $defaultChecklist]);
 
             // 5. Create Invoice
             $invCode = 'INV-' . date('Y') . '-' . rand(1000, 9999);
@@ -201,7 +222,9 @@ switch ($action) {
             // 6. Notify Customer & Caterer
             $stmtNotif = $db->prepare("INSERT INTO notifications (user_id, title, message, type, link_url) VALUES (?, ?, ?, ?, ?)");
             $stmtNotif->execute([$user['id'], "Booking Confirmed ($bookingCode)", "Your reservation for {$venue['name']} on $eventDate has been confirmed.", 'booking', 'booking-status-timeline.php']);
-            $stmtNotif->execute([2, "New Catering Order ($bookingCode)", "Customer {$user['name']} placed order for {$venue['name']}.", 'order', 'caterer-order-details.php']);
+            if ($catererId) {
+                $stmtNotif->execute([$catererId, "New Catering Order ($bookingCode)", "Customer {$user['name']} placed order for {$venue['name']}.", 'order', 'caterer-order-details.php']);
+            }
 
             $db->commit();
 

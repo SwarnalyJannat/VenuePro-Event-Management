@@ -182,27 +182,24 @@ $pendingTasks = (int)$stmtPending->fetchColumn();
         </tr>
       </thead>
       <tbody>
+        <?php if (empty($assignments)): ?>
+        <tr><td colspan="5" style="text-align:center; padding:24px; color:var(--gray-400);">No assigned event shifts at this time.</td></tr>
+        <?php else: foreach ($assignments as $a): 
+          $callTime = substr($a['start_time'], 0, 5);
+          $stClass  = ($a['setup_status'] === 'completed') ? 'confirmed' : (($a['setup_status'] === 'in_progress') ? 'in-progress' : 'pending');
+          $stLabel  = ($a['setup_status'] === 'completed') ? 'READY' : (($a['setup_status'] === 'in_progress') ? 'IN SETUP' : 'UPCOMING');
+        ?>
         <tr>
-          <td><div class="font-semibold">Wedding at Grand Emerald</div></td>
-          <td>Grand Emerald Ballroom</td>
-          <td class="font-semibold">14:00</td>
-          <td><span class="pill pill-in-progress">IN SETUP</span></td>
-          <td><a href="staff-event-setup.php" class="btn btn-outline btn-sm">Open Full Setup</a></td>
+          <td>
+            <div class="font-semibold"><?= e($a['event_name']) ?></div>
+            <div class="text-xs text-muted">Client: <?= e($a['customer_name']) ?> · <?= date('M j, Y', strtotime($a['event_date'])) ?></div>
+          </td>
+          <td><?= e($a['venue_name']) ?></td>
+          <td class="font-semibold"><?= $callTime ?></td>
+          <td><span class="pill pill-<?= $stClass ?>"><?= $stLabel ?></span></td>
+          <td><a href="staff-event-setup.php?booking_id=<?= $a['booking_id'] ?>" class="btn btn-outline btn-sm">Open Full Setup</a></td>
         </tr>
-        <tr>
-          <td><div class="font-semibold">Tech Summit Keynote</div></td>
-          <td>Skyline Vista Lounge</td>
-          <td class="font-semibold">17:30</td>
-          <td><span class="pill pill-pending">UPCOMING</span></td>
-          <td><a href="staff-event-setup.php" class="btn btn-ghost btn-sm">View Spec</a></td>
-        </tr>
-        <tr>
-          <td><div class="font-semibold">Art Gala Reception</div></td>
-          <td>Brick &amp; Steel Gallery</td>
-          <td class="font-semibold">19:00</td>
-          <td><span class="pill pill-pending">UPCOMING</span></td>
-          <td><a href="staff-event-setup.php" class="btn btn-ghost btn-sm">View Spec</a></td>
-        </tr>
+        <?php endforeach; endif; ?>
       </tbody>
     </table>
   </div>
