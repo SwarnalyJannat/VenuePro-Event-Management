@@ -13,35 +13,30 @@
 </head>
 <body style="background:#f8fafc;">
 
+  <!-- Header with ONLY Back Button -->
   <header class="landing-header" style="display:flex; align-items:center; justify-content:space-between; padding:18px 48px; background:#fff; border-bottom:1px solid var(--gray-200); position:sticky; top:0; z-index:100;">
     <div class="flex-center gap-12">
-      <a href="index.html" style="text-decoration:none; display:flex; align-items:center; gap:12px;">
+      <a href="customer/customer-dashboard.html" style="text-decoration:none; display:flex; align-items:center; gap:12px;">
         <img src="assets/logo.png" alt="VenuePro" class="header-logo-img">
         <div>
           <div style="font-size:1.2rem; font-weight:800; color:var(--gray-900);">VenuePro</div>
-          <div style="font-size:0.7rem; color:var(--gray-500); font-weight:500;">Enterprise Event Platform</div>
+          <div style="font-size:0.7rem; color:var(--gray-500); font-weight:500;">Customer Concierge Support</div>
         </div>
       </a>
     </div>
-    <nav class="flex-center gap-20">
-      <a href="venues.html" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Venues</a>
-      <a href="packages.html" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Catering Packages</a>
-      <a href="login-role.html" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
-      <a href="signup-role.html" class="btn btn-primary btn-sm" style="font-weight:600;">Sign Up</a>
+    <nav class="flex-center gap-12">
+      <button onclick="if(window.history.length > 1){window.history.back();}else{window.location.href='customer/customer-dashboard.html';}" class="btn btn-outline btn-sm flex-center gap-8" style="font-weight:700; cursor:pointer; padding:7px 16px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Back</span>
+      </button>
     </nav>
   </header>
 
   <main class="contact-container">
-    <div class="breadcrumb mb-16">
-      <a href="index.html">Home</a>
-      <span class="breadcrumb-sep">›</span>
-      <span class="breadcrumb-current">Contact Support</span>
-    </div>
-
     <div class="mb-32 text-center">
-      <span class="stat-badge positive mb-8">24/7 EVENT CONCIERGE</span>
+      <span class="stat-badge positive mb-8">24/7 CUSTOMER CONCIERGE</span>
       <h1 style="font-size:2.4rem; font-weight:800; margin:12px 0 8px;">How Can We Help You?</h1>
-      <p class="text-muted" style="max-width:600px; margin:0 auto;">Dedicated assistance for venue bookings, culinary packages, kitchen operations, and enterprise administration.</p>
+      <p class="text-muted" style="max-width:600px; margin:0 auto;">Dedicated assistance for venue bookings, culinary packages, kitchen operations, and event coordination.</p>
     </div>
 
     <!-- Contact Channels -->
@@ -82,11 +77,11 @@
           <div class="form-row mb-16">
             <div class="form-group" style="margin-bottom:0;">
               <label class="form-label">Full Name</label>
-              <input type="text" class="form-control" placeholder="e.g. Sarah Jenkins" required>
+              <input type="text" class="form-control" placeholder="e.g. Mahmud" value="Mahmud" required>
             </div>
             <div class="form-group" style="margin-bottom:0;">
               <label class="form-label">Email Address</label>
-              <input type="email" class="form-control" placeholder="s.jenkins@company.com" required>
+              <input type="email" class="form-control" placeholder="mahmud@enterprise.com" value="mahmud@client.internal" required>
             </div>
           </div>
 
@@ -94,15 +89,12 @@
             <div class="form-group" style="margin-bottom:0;">
               <label class="form-label">Your Role</label>
               <select class="form-control">
-                <option>Customer / Event Host</option>
-                <option>Catering Partner</option>
-                <option>On-site Staff Member</option>
-                <option>Prospective Enterprise Client</option>
+                <option selected>Customer</option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom:0;">
               <label class="form-label">Booking Reference (Optional)</label>
-              <input type="text" class="form-control" placeholder="e.g. #BK-9021">
+              <input type="text" class="form-control" value="#BK-9021">
             </div>
           </div>
 
@@ -134,24 +126,24 @@
         </div>
 
         <div class="mb-20">
-          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">🍴 Can I customize catering packages?</div>
-          <p class="text-xs text-muted">Yes! Use our interactive <a href="customer/caterer-custom-package.html" class="text-primary font-semibold">Custom Package Builder</a> to tailor appetizers, main entrees, desserts, and dietary tags to your headcount.</p>
+          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">🍴 Can I inspect live event setup and catering?</div>
+          <p class="text-xs text-muted">Yes! Use our unified <a href="customer/customer-live-progress.html" class="text-primary font-semibold">Live Progress Tracker</a> to select any booked venue and inspect milestones and kitchen progress simultaneously.</p>
         </div>
 
         <div class="mb-20">
-          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">🔒 What happens if my date is booked?</div>
-          <p class="text-xs text-muted">If another event holds the calendar slot, our date-conflict system provides suggested alternative openings or allows you to request a waitlist notification.</p>
+          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">💬 How do I communicate with venue staff?</div>
+          <p class="text-xs text-muted">Customers communicate directly and exclusively with assigned Venue Staff via the <a href="customer/customer-chat.html" class="text-primary font-semibold">Support Chat</a> portal.</p>
         </div>
 
         <div>
-          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">🛡️ How do administrators verify caterers?</div>
-          <p class="text-xs text-muted">Administrators inspect kitchen certifications, National ID (NID), and CVs directly in the <a href="admin/admin-review-caterer.html" class="text-primary font-semibold">Admin Verification Portal</a> prior to activation.</p>
+          <div class="font-semibold text-sm mb-4" style="color:var(--gray-900);">🔒 What happens if my date is booked?</div>
+          <p class="text-xs text-muted">If another event holds the calendar slot, our date-conflict system provides suggested alternative openings or allows you to request a waitlist notification.</p>
         </div>
       </div>
     </div>
   </main>
 
-    <footer class="page-footer">
+  <footer class="page-footer">
     <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
     <div class="footer-links">
       <a href="privacy-policy.html">Privacy Policy</a>
