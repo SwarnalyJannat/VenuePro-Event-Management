@@ -212,11 +212,11 @@ echo "[14/16] Seeding Notifications...\n";
 $db->exec("INSERT INTO notifications (user_id, title, message, type, link_url, is_read, created_at) VALUES
 (1, 'Booking #BK-9021 Approved', 'Your reservation for Grand Emerald Ballroom on Oct 14, 2026 has been confirmed by Admin.', 'booking', 'customer-live-progress.php?booking_id=1', 1, '2026-10-01 10:00:00'),
 (1, 'Invoice #INV-2026-9021 Issued', 'Payment receipt for $5,894.10 has cleared. Your itemized invoice is ready.', 'payment', 'client-invoice.php?booking_id=1', 0, '2026-10-01 10:05:00'),
-(1, 'New Message from Sarah Jenkins', 'Sarah: \"The Greek Yogurt Parfaits and chilled San Pellegrino are staged in the green room.\"', 'message', 'customer-chat.php', 0, '2026-10-01 13:12:00'),
-(2, 'New Kitchen Order #ORD-2045', 'Annual Corporate Gala order received for 320 covers at Grand Emerald Ballroom.', 'caterer', 'caterer-order-details.php?order_id=1', 1, '2026-09-15 10:35:00'),
-(2, 'Pending Review: Order #ORD-9011', 'Luxe Media Q4 Launch Summit has requested 5-course Chef Tasting (80 covers).', 'caterer', 'caterer-order-details.php?order_id=3', 0, '2026-09-22 09:50:00'),
+(1, 'New Message from Sarah Jenkins', 'Sarah: \"The Greek Yogurt Parfaits and chilled San Pellegrino are staged in the green room.\"', 'chat', 'customer-chat.php', 0, '2026-10-01 13:12:00'),
+(2, 'New Kitchen Order #ORD-2045', 'Annual Corporate Gala order received for 320 covers at Grand Emerald Ballroom.', 'order', 'caterer-order-details.php?order_id=1', 1, '2026-09-15 10:35:00'),
+(2, 'Pending Review: Order #ORD-9011', 'Luxe Media Q4 Launch Summit has requested 5-course Chef Tasting (80 covers).', 'order', 'caterer-order-details.php?order_id=3', 0, '2026-09-22 09:50:00'),
 (3, 'Assigned to Event #BK-9021', 'You have been assigned as Lead Coordinator for Grand Emerald Ballroom on Oct 14, 2026.', 'system', 'staff-event-setup.php?booking_id=1', 1, '2026-09-16 09:00:00'),
-(3, 'New Client Message from Mahmud', 'Mahmud: \"We also have 4 VIP guests arriving at 5:30 PM...\"', 'message', 'staff-chat.php', 0, '2026-10-01 13:05:00'),
+(3, 'New Client Message from Mahmud', 'Mahmud: \"We also have 4 VIP guests arriving at 5:30 PM...\"', 'chat', 'staff-chat.php', 0, '2026-10-01 13:05:00'),
 (4, 'Pending Booking Approval: BK-9011', 'Luxe Media submitted reservation for The Brick & Steel Gallery ($6,036.88).', 'booking', 'admin-booking-approval.php?booking_id=3', 0, '2026-09-22 09:45:00');");
 echo "       ✔ Inserted 8 role-targeted notifications.\n";
 

@@ -150,7 +150,7 @@ $db = getDBConnection();
           <div class="flex-between mb-8">
             <h3 class="venue-card-title"><?= e($v['name']) ?></h3>
           </div>
-          <p class="venue-card-loc">📍 <?= e($v['district']) ?> · <?= number_format($v['max_capacity']) ?> Guests Capacity</p>
+          <!-- <p class="venue-card-loc">📍 <?= e($v['district']) ?> · <?= number_format($v['max_capacity']) ?> Guests Capacity</p> -->
           <p class="text-xs text-muted mb-16"><?= e(mb_strimwidth($v['description'] ?? '', 0, 120, '...')) ?></p>
           <div class="flex-between">
             <div>
