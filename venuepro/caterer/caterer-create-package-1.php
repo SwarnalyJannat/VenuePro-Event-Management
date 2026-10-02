@@ -10,22 +10,17 @@ $db = getDBConnection();
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VenuePro Caterer – Create Package Step 1</title>
+  <title>VenuePro – Create Package Step 1</title>
   <link rel="stylesheet" href="../css/style.css">
   <style>
     .sidebar-logo-sub { color:#10b981; }
-    .upload-zone { border:2px dashed var(--gray-300); border-radius:var(--radius); padding:24px; text-align:center; background:var(--gray-50); transition:all .2s; cursor:pointer; }
-    .upload-zone:hover { border-color:var(--primary); background:#eff6ff; }
-    .upload-zone input[type=file] { display:none; }
-    .upload-zone label { display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer; }
+    .img-thumb { width:80px; height:60px; object-fit:cover; border-radius:6px; }
     .img-thumb.add { border:2px dashed var(--primary); color:var(--primary); font-size:1.6rem; }
   </style>
 </head>
 <body>
   <input type="checkbox" id="sidebar-toggle">
   <div class="app-shell">
-    
-    
     <aside class="sidebar" id="main-sidebar">
       <div class="sidebar-logo">
         <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
@@ -44,18 +39,22 @@ $db = getDBConnection();
         <a href="caterer-food-packages.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Package Library
         </a>
+        <a href="caterer-menu-items.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+          Singular Menu Items
+        </a>
         <a href="caterer-create-package-1.php" class="nav-item active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Create Package
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../login-role.php" class="nav-item logout-link" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
     </aside>
     <div class="main-content">
-            <header class="topbar">
+      <header class="topbar">
         <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </label>
@@ -72,7 +71,7 @@ $db = getDBConnection();
             <div class="user-avatar" style="background:#059669;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'caterer')) ?></div>
             </div>
           </div>
         </div>
@@ -80,7 +79,7 @@ $db = getDBConnection();
       <main class="page-body">
 
 <div class="steps">
-  <div class="step active"><div class="step-circle">1</div><div class="step-label">Basic Info &amp; Photos</div></div>
+  <div class="step active"><div class="step-circle">1</div><div class="step-label">Basic Info</div></div>
   <div class="step-line"></div>
   <div class="step"><div class="step-circle">2</div><div class="step-label">Menu Courses</div></div>
   <div class="step-line"></div>
@@ -89,78 +88,39 @@ $db = getDBConnection();
 
 <div style="max-width:860px; margin:0 auto;">
   <div class="card">
-    <h2 class="mb-4">Step 1: Package Info &amp; Photographs</h2>
-    <p class="mb-24">Define the package name, service tier, and upload professional food photography.</p>
+    <h2 class="mb-4">Step 1: Package Basic Information</h2>
+    <p class="mb-24">Define the package name, service tier, cuisine type, and a brief description.</p>
 
-    <form action="caterer-create-package-2.php" enctype="multipart/form-data">
+    <form id="step1Form">
       <div class="form-group">
         <label class="form-label">Package Name *</label>
-        <input type="text" class="form-control" value="Grand Sovereign Banquet" required>
+        <input type="text" name="title" class="form-control" placeholder="e.g. Grand Sovereign Banquet" required>
       </div>
 
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Catering Tier *</label>
-          <select class="form-control">
-            <option>Platinum Gala Tier</option>
-            <option>Gold Luncheon Tier</option>
-            <option>Custom Signature Tasting</option>
+          <select name="tier" class="form-control">
+            <option value="Platinum">Platinum</option>
+            <option value="Gold">Gold</option>
+            <option value="Signature">Signature</option>
+            <option value="Custom">Custom</option>
           </select>
         </div>
         <div class="form-group">
           <label class="form-label">Max Capacity (Guests) *</label>
-          <input type="number" class="form-control" placeholder="e.g. 300" required>
+          <input type="number" name="max_capacity" class="form-control" placeholder="e.g. 300" required>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cuisine Type</label>
+        <input type="text" name="cuisine_type" class="form-control" placeholder="e.g. Fine Dining, Buffet, Mediterranean">
       </div>
 
       <div class="form-group">
         <label class="form-label">Package Description *</label>
-        <textarea class="form-control" rows="3" placeholder="Describe the culinary experience, course features, and presentation style..."></textarea>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Service Style</label>
-        <div class="grid-3 gap-8">
-          <label class="card flex-center gap-8" style="padding:10px; cursor:pointer;">
-            <input type="radio" name="style" checked>
-            <span class="text-sm font-semibold">Synchronized Plated</span>
-          </label>
-          <label class="card flex-center gap-8" style="padding:10px; cursor:pointer;">
-            <input type="radio" name="style">
-            <span class="text-sm font-semibold">Interactive Station</span>
-          </label>
-          <label class="card flex-center gap-8" style="padding:10px; cursor:pointer;">
-            <input type="radio" name="style">
-            <span class="text-sm font-semibold">Family Style Feast</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Photo Upload -->
-      <div class="form-group">
-        <label class="form-label">Package Hero Image (Main Photo) *</label>
-        <div class="upload-zone">
-          <label for="pkg-hero">
-            <span style="font-size:32px;">🍽️</span>
-            <span class="font-semibold text-sm">Click to upload hero food photograph</span>
-            <span class="text-xs text-muted">JPG, PNG, WebP — min 1200×800 px, max 5 MB</span>
-          </label>
-          <input id="pkg-hero" type="file" accept="image/*">
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Additional Gallery Photos (up to 6)</label>
-        <div class="upload-zone" style="padding:16px;">
-          <label for="pkg-gallery" style="flex-direction:row; gap:12px;">
-            <span style="font-size:24px;">📸</span>
-            <div style="text-align:left;">
-              <div class="font-semibold text-sm">Upload additional food &amp; setup photos</div>
-              <div class="text-xs text-muted">Hold Ctrl/Cmd to select multiple — JPG, PNG, max 3 MB each</div>
-            </div>
-          </label>
-          <input id="pkg-gallery" type="file" accept="image/*" multiple>
-        </div>
+        <textarea name="description" class="form-control" rows="3" placeholder="e.g. Describe the culinary experience, course features, and presentation style..."></textarea>
       </div>
 
       <div class="flex gap-12 mt-24">
@@ -172,11 +132,48 @@ $db = getDBConnection();
 </div>
 
       </main>
-                        <footer class="page-footer">
+      <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
       </footer>
     </div>
   </div>
 <script src="../js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Clear old wizard data when starting fresh
+  if (!sessionStorage.getItem('pkg_step1')) {
+    sessionStorage.removeItem('pkg_step1');
+    sessionStorage.removeItem('pkg_step2');
+  }
+
+  var form = document.getElementById('step1Form');
+  if (!form) return;
+
+  // Restore previously entered values if navigating back
+  var saved = JSON.parse(sessionStorage.getItem('pkg_step1') || '{}');
+  if (saved.title)        form.querySelector('[name="title"]').value = saved.title;
+  if (saved.tier)         form.querySelector('[name="tier"]').value = saved.tier;
+  if (saved.max_capacity) form.querySelector('[name="max_capacity"]').value = saved.max_capacity;
+  if (saved.cuisine_type) form.querySelector('[name="cuisine_type"]').value = saved.cuisine_type;
+  if (saved.description)  form.querySelector('[name="description"]').value = saved.description;
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var data = {
+      title:        form.querySelector('[name="title"]').value.trim(),
+      tier:         form.querySelector('[name="tier"]').value,
+      max_capacity: parseInt(form.querySelector('[name="max_capacity"]').value) || 100,
+      cuisine_type: form.querySelector('[name="cuisine_type"]').value.trim(),
+      description:  form.querySelector('[name="description"]').value.trim()
+    };
+    if (!data.title || !data.description) {
+      alert('Package Name and Description are required.');
+      return;
+    }
+    sessionStorage.setItem('pkg_step1', JSON.stringify(data));
+    window.location.href = 'caterer-create-package-2.php';
+  });
+});
+</script>
 </body>
 </html>

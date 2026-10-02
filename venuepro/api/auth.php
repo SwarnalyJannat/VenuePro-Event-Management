@@ -120,7 +120,17 @@ switch ($action) {
 
             $db->commit();
 
-            // Auto-login
+            // Only auto-login if the creator is NOT already an admin
+            $callerRole = isLoggedIn() ? (getCurrentUser()['role'] ?? '') : '';
+            if ($callerRole === 'admin') {
+                // Admin created a user — don't switch session, just return success
+                jsonResponse(true, 'Account created successfully.', [
+                    'user_id' => $userId,
+                    'redirect' => null
+                ], 201);
+            }
+
+            // Regular self-registration: auto-login
             $newUser = [
                 'id'          => $userId,
                 'name'        => $name,
@@ -152,7 +162,7 @@ switch ($action) {
 
     case 'logout':
         logoutUser();
-        jsonResponse(true, 'Successfully logged out.', ['redirect' => '../login-role.php']);
+        jsonResponse(true, 'Successfully logged out.', ['redirect' => '../venues.php']);
         break;
 
     case 'me':

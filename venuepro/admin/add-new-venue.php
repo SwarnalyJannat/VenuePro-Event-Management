@@ -16,8 +16,6 @@ $db = getDBConnection();
 <body>
   <input type="checkbox" id="sidebar-toggle">
   <div class="app-shell">
-    
-    
     <aside class="sidebar" id="main-sidebar">
       <div class="sidebar-logo">
         <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
@@ -47,14 +45,14 @@ $db = getDBConnection();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../login-role.php" class="nav-item logout-link" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
     </aside>
 
     <div class="main-content">
-            <header class="topbar">
+      <header class="topbar">
         <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </label>
@@ -63,7 +61,7 @@ $db = getDBConnection();
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
-        <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
+          <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
           </a>
@@ -77,6 +75,7 @@ $db = getDBConnection();
         </div>
       </header>
       <main class="page-body">
+
 <div class="breadcrumb">
   <a href="venue-management.php">Venue Management</a>
   <span class="breadcrumb-sep">›</span>
@@ -87,47 +86,59 @@ $db = getDBConnection();
   <h2 class="mb-4">Add New Enterprise Venue</h2>
   <p class="mb-24">Publish an enterprise space to the verified VenuePro inventory.</p>
 
-  <form action="venue-management.php">
+  <div id="venueAlert" style="display:none; padding:12px; border-radius:6px; margin-bottom:16px; font-size:0.9rem;"></div>
+
+  <form id="addVenueForm">
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Venue Name</label>
-        <input type="text" class="form-control" placeholder="e.g. The Glass House Pavillion" required>
+        <label class="form-label">Venue Name *</label>
+        <input type="text" name="name" class="form-control" placeholder="e.g. The Glass House Pavillion" required>
       </div>
       <div class="form-group">
         <label class="form-label">Property Type</label>
-        <select class="form-control">
-          <option>Ballroom & Grand Hall</option>
-          <option>Rooftop Terrace & Lounge</option>
-          <option>Contemporary Industrial Gallery</option>
-          <option>Conference & Tech Pavilion</option>
+        <select name="venue_type" class="form-control">
+          <option value="Ballroom">Ballroom &amp; Grand Hall</option>
+          <option value="Rooftop">Rooftop Terrace &amp; Lounge</option>
+          <option value="Gallery">Contemporary Industrial Gallery</option>
+          <option value="Conference">Conference &amp; Tech Pavilion</option>
         </select>
       </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Full Address *</label>
+      <input type="text" name="address" class="form-control" placeholder="e.g. 12 Enterprise Blvd, Level 3, Downtown" required>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">District / Location</label>
-        <input type="text" class="form-control" placeholder="e.g. West Garden Hills" required>
+        <input type="text" name="district" class="form-control" placeholder="e.g. West Garden Hills">
       </div>
       <div class="form-group">
         <label class="form-label">Maximum Guest Capacity</label>
-        <input type="number" class="form-control" placeholder="400" required>
+        <input type="number" name="capacity" class="form-control" placeholder="e.g. 400" required>
       </div>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Daily Base Rate (USD)</label>
-        <input type="number" class="form-control" placeholder="2800" required>
+        <input type="number" name="base_rate" class="form-control" placeholder="e.g. 2800" required>
       </div>
       <div class="form-group">
         <label class="form-label">Hourly Overtime Fee</label>
-        <input type="number" class="form-control" placeholder="350" required>
+        <input type="number" name="additional_hour_rate" class="form-control" placeholder="e.g. 350">
       </div>
     </div>
 
     <div class="form-group">
-      <label class="form-label">Venue Images &amp; Gallery</label>
+      <label class="form-label">Venue Description</label>
+      <textarea name="description" class="form-control" rows="3" placeholder="e.g. A stunning waterfront ballroom with panoramic city views, featuring state-of-the-art AV systems..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Venue Image</label>
       <div style="border: 2px dashed var(--gray-300); border-radius: 8px; padding: 24px 16px; text-align: center; background: var(--gray-50); cursor: pointer;" onclick="document.getElementById('venue-image-input').click()">
         <div style="font-size: 32px; line-height: 1; margin-bottom: 8px;">🖼️</div>
         <div style="font-weight: 600; font-size: 14px; color: var(--navy-900);">Click to upload venue image or drag and drop</div>
@@ -138,27 +149,27 @@ $db = getDBConnection();
         </div>
       </div>
       <div style="margin-top: 8px;">
-        <input type="url" class="form-control" placeholder="Or enter image URL (e.g. https://images.unsplash.com/...)">
+        <input type="url" name="image_url" class="form-control" placeholder="Or enter image URL (e.g. https://images.unsplash.com/...)">
       </div>
     </div>
 
     <div class="form-group">
       <label class="form-label">Key Amenities Included</label>
       <div class="grid-4 gap-8">
-        <label class="filter-check"><input type="checkbox" checked> Fiber WiFi</label>
-        <label class="filter-check"><input type="checkbox" checked> Sound Rig</label>
-        <label class="filter-check"><input type="checkbox" checked> In-House Catering</label>
-        <label class="filter-check"><input type="checkbox" checked> Valet Parking</label>
-        <label class="filter-check"><input type="checkbox"> ADA Elevator</label>
-        <label class="filter-check"><input type="checkbox"> Breakout Rooms</label>
-        <label class="filter-check"><input type="checkbox"> Security Detail</label>
-        <label class="filter-check"><input type="checkbox"> Loading Dock</label>
+        <label class="filter-check"><input type="checkbox" name="amenities[]" value="Fiber WiFi"> Fiber WiFi</label>
+        <label class="filter-check"><input type="checkbox" name="amenities[]" value="Sound Rig"> Sound Rig</label>
+        <label class="filter-check"><input type="checkbox" name="amenities[]" value="In-House Catering"> In-House Catering</label>
+        <label class="filter-check"><input type="checkbox" name="amenities[]" value="Valet Parking"> Valet Parking</label>
+        <label class="filter-check"><input type="checkbox" name="amenities[]" value="ADA Elevator"> ADA Elevator</label>
+        <label class="filter-check"><input type="checkbox" name="amenities[]" value="Breakout Rooms"> Breakout Rooms</label>
+        <label class="filter-check"><input type="checkbox" name="amenities[]" value="Security Detail"> Security Detail</label>
+        <label class="filter-check"><input type="checkbox" name="amenities[]" value="Loading Dock"> Loading Dock</label>
       </div>
     </div>
 
     <div class="flex gap-12 mt-24">
       <a href="venue-management.php" class="btn btn-ghost" style="flex:1;">Cancel</a>
-      <button type="submit" class="btn btn-primary" style="flex:2;">Save & Publish Venue →</button>
+      <button type="submit" class="btn btn-primary" style="flex:2;">Save &amp; Publish Venue →</button>
     </div>
   </form>
 </div>
@@ -181,23 +192,49 @@ $db = getDBConnection();
 <script src="../js/app.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  var form = document.querySelector('form');
+  var form = document.getElementById('addVenueForm');
+  var alertBox = document.getElementById('venueAlert');
   if (!form) return;
-  form.id = 'addVenueForm';
+
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
-    var btn = form.querySelector('[type="submit"], .btn-primary');
-    if (btn) btn.disabled = true;
+    alertBox.style.display = 'none';
+    var btn = form.querySelector('[type="submit"]');
+    var origText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+    // Collect amenities
+    var amenities = [];
+    form.querySelectorAll('input[name="amenities[]"]:checked').forEach(function(cb) {
+      amenities.push(cb.value);
+    });
+
+    var nameVal    = (form.querySelector('[name="name"]') || {}).value || '';
+    var addrVal    = (form.querySelector('[name="address"]') || {}).value || '';
+
+    if (!nameVal.trim() || !addrVal.trim()) {
+      alertBox.style.display = 'block';
+      alertBox.style.background = '#fee2e2';
+      alertBox.style.color = '#991b1b';
+      alertBox.textContent = '⚠️ Venue Name and Address are required.';
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+      return;
+    }
+
     var data = {
-      name:           form.querySelector('[name="name"], [placeholder*="Venue Name" i]') ? form.querySelector('[name="name"], [placeholder*="Venue Name" i]').value : '',
-      venue_type:     form.querySelector('select') ? form.querySelector('select').value : 'Ballroom',
-      address:        form.querySelector('[name="address"], [placeholder*="Address" i]') ? form.querySelector('[name="address"], [placeholder*="Address" i]').value : '',
-      district:       form.querySelector('[name="district"], [placeholder*="District" i]') ? form.querySelector('[name="district"], [placeholder*="District" i]').value : '',
-      max_capacity:   form.querySelector('[name="max_capacity"], [placeholder*="Capacity" i]') ? form.querySelector('[name="max_capacity"], [placeholder*="Capacity" i]').value : 100,
-      base_rate:      form.querySelector('[name="base_rate"], [placeholder*="Rate" i]') ? form.querySelector('[name="base_rate"], [placeholder*="Rate" i]').value : 1000,
-      description:    form.querySelector('textarea') ? form.querySelector('textarea').value : '',
-      status:         'active'
+      name:                 nameVal.trim(),
+      venue_type:           (form.querySelector('[name="venue_type"]') || {}).value || 'Ballroom',
+      address:              addrVal.trim(),
+      district:             ((form.querySelector('[name="district"]') || {}).value || '').trim(),
+      capacity:             parseInt((form.querySelector('[name="capacity"]') || {}).value) || 100,
+      base_rate:            parseFloat((form.querySelector('[name="base_rate"]') || {}).value) || 1000,
+      additional_hour_rate: parseFloat((form.querySelector('[name="additional_hour_rate"]') || {}).value) || 350,
+      description:          ((form.querySelector('[name="description"]') || {}).value || '').trim(),
+      image_url:            ((form.querySelector('[name="image_url"]') || {}).value || '').trim(),
+      amenities:            amenities,
+      status:               'active'
     };
+
     try {
       var res = await fetch('../api/venues.php?action=create', {
         method: 'POST',
@@ -206,15 +243,24 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       var d = await res.json();
       if (d.success) {
-        alert('Venue created successfully!');
-        window.location.href = 'venue-management.php';
+        alertBox.style.display = 'block';
+        alertBox.style.background = '#dcfce7';
+        alertBox.style.color = '#166534';
+        alertBox.textContent = '✓ Venue published successfully! Redirecting...';
+        setTimeout(function() { window.location.href = 'venue-management.php'; }, 900);
       } else {
-        alert('Error: ' + d.message);
-        if (btn) btn.disabled = false;
+        alertBox.style.display = 'block';
+        alertBox.style.background = '#fee2e2';
+        alertBox.style.color = '#991b1b';
+        alertBox.textContent = '⚠️ ' + (d.message || 'Error creating venue');
+        if (btn) { btn.disabled = false; btn.textContent = origText; }
       }
     } catch(err) {
-      alert('Connection error. Please try again.');
-      if (btn) btn.disabled = false;
+      alertBox.style.display = 'block';
+      alertBox.style.background = '#fee2e2';
+      alertBox.style.color = '#991b1b';
+      alertBox.textContent = '⚠️ Connection error. Please try again.';
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
     }
   });
 });

@@ -185,7 +185,7 @@
           // Clear client storage
           try { sessionStorage.clear(); } catch(err) {}
 
-          const targetUrl = isSubfolder ? '../login-role.php' : 'login-role.php';
+          const targetUrl = isSubfolder ? '../venues.php' : 'venues.php';
           const logoutUrl = API_BASE + 'auth.php?action=logout';
 
           let redirected = false;

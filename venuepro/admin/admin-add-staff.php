@@ -4,6 +4,9 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('admin', 'admin-login.php');
 $db = getDBConnection();
+
+// Fetch all venues for multi-assign
+$venues = $db->query("SELECT id, name FROM venues ORDER BY name ASC")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,7 +19,7 @@ $db = getDBConnection();
 .upload-zone {
   border: 2px dashed var(--gray-300); border-radius: var(--radius);
   padding: 28px; text-align: center; background: var(--gray-50);
-  transition: border-color .2s;
+  transition: border-color .2s; cursor: pointer;
 }
 .upload-zone:hover { border-color: var(--primary); background: #eff6ff; }
 .upload-zone input[type=file] { display:none; }
@@ -33,20 +36,20 @@ $db = getDBConnection();
   display: flex; align-items: center; gap: 12px; margin: 24px 0 16px;
 }
 .section-divider::after { content:''; flex:1; height:1px; background:var(--gray-200); }
-</style>
+.venue-check-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:8px; margin-top:8px; }
+.venue-check-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1.5px solid var(--gray-200); border-radius:6px; cursor:pointer; transition:all .15s; }
+.venue-check-item:has(input:checked) { border-color:var(--primary); background:#eff6ff; }
+.venue-check-item input { accent-color: var(--primary); }
+  </style>
 </head>
 <body>
   <input type="checkbox" id="sidebar-toggle">
   <div class="app-shell">
-    
-  
-    
     <aside class="sidebar" id="main-sidebar">
       <div class="sidebar-logo">
         <img src="../assets/logo.png" alt="VenuePro" class="sidebar-logo-img">
           <div class="sidebar-logo-text">VenuePro</div>
-        <div>
-        </div>
+        <div></div>
       </div>
       <nav class="sidebar-nav">
         <div class="nav-label">Governance</div>
@@ -70,14 +73,13 @@ $db = getDBConnection();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../login-role.php" class="nav-item logout-link" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
     </aside>
     <div class="main-content">
-      
-            <header class="topbar">
+      <header class="topbar">
         <label for="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </label>
@@ -86,7 +88,7 @@ $db = getDBConnection();
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
-        <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
+          <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
           </a>
@@ -109,169 +111,223 @@ $db = getDBConnection();
 
 <div class="card" style="max-width:820px; margin:0 auto;">
   <h2 class="mb-4">Add Staff Member</h2>
-  <p class="mb-24">Provision credentials, designate logistics role, and upload verification documents.</p>
+  <p class="mb-24">Provision credentials, designate department, and assign venues.</p>
 
-  <form action="admin-staff-management.php" enctype="multipart/form-data">
+  <div id="staffAlert" style="display:none; padding:12px; border-radius:6px; margin-bottom:16px; font-size:0.9rem;"></div>
 
+  <form id="addStaffForm">
     <!-- Basic Info -->
     <div class="section-divider">Personal Information</div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Full Legal Name *</label>
-        <input type="text" class="form-control" placeholder="Jordan Hayes" required>
+        <input type="text" name="name" class="form-control" placeholder="e.g. Jordan Hayes" required>
       </div>
       <div class="form-group">
         <label class="form-label">Corporate Email *</label>
-        <input type="email" class="form-control" placeholder="j.hayes@venuepro.com" required>
+        <input type="email" name="email" class="form-control" placeholder="e.g. j.hayes@venuepro.com" required>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Phone Number</label>
-        <input type="tel" class="form-control" placeholder="+1 (555) 000-0000">
+        <input type="tel" name="phone" class="form-control" placeholder="e.g. +1 (555) 000-0000">
       </div>
       <div class="form-group">
-        <label class="form-label">National ID (NID) Number *</label>
-        <input type="text" class="form-control" placeholder="NID-9920-8374-XX" required>
+        <label class="form-label">Department</label>
+        <select name="department" class="form-control">
+          <option value="Event Operations">Event Operations</option>
+          <option value="AV & Technology">AV &amp; Technology</option>
+          <option value="Security">Security</option>
+          <option value="Catering Support">Catering Support</option>
+          <option value="Logistics">Logistics</option>
+        </select>
       </div>
     </div>
-
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Password *</label>
-        <input type="password" class="form-control" placeholder="Create staff login password" required>
+        <div class="password-wrap">
+          <input type="password" name="password" class="form-control" placeholder="Create staff login password" required>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Confirm Password *</label>
-        <input type="password" class="form-control" placeholder="Confirm password" required>
+        <div class="password-wrap">
+          <input type="password" name="confirm_password" class="form-control" placeholder="Confirm password" required>
+        </div>
       </div>
     </div>
 
-    <!-- Role & Venue -->
-    <div class="section-divider">Role &amp; Assignment</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Role Designation *</label>
-        <select class="form-control">
-          <option>Event Logistics Coordinator</option>
-          <option>Audio / Visual Senior Engineer</option>
-          <option>On-Site Security Lead</option>
-          <option>Catering Floor Supervisor</option>
-          <option>Operations Assistant</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Primary Assigned Venue</label>
-        <select class="form-control">
-          <option>Grand Emerald Ballroom</option>
-          <option>Skyline Vista Lounge</option>
-          <option>Crystal Tech Pavilion</option>
-          <option>The Brick &amp; Steel Gallery</option>
-        </select>
-      </div>
+    <!-- Venue Assignment -->
+    <div class="section-divider">Venue Assignment</div>
+    <p class="text-sm text-muted mb-8">Select one or more venues this staff member will be assigned to.</p>
+    <div class="venue-check-grid">
+      <?php if (empty($venues)): ?>
+      <p class="text-sm text-muted">No venues found. Add venues first.</p>
+      <?php else: ?>
+      <?php foreach ($venues as $v): ?>
+      <label class="venue-check-item">
+        <input type="checkbox" name="assigned_venues[]" value="<?= (int)$v['id'] ?>">
+        <span class="text-sm font-semibold"><?= e($v['name']) ?></span>
+      </label>
+      <?php endforeach; ?>
+      <?php endif; ?>
     </div>
 
     <!-- Document Upload -->
     <div class="section-divider">Verification Documents</div>
     <div class="grid-2 gap-20 mb-24">
       <div>
-        <label class="form-label">Curriculum Vitae (CV / Resume) *</label>
-        <div class="upload-zone">
+        <label class="form-label">Curriculum Vitae (CV / Resume)</label>
+        <div class="upload-zone" id="zone-cv">
           <label for="cv-upload">
             <span class="upload-icon">📄</span>
             <span class="upload-text font-semibold">Click to upload CV / Resume</span>
             <span class="upload-hint">PDF, DOC, DOCX — max 10 MB</span>
           </label>
-          <input id="cv-upload" type="file" accept=".pdf,.doc,.docx">
+          <input id="cv-upload" type="file" accept=".pdf,.doc,.docx" onchange="handleDocUpload(this,'zone-cv')">
         </div>
       </div>
       <div>
-        <label class="form-label">National Identity Document (NID) Scan *</label>
-        <div class="upload-zone">
+        <label class="form-label">National Identity Document (NID) Scan</label>
+        <div class="upload-zone" id="zone-nid">
           <label for="nid-upload">
             <span class="upload-icon">🪪</span>
             <span class="upload-text font-semibold">Click to upload NID Scan</span>
-            <span class="upload-hint">JPG, PNG, PDF — max 5 MB (front &amp; back)</span>
+            <span class="upload-hint">JPG, PNG, PDF — max 5 MB</span>
           </label>
-          <input id="nid-upload" type="file" accept=".jpg,.jpeg,.png,.pdf">
+          <input id="nid-upload" type="file" accept=".jpg,.jpeg,.png,.pdf" onchange="handleDocUpload(this,'zone-nid')">
         </div>
-      </div>
-    </div>
-
-    <!-- Additional Photo -->
-    <div class="form-group">
-      <label class="form-label">Staff Profile Photo</label>
-      <div class="upload-zone" style="padding:18px;">
-        <label for="photo-upload" style="flex-direction:row; gap:16px;">
-          <span class="upload-icon" style="font-size:24px;">📷</span>
-          <div style="text-align:left;">
-            <div class="upload-text font-semibold">Upload profile photograph</div>
-            <div class="upload-hint">JPG, PNG — recommended 400×400 px, max 2 MB</div>
-          </div>
-        </label>
-        <input id="photo-upload" type="file" accept=".jpg,.jpeg,.png">
       </div>
     </div>
 
     <div class="flex gap-12 mt-24">
       <a href="admin-staff-management.php" class="btn btn-ghost" style="flex:1;">Cancel</a>
       <button type="submit" class="btn btn-primary" style="flex:2;">
-        Send Invitation &amp; Provision Account →
+        Add Staff Member →
       </button>
     </div>
   </form>
 </div>
 
       </main>
-                        <footer class="page-footer">
+      <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
       </footer>
     </div>
   </div>
 <script src="../js/app.js"></script>
 <script>
+function handleDocUpload(input, zoneId) {
+  var zone = document.getElementById(zoneId);
+  if (!zone || !input.files || !input.files[0]) return;
+  var file = input.files[0];
+  if (file.type.startsWith('image/')) {
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      zone.innerHTML = '<div style="padding:12px; text-align:center;">' +
+        '<img src="' + ev.target.result + '" style="max-height:80px; max-width:100%; border-radius:6px; margin-bottom:8px;">' +
+        '<div style="font-size:13px; font-weight:600; color:var(--success);">✓ ' + file.name + ' (' + Math.round(file.size/1024) + ' KB)</div>' +
+        '<div style="font-size:11px; color:var(--gray-500); margin-top:4px; cursor:pointer;">Click to change</div>' +
+      '</div>';
+      zone.style.borderColor = 'var(--success)';
+      zone.style.background = '#f0fdf4';
+      zone.onclick = function() { input.click(); };
+    };
+    reader.readAsDataURL(file);
+  } else {
+    zone.innerHTML = '<div style="padding:16px; text-align:center;">' +
+      '<div style="font-size:32px; margin-bottom:6px;">📄</div>' +
+      '<div style="font-size:13px; font-weight:600; color:var(--navy-900);">✓ ' + file.name + '</div>' +
+      '<div style="font-size:12px; color:var(--success); font-weight:500; margin-top:2px;">Ready (' + Math.round(file.size/1024) + ' KB)</div>' +
+      '<div style="font-size:11px; color:var(--gray-500); margin-top:4px; cursor:pointer;">Click to change</div>' +
+    '</div>';
+    zone.style.borderColor = 'var(--success)';
+    zone.style.background = '#f0fdf4';
+    zone.onclick = function() { input.click(); };
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-  var form = document.querySelector('form');
+  var form = document.getElementById('addStaffForm');
+  var alertBox = document.getElementById('staffAlert');
   if (!form) return;
-  form.id = 'addStaffForm';
+
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
-    var btn = form.querySelector('[type="submit"], .btn-primary');
-    if (btn) btn.disabled = true;
-    var inputs = form.querySelectorAll('input, select, textarea');
-    var nameEl  = form.querySelector('[placeholder*="Full Name" i], [name="name"]');
-    var emailEl = form.querySelector('[type="email"], [placeholder*="email" i]');
-    var phoneEl = form.querySelector('[type="tel"], [placeholder*="phone" i]');
-    var deptEl  = form.querySelector('[name="department"]');
-    // Generate a random staff code
+    alertBox.style.display = 'none';
+    var btn = form.querySelector('[type="submit"]');
+    var origText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+
+    var pw  = (form.querySelector('[name="password"]') || {}).value || '';
+    var cpw = (form.querySelector('[name="confirm_password"]') || {}).value || '';
+    if (pw !== cpw) {
+      alertBox.style.display = 'block';
+      alertBox.style.background = '#fee2e2'; alertBox.style.color = '#991b1b';
+      alertBox.textContent = '⚠️ Passwords do not match.';
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+      return;
+    }
+
+    // Collect selected venue IDs
+    var assignedVenues = [];
+    form.querySelectorAll('[name="assigned_venues[]"]:checked').forEach(function(cb) {
+      assignedVenues.push(parseInt(cb.value));
+    });
+
     var staffCode = 'STF-' + Math.floor(1000 + Math.random() * 9000);
-    var data = {
-      name:       nameEl  ? nameEl.value  : 'New Staff Member',
-      email:      emailEl ? emailEl.value : '',
-      phone:      phoneEl ? phoneEl.value : '',
-      password:   'TempPass@2026',
-      role:       'staff',
-      staff_id:   staffCode,
-      department: deptEl  ? deptEl.value  : 'Event Operations'
+    var payload = {
+      name:            (form.querySelector('[name="name"]') || {}).value || '',
+      email:           (form.querySelector('[name="email"]') || {}).value || '',
+      phone:           (form.querySelector('[name="phone"]') || {}).value || '',
+      password:        pw,
+      role:            'staff',
+      staff_id:        staffCode,
+      department:      (form.querySelector('[name="department"]') || {}).value || 'Event Operations',
+      assigned_venues: assignedVenues
     };
-    if (!data.email) { alert('Please enter a valid email address.'); if (btn) btn.disabled=false; return; }
+
+    if (!payload.name || !payload.email) {
+      alertBox.style.display = 'block';
+      alertBox.style.background = '#fee2e2'; alertBox.style.color = '#991b1b';
+      alertBox.textContent = '⚠️ Name and email are required.';
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+      return;
+    }
+
     try {
       var res = await fetch('../api/auth.php?action=register', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
+        body: JSON.stringify(payload)
       });
       var d = await res.json();
       if (d.success) {
-        alert('Staff member added! Temporary password: TempPass@2026\nStaff Code: ' + staffCode);
-        window.location.href = 'admin-staff-management.php';
+        // Also save venue assignments via staff API
+        if (assignedVenues.length > 0 && d.data && d.data.user_id) {
+          await fetch('../api/staff.php?action=assign_venues', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ user_id: d.data.user_id, venue_ids: assignedVenues })
+          });
+        }
+        alertBox.style.display = 'block';
+        alertBox.style.background = '#dcfce7'; alertBox.style.color = '#166534';
+        alertBox.textContent = '✓ Staff member added successfully! Staff Code: ' + staffCode + '. Redirecting...';
+        setTimeout(function() { window.location.href = 'admin-staff-management.php'; }, 1200);
       } else {
-        alert('Error: ' + d.message);
-        if (btn) btn.disabled = false;
+        alertBox.style.display = 'block';
+        alertBox.style.background = '#fee2e2'; alertBox.style.color = '#991b1b';
+        alertBox.textContent = '⚠️ ' + (d.message || 'Failed to add staff');
+        if (btn) { btn.disabled = false; btn.textContent = origText; }
       }
     } catch(err) {
-      alert('Connection error. Please try again.');
-      if (btn) btn.disabled = false;
+      alertBox.style.display = 'block';
+      alertBox.style.background = '#fee2e2'; alertBox.style.color = '#991b1b';
+      alertBox.textContent = '⚠️ Connection error. Please try again.';
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
     }
   });
 });
