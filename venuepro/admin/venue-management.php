@@ -145,7 +145,7 @@ $totalGross = (float)$stmtGross->fetchColumn();
         <div class="text-xs text-muted">Bookings: <?= (int)$v['booking_count'] ?></div>
       </div>
     </div>
-    <div class="progress-bar mb-16"><div class="progress-fill" style="width:<?= $occ ?>%;"></div></div>
+    <!-- <div class="progress-bar mb-16"><div class="progress-fill" style="width:<?= $occ ?>%;"></div></div> -->
     <div>
       <a href="admin-edit-venue.php?id=<?= $v['id'] ?>" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center;">Edit Properties</a>
     </div>
