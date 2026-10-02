@@ -86,9 +86,6 @@ $db = getDBConnection();
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
-                  <a href="admin-policy-management.php" class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Legal &amp; Policies
-        </a>
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
@@ -97,7 +94,7 @@ $db = getDBConnection();
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
           </div>
         </div>
@@ -114,58 +111,63 @@ $db = getDBConnection();
   <h2 class="mb-4">Onboard Catering Partner</h2>
   <p class="mb-24">Register a new certified kitchen partner and upload their compliance verification documents.</p>
 
-  <form action="admin-catering-management.php" enctype="multipart/form-data">
+  <form id="addCatererForm">
+    <div id="catererAlert" style="display:none; padding:12px; border-radius:6px; margin-bottom:16px; font-size:0.9rem;"></div>
 
     <div class="section-divider">Business Information</div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Catering Business Name *</label>
-        <input type="text" class="form-control" placeholder="Epicurean Events Co." required>
+        <input type="text" name="business_name" class="form-control" placeholder="e.g. Epicurean Events Co." required>
       </div>
       <div class="form-group">
         <label class="form-label">Primary Contact Person *</label>
-        <input type="text" class="form-control" placeholder="Chef Marcus Vance" required>
+        <input type="text" name="owner_name" class="form-control" placeholder="e.g. Chef Marcus Vance" required>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Business Email *</label>
-        <input type="email" class="form-control" placeholder="marcus@epicurean.com" required>
+        <input type="email" name="email" class="form-control" placeholder="e.g. marcus@epicurean.com" required>
       </div>
       <div class="form-group">
         <label class="form-label">Phone Number</label>
-        <input type="tel" class="form-control" placeholder="+1 (555) 349-2091">
+        <input type="tel" name="phone" class="form-control" placeholder="e.g. +1 (555) 349-2091">
       </div>
     </div>
     <div class="form-group">
       <label class="form-label">Kitchen / Commercial Facility Address</label>
-      <input type="text" class="form-control" placeholder="Suite 400, 782 Culinary Way, Downtown">
+      <input type="text" name="kitchen_address" class="form-control" placeholder="e.g. Suite 400, 782 Culinary Way, Downtown">
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Password *</label>
-        <input type="password" class="form-control" placeholder="Create caterer login password" required>
+        <div class="password-wrap">
+          <input type="password" name="password" class="form-control" placeholder="Create caterer login password" required>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Confirm Password *</label>
-        <input type="password" class="form-control" placeholder="Confirm password" required>
+        <div class="password-wrap">
+          <input type="password" name="confirm_password" class="form-control" placeholder="Confirm password" required>
+        </div>
       </div>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Culinary Specialization *</label>
-        <select class="form-control">
-          <option>Contemporary Fine Dining &amp; Plated Service</option>
-          <option>High-End Buffet &amp; Interactive Stations</option>
-          <option>Artisanal Canapés &amp; Cocktail Reception</option>
-          <option>Global Fusion &amp; Dietary-Specialized Menus</option>
+        <select name="specialization" class="form-control">
+          <option value="Contemporary Fine Dining &amp; Plated Service">Contemporary Fine Dining &amp; Plated Service</option>
+          <option value="High-End Buffet &amp; Interactive Stations">High-End Buffet &amp; Interactive Stations</option>
+          <option value="Artisanal Canapés &amp; Cocktail Reception">Artisanal Canapés &amp; Cocktail Reception</option>
+          <option value="Global Fusion &amp; Dietary-Specialized Menus">Global Fusion &amp; Dietary-Specialized Menus</option>
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">Primary Assigned Venue</label>
-        <select class="form-control">
+        <select name="assigned_venue" class="form-control">
           <option>Grand Emerald Ballroom</option>
           <option>Skyline Vista Lounge</option>
           <option>Crystal Tech Pavilion</option>
@@ -175,75 +177,178 @@ $db = getDBConnection();
     </div>
     <div class="form-group">
       <label class="form-label">NID / Tax Registration Number *</label>
-      <input type="text" class="form-control" placeholder="TAX-98420-VN" required>
+      <input type="text" name="tax_id" class="form-control" placeholder="e.g. TAX-98420-VN" required>
     </div>
 
     <div class="section-divider">Verification Documents</div>
     <div class="grid-2 gap-20 mb-16">
       <div>
         <label class="form-label">Owner / Head Chef CV *</label>
-        <div class="upload-zone">
+        <div class="upload-zone" id="zone-cat-cv">
           <label for="cat-cv">
             <span class="upload-icon">📄</span>
             <span class="upload-text font-semibold">Upload CV / Portfolio</span>
             <span class="upload-hint">PDF, DOC — max 10 MB</span>
           </label>
-          <input id="cat-cv" type="file" accept=".pdf,.doc,.docx">
+          <input id="cat-cv" type="file" accept=".pdf,.doc,.docx" onchange="handleDocUpload(this, 'zone-cat-cv')">
         </div>
       </div>
       <div>
         <label class="form-label">National ID (NID) Scan — Owner *</label>
-        <div class="upload-zone">
+        <div class="upload-zone" id="zone-cat-nid">
           <label for="cat-nid">
             <span class="upload-icon">🪪</span>
             <span class="upload-text font-semibold">Upload NID Document</span>
             <span class="upload-hint">JPG, PNG, PDF — both sides</span>
           </label>
-          <input id="cat-nid" type="file" accept=".jpg,.jpeg,.png,.pdf">
+          <input id="cat-nid" type="file" accept=".jpg,.jpeg,.png,.pdf" onchange="handleDocUpload(this, 'zone-cat-nid')">
         </div>
       </div>
     </div>
     <div class="grid-2 gap-20 mb-24">
       <div>
         <label class="form-label">Food Safety / Health Dept. Certificate</label>
-        <div class="upload-zone">
+        <div class="upload-zone" id="zone-cat-cert">
           <label for="cat-cert">
             <span class="upload-icon">📋</span>
             <span class="upload-text font-semibold">Upload Health Certificate</span>
             <span class="upload-hint">PDF, JPG — max 5 MB</span>
           </label>
-          <input id="cat-cert" type="file" accept=".pdf,.jpg,.jpeg,.png">
+          <input id="cat-cert" type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDocUpload(this, 'zone-cat-cert')">
         </div>
       </div>
       <div>
         <label class="form-label">Commercial Kitchen License</label>
-        <div class="upload-zone">
+        <div class="upload-zone" id="zone-cat-lic">
           <label for="cat-lic">
             <span class="upload-icon">🏛️</span>
             <span class="upload-text font-semibold">Upload Kitchen License</span>
             <span class="upload-hint">PDF, JPG — max 5 MB</span>
           </label>
-          <input id="cat-lic" type="file" accept=".pdf,.jpg,.jpeg,.png">
+          <input id="cat-lic" type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDocUpload(this, 'zone-cat-lic')">
         </div>
       </div>
     </div>
 
     <div class="flex gap-12">
       <a href="admin-catering-management.php" class="btn btn-ghost" style="flex:1;">Cancel</a>
-      <button type="submit" class="btn btn-primary" style="flex:2;">Register Catering Partner →</button>
+      <button type="submit" id="btnRegisterCaterer" class="btn btn-primary" style="flex:2;">Register Catering Partner →</button>
     </div>
   </form>
 </div>
 
       </main>
-                        <footer class="page-footer">
+      <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
-        <div class="footer-links">
-          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
-        </div>
       </footer>
     </div>
   </div>
 <script src="../js/app.js"></script>
+<script>
+function handleDocUpload(input, zoneId) {
+  var zone = document.getElementById(zoneId);
+  if (!zone || !input.files || !input.files[0]) return;
+  var file = input.files[0];
+
+  // If image, show image thumbnail preview
+  if (file.type.startsWith('image/')) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      zone.innerHTML = '<div style="padding:12px; text-align:center;">' +
+        '<img src="' + e.target.result + '" style="max-height:100px; max-width:100%; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin-bottom:8px; display:inline-block;" alt="Selected Document">' +
+        '<div style="font-size:13px; font-weight:600; color:var(--success);">✓ ' + escapeHtml(file.name) + ' (' + Math.round(file.size / 1024) + ' KB)</div>' +
+        '<div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Click to change</div>' +
+      '</div>';
+      zone.style.borderColor = 'var(--success)';
+      zone.style.background = '#f0fdf4';
+      zone.onclick = function() { input.click(); };
+    };
+    reader.readAsDataURL(file);
+  } else {
+    // Non-image document (PDF, DOC)
+    zone.innerHTML = '<div style="padding:16px; text-align:center;">' +
+      '<div style="font-size:32px; margin-bottom:6px;">📄</div>' +
+      '<div style="font-size:13px; font-weight:600; color:var(--navy-900);">✓ ' + escapeHtml(file.name) + '</div>' +
+      '<div style="font-size:12px; color:var(--success); font-weight:500; margin-top:2px;">Document verified & ready (' + Math.round(file.size / 1024) + ' KB)</div>' +
+      '<div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Click to change</div>' +
+    '</div>';
+    zone.style.borderColor = 'var(--success)';
+    zone.style.background = '#f0fdf4';
+    zone.onclick = function() { input.click(); };
+  }
+}
+
+function escapeHtml(text) {
+  var div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var form = document.getElementById('addCatererForm');
+  var regBtn = document.getElementById('btnRegisterCaterer');
+  var alertBox = document.getElementById('catererAlert');
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    alertBox.style.display = 'none';
+
+    var pw = form.querySelector('[name="password"]').value;
+    var cpw = form.querySelector('[name="confirm_password"]').value;
+    if (pw !== cpw) {
+      alertBox.style.display = 'block';
+      alertBox.style.background = '#fee2e2';
+      alertBox.style.color = '#991b1b';
+      alertBox.textContent = '⚠️ Passwords do not match.';
+      return;
+    }
+
+    regBtn.disabled = true;
+    regBtn.textContent = 'Registering Partner...';
+
+    var payload = {
+      business_name:   form.querySelector('[name="business_name"]').value.trim(),
+      owner_name:      form.querySelector('[name="owner_name"]').value.trim(),
+      email:           form.querySelector('[name="email"]').value.trim(),
+      phone:           form.querySelector('[name="phone"]').value.trim(),
+      kitchen_address: form.querySelector('[name="kitchen_address"]').value.trim(),
+      password:        pw,
+      specialization:  form.querySelector('[name="specialization"]').value
+    };
+
+    try {
+      var res = await fetch('../api/caterers.php?action=create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      var d = await res.json();
+      if (d.success) {
+        alertBox.style.display = 'block';
+        alertBox.style.background = '#dcfce7';
+        alertBox.style.color = '#166534';
+        alertBox.textContent = '✓ Caterer registered and approved successfully! Redirecting to Approved Caterers...';
+        setTimeout(function() {
+          window.location.href = 'admin-catering-management.php';
+        }, 900);
+      } else {
+        alertBox.style.display = 'block';
+        alertBox.style.background = '#fee2e2';
+        alertBox.style.color = '#991b1b';
+        alertBox.textContent = '⚠️ ' + (d.message || 'Error registering caterer');
+        regBtn.disabled = false;
+        regBtn.textContent = 'Register Catering Partner →';
+      }
+    } catch(err) {
+      alertBox.style.display = 'block';
+      alertBox.style.background = '#fee2e2';
+      alertBox.style.color = '#991b1b';
+      alertBox.textContent = '⚠️ Network connection error. Please try again.';
+      regBtn.disabled = false;
+      regBtn.textContent = 'Register Catering Partner →';
+    }
+  });
+});
+</script>
 </body>
 </html>

@@ -78,9 +78,6 @@ $caterers = $stmtC->fetchAll();
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
-                  <a href="admin-policy-management.php" class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Legal &amp; Policies
-        </a>
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
@@ -89,7 +86,7 @@ $caterers = $stmtC->fetchAll();
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
           </div>
         </div>
@@ -103,19 +100,38 @@ $caterers = $stmtC->fetchAll();
   <a href="admin-add-caterer.php" class="btn btn-primary">+ Add New Caterer</a>
 </div>
 
+<?php
+$approvedCaterers = [];
+$pendingCaterers = [];
+foreach ($caterers as $c) {
+    if ($c['approval_status'] === 'approved') {
+        $approvedCaterers[] = $c;
+    } else {
+        $pendingCaterers[] = $c;
+    }
+}
+?>
+
 <div class="grid-2 gap-24">
   <div class="card">
     <div class="flex-between mb-16">
       <h3>Active Certified Partners</h3>
-      <span class="pill pill-confirmed">3 PARTNERS</span>
+      <span class="pill pill-confirmed"><?= count($approvedCaterers) ?> PARTNERS</span>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>KITCHEN</th><th>SPECIALTY</th><th>STATUS</th></tr></thead>
+        <thead><tr><th>KITCHEN</th><th>SPECIALTY</th><th>ORDERS</th><th>STATUS</th></tr></thead>
         <tbody>
-          <tr><td><strong>Artisan Catering Co.</strong></td><td>Gala Dinners</td><td><span class="pill pill-confirmed">VERIFIED</span></td></tr>
-          <tr><td><strong>Epicurean Events</strong></td><td>Plated Tasting</td><td><span class="pill pill-confirmed">VERIFIED</span></td></tr>
-          <tr><td><strong>Boutique Bites</strong></td><td>Canapés</td><td><span class="pill pill-confirmed">VERIFIED</span></td></tr>
+          <?php if (empty($approvedCaterers)): ?>
+          <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--gray-400);">No approved caterers found.</td></tr>
+          <?php else: foreach ($approvedCaterers as $c): ?>
+          <tr>
+            <td><strong><?= e($c['business_name'] ?: $c['name']) ?></strong></td>
+            <td><?= e($c['specialization'] ?? 'Fine Dining') ?></td>
+            <td><?= (int)$c['active_orders'] ?></td>
+            <td><span class="pill pill-confirmed">VERIFIED</span></td>
+          </tr>
+          <?php endforeach; endif; ?>
         </tbody>
       </table>
     </div>
@@ -124,23 +140,24 @@ $caterers = $stmtC->fetchAll();
   <div class="card">
     <div class="flex-between mb-16">
       <h3>Pending Applications</h3>
-      <span class="pill pill-pending">1 PENDING</span>
+      <span class="pill pill-pending"><?= count($pendingCaterers) ?> PENDING</span>
     </div>
+    <?php if (empty($pendingCaterers)): ?>
+    <div style="text-align:center;padding:24px;color:var(--gray-400);">No pending applications.</div>
+    <?php else: foreach ($pendingCaterers as $c): ?>
     <div class="card mb-12" style="background:var(--gray-50);">
       <div class="flex-between mb-4">
-        <span class="font-bold">Epicurean Events Co.</span>
-        <a href="admin-review-caterer.php" class="btn btn-outline btn-sm">Review App</a>
+        <span class="font-bold"><?= e($c['business_name'] ?: $c['name']) ?></span>
+        <a href="admin-review-caterer.php?id=<?= $c['id'] ?>" class="btn btn-outline btn-sm">Review App</a>
       </div>
-      <div class="text-xs text-muted">Submitted 1 day ago • Commercial Kitchen Downtown</div>
+      <div class="text-xs text-muted"><?= e($c['specialization'] ?? '') ?> • <?= e($c['kitchen_address'] ?? 'Kitchen Facility') ?></div>
     </div>
+    <?php endforeach; endif; ?>
   </div>
 </div>
 </main>
                         <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
-        <div class="footer-links">
-          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
-        </div>
       </footer>
     </div>
   </div>

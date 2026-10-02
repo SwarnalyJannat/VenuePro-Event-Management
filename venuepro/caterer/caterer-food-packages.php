@@ -17,6 +17,16 @@ $stmtMP  = $db->prepare(
 );
 $stmtMP->execute([$catUser['id']]);
 $myPackages = $stmtMP->fetchAll();
+if (empty($myPackages)) {
+    $stmtAllP = $db->query(
+        "SELECT cp.*, COUNT(b.id) AS active_bookings
+         FROM catering_packages cp
+         LEFT JOIN bookings b ON b.package_id = cp.id AND b.booking_status IN ('confirmed','pending')
+         GROUP BY cp.id
+         ORDER BY cp.id ASC"
+    );
+    $myPackages = $stmtAllP->fetchAll();
+}
 $tierPills  = ['Gold'=>'pill-pending','Platinum'=>'pill-confirmed','Signature'=>'pill-inquiry','Custom'=>'pill-inquiry'];
 ?>
 <!DOCTYPE html>
@@ -86,7 +96,7 @@ $tierPills  = ['Gold'=>'pill-pending','Platinum'=>'pill-confirmed','Signature'=>
             <div class="user-avatar" style="background:#059669;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'caterer')) ?></div>
             </div>
           </div>
         </div>
@@ -136,7 +146,7 @@ $tierPills  = ['Gold'=>'pill-pending','Platinum'=>'pill-confirmed','Signature'=>
     </div>
     <div class="flex gap-8">
       <a href="package-details.php?id=<?= $pkg['id'] ?>" class="btn btn-outline btn-sm" style="flex:1;">View Details</a>
-      <a href="caterer-create-package-1.php?edit=<?= $pkg['id'] ?>" class="btn btn-ghost btn-sm">Edit</a>
+      <a href="caterer-edit-package.php?id=<?= $pkg['id'] ?>" class="btn btn-ghost btn-sm">Edit</a>
     </div>
   </div>
 <?php endforeach; endif; ?>

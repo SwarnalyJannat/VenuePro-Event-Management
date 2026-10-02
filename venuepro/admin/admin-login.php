@@ -33,11 +33,11 @@ if (isLoggedIn()) {
     <form action="admin-dashboard.php">
       <div class="form-group">
         <label class="form-label">Admin SSO / Email</label>
-        <input type="email" class="form-control" value="alex.sterling@venuepro.internal" required>
+        <input type="email" name="email" class="form-control" placeholder="admin@venuepro.com" required>
       </div>
       <div class="form-group">
         <label class="form-label">Security Key / Password</label>
-        <input type="password" class="form-control" value="••••••••••••••••" required>
+        <input type="password" name="password" class="form-control" placeholder="••••••••••••" required>
       </div>
       <button type="submit" class="btn btn-primary btn-full mb-16" style="background:#0f172a; border-color:#0f172a;">Authenticate Admin Console →</button>
     </form>

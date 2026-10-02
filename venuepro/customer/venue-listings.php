@@ -105,112 +105,120 @@ $db = getDBConnection();
 
       <main class="page-body">
 <?php
-$stmtV=$db->prepare("SELECT * FROM venues WHERE status='active' ORDER BY id");$stmtV->execute();$venues=$stmtV->fetchAll();$venueCount=count($venues);
+$search     = htmlspecialchars(trim($_GET['search'] ?? ''), ENT_QUOTES);
+$typeFilter = htmlspecialchars(trim($_GET['type'] ?? ''), ENT_QUOTES);
+$minCap     = (int)($_GET['min_capacity'] ?? 0);
+$maxPrice   = (int)($_GET['max_price'] ?? 0);
+$sortBy     = htmlspecialchars(trim($_GET['sort'] ?? 'popular'), ENT_QUOTES);
+
+$sql    = "SELECT * FROM venues WHERE status = 'active'";
+$params = [];
+
+if (!empty($search)) {
+    $sql .= " AND (name LIKE ? OR district LIKE ? OR description LIKE ?)";
+    $params[] = "%$search%"; $params[] = "%$search%"; $params[] = "%$search%";
+}
+if (!empty($typeFilter)) {
+    $sql .= " AND LOWER(venue_type) = LOWER(?)";
+    $params[] = $typeFilter;
+}
+if ($minCap > 0) {
+    $sql .= " AND max_capacity >= ?";
+    $params[] = $minCap;
+}
+if ($maxPrice > 0) {
+    $sql .= " AND base_rate <= ?";
+    $params[] = $maxPrice;
+}
+
+$orderMap = [
+    'popular'       => 'rating DESC, id ASC',
+    'price_asc'     => 'base_rate ASC',
+    'price_desc'    => 'base_rate DESC',
+    'capacity_desc' => 'max_capacity DESC',
+    'rating'        => 'rating DESC',
+];
+$sql .= " ORDER BY " . ($orderMap[$sortBy] ?? 'rating DESC, id ASC');
+
+$stmtVenues = $db->prepare($sql);
+$stmtVenues->execute($params);
+$venueRows  = $stmtVenues->fetchAll();
+$venueCount = count($venueRows);
 ?>
         
 <div class="flex-between mb-16">
   <div>
     <h1 style="font-size:1.8rem; font-weight:800;">Premium Venues</h1>
-    <p><?php echo isset($venueRows) ? "Showing " . count($venueRows) . " venue" . (count($venueRows) !== 1 ? "s" : "") : "Loading venues..."; ?> from our database</p>
+    <p>Showing <?= $venueCount ?> venue<?= $venueCount !== 1 ? 's' : '' ?> matching your criteria</p>
   </div>
   <div class="flex-center gap-12">
-    <span class="text-sm text-muted">Sort by:</span>
-    <select class="form-control" style="width:160px; padding:6px 12px;">
-      <option>Most Popular</option>
-      <option>Price: Low to High</option>
-      <option>Price: High to Low</option>
-      <option>Highest Rated</option>
-    </select>
+    <form method="GET" action="venue-listings.php" id="customer-sort-form" style="display:flex; align-items:center; gap:8px;">
+      <?php if (!empty($search)): ?>
+      <input type="hidden" name="search" value="<?= e($search) ?>">
+      <?php endif; ?>
+      <?php if (!empty($typeFilter)): ?>
+      <input type="hidden" name="type" value="<?= e($typeFilter) ?>">
+      <?php endif; ?>
+      <?php if ($minCap > 0): ?>
+      <input type="hidden" name="min_capacity" value="<?= $minCap ?>">
+      <?php endif; ?>
+      <span class="text-sm text-muted">Sort by:</span>
+      <select name="sort" class="form-control" style="width:170px; padding:6px 12px;" onchange="this.form.submit()">
+        <option value="popular" <?= $sortBy==='popular' ? 'selected' : '' ?>>Most Popular</option>
+        <option value="price_asc" <?= $sortBy==='price_asc' ? 'selected' : '' ?>>Price: Low to High</option>
+        <option value="price_desc" <?= $sortBy==='price_desc' ? 'selected' : '' ?>>Price: High to Low</option>
+        <option value="capacity_desc" <?= $sortBy==='capacity_desc' ? 'selected' : '' ?>>Capacity: High to Low</option>
+        <option value="rating" <?= $sortBy==='rating' ? 'selected' : '' ?>>Highest Rated</option>
+      </select>
+    </form>
   </div>
 </div>
 
 <div class="flex gap-24" style="align-items:flex-start;">
-  <!-- Filters Sidebar -->
+  <!-- Filters Sidebar Form -->
   <aside class="filters-panel">
-    <div class="flex-between mb-16">
-      <span class="font-bold" style="font-size:0.95rem;">Filters</span>
-      <a href="#" class="text-xs text-primary font-semibold">Clear All</a>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-label">Price Range (Daily)</div>
-      <input type="range" min="500" max="10000" value="5000" style="width:100%; accent-color:var(--primary); margin-bottom:8px;">
-      <div class="flex-between text-xs text-muted">
-        <span>$500</span>
-        <span>$10,000+</span>
+    <form method="GET" action="venue-listings.php" id="venue-filter-form">
+      <input type="hidden" name="sort" value="<?= e($sortBy) ?>">
+      <div class="flex-between mb-16">
+        <span class="font-bold" style="font-size:0.95rem;">Filters</span>
+        <a href="venue-listings.php" class="text-xs text-primary font-semibold">Clear All</a>
       </div>
-    </div>
 
-    <div class="filter-group">
-      <div class="filter-label">Min Capacity</div>
-      <div class="capacity-grid">
-        <div class="capacity-btn">50+</div>
-        <div class="capacity-btn active">200+</div>
-        <div class="capacity-btn">500+</div>
-        <div class="capacity-btn">1000+</div>
+      <div class="filter-group">
+        <div class="filter-label">Search Keyword</div>
+        <input type="text" name="search" class="form-control" placeholder="Venue name or district..." value="<?= e($search) ?>" style="font-size:0.85rem;">
       </div>
-    </div>
 
-    <div class="filter-group">
-      <div class="filter-label">Venue Type</div>
-      <label class="filter-check"><input type="checkbox" checked> Ballrooms</label>
-      <label class="filter-check"><input type="checkbox" checked> Rooftops</label>
-      <label class="filter-check"><input type="checkbox"> Garden Spaces</label>
-      <label class="filter-check"><input type="checkbox"> Industrial Lofts</label>
-    </div>
+      <div class="filter-group">
+        <div class="filter-label">Venue Type</div>
+        <select name="type" class="form-control" style="font-size:0.85rem;" onchange="this.form.submit()">
+          <option value="">All Categories</option>
+          <option value="Ballroom" <?= strcasecmp($typeFilter, 'Ballroom')===0 ? 'selected' : '' ?>>Ballrooms</option>
+          <option value="Rooftop" <?= strcasecmp($typeFilter, 'Rooftop')===0 ? 'selected' : '' ?>>Rooftops</option>
+          <option value="Garden" <?= strcasecmp($typeFilter, 'Garden')===0 ? 'selected' : '' ?>>Garden Spaces</option>
+          <option value="Gallery" <?= strcasecmp($typeFilter, 'Gallery')===0 ? 'selected' : '' ?>>Industrial Lofts</option>
+          <option value="Auditorium" <?= strcasecmp($typeFilter, 'Auditorium')===0 ? 'selected' : '' ?>>Tech Pavilions</option>
+        </select>
+      </div>
 
-    <div class="filter-group">
-      <div class="filter-label">Amenities</div>
-      <label class="filter-check"><input type="checkbox" checked> In-house Catering</label>
-      <label class="filter-check"><input type="checkbox" checked> AV Equipment</label>
-      <label class="filter-check"><input type="checkbox"> Valet Parking</label>
-    </div>
+      <div class="filter-group">
+        <div class="filter-label">Min Capacity</div>
+        <select name="min_capacity" class="form-control" style="font-size:0.85rem;" onchange="this.form.submit()">
+          <option value="0">Any Capacity</option>
+          <option value="50" <?= $minCap===50 ? 'selected' : '' ?>>50+ Guests</option>
+          <option value="150" <?= $minCap===150 ? 'selected' : '' ?>>150+ Guests</option>
+          <option value="300" <?= $minCap===300 ? 'selected' : '' ?>>300+ Guests</option>
+          <option value="500" <?= $minCap===500 ? 'selected' : '' ?>>500+ Guests</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full btn-sm mt-12">Apply Filters</button>
+    </form>
   </aside>
 
   <!-- Venue Cards Grid -->
   <div style="flex:1;">
       <?php
-      // --- DB-driven venue query with filters ---
-      $search   = htmlspecialchars($_GET['search'] ?? '', ENT_QUOTES);
-      $typeFilter = htmlspecialchars($_GET['type'] ?? '', ENT_QUOTES);
-      $minCap   = (int)($_GET['min_capacity'] ?? 0);
-      $maxPrice = (int)($_GET['max_price'] ?? 0);
-      $sortBy   = htmlspecialchars($_GET['sort'] ?? 'popular', ENT_QUOTES);
-
-      $sql    = "SELECT * FROM venues WHERE status = 'active'";
-      $params = [];
-
-      if (!empty($search)) {
-          $sql .= " AND (name LIKE ? OR district LIKE ? OR description LIKE ?)";
-          $params[] = "%$search%"; $params[] = "%$search%"; $params[] = "%$search%";
-      }
-      if (!empty($typeFilter)) {
-          $sql .= " AND venue_type = ?";
-          $params[] = $typeFilter;
-      }
-      if ($minCap > 0) {
-          $sql .= " AND max_capacity >= ?";
-          $params[] = $minCap;
-      }
-      if ($maxPrice > 0) {
-          $sql .= " AND base_rate <= ?";
-          $params[] = $maxPrice;
-      }
-
-      $orderMap = [
-          'popular' => 'rating DESC, id ASC',
-          'price_asc' => 'base_rate ASC',
-          'price_desc' => 'base_rate DESC',
-          'rating' => 'rating DESC',
-      ];
-      $sql .= " ORDER BY " . ($orderMap[$sortBy] ?? 'rating DESC, id ASC');
-
-      $stmtVenues = $db->prepare($sql);
-      $stmtVenues->execute($params);
-      $venueRows  = $stmtVenues->fetchAll();
-      $venueCount = count($venueRows);
-
-      // Unsplash stock images for variety
       $stockImages = [
         'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=600&q=80',
         'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=600&q=80',

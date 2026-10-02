@@ -33,16 +33,16 @@ if (isLoggedIn()) {
     <form action="staff-dashboard.php">
       <div class="form-group">
         <label class="form-label">Staff Email or Employee ID</label>
-        <input type="text" class="form-control" value="sarah.staff@venuepro.com" required>
+        <input type="text" name="email" class="form-control" placeholder="staff@venuepro.com or Staff ID" required>
       </div>
       <div class="form-group">
         <label class="form-label">Password</label>
-        <input type="password" class="form-control" value="••••••••••••" required>
+        <input type="password" name="password" class="form-control" placeholder="••••••••••••" required>
       </div>
       <button type="submit" class="btn btn-primary btn-full mb-16" style="background:#7c3aed; border-color:#7c3aed;">Open Staff Workspace →</button>
     </form>
   </div>
-  <div class="auth-footer">New staff member? <a href="staff-signup.php" style="font-weight:600;">Activate with Invite Code</a></div>
+  <!-- <div class="auth-footer">New staff member? <a href="staff-signup.php" style="font-weight:600;">Activate with Invite Code</a></div> -->
 <script src="../js/app.js"></script>
 </body>
 </html>

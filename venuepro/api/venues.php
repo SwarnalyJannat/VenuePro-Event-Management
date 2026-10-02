@@ -101,6 +101,40 @@ switch ($action) {
         jsonResponse(true, 'Venue created successfully', ['venue_id' => $db->lastInsertId()], 201);
         break;
 
+    case 'update':
+        requireRole('admin');
+        $input = !empty($_POST) ? $_POST : getJsonInput();
+        $id = (int)($input['id'] ?? ($_GET['id'] ?? 0));
+        if ($id <= 0) {
+            jsonResponse(false, 'Missing valid venue ID', null, 400);
+        }
+        $name = sanitize($input['name'] ?? '');
+        $venueType = sanitize($input['venue_type'] ?? 'Ballroom');
+        $address = sanitize($input['address'] ?? '');
+        $district = sanitize($input['district'] ?? '');
+        $capacity = (int)($input['capacity'] ?? ($input['max_capacity'] ?? 100));
+        $baseRate = (float)($input['base_rate'] ?? 2000.00);
+        $serviceFee = (float)($input['service_fee_pct'] ?? 10.00);
+        $extraHour = (float)($input['additional_hour_rate'] ?? 300.00);
+        $description = sanitize($input['description'] ?? '');
+        $status = sanitize($input['status'] ?? 'active');
+        $amenities = isset($input['amenities']) && is_array($input['amenities']) ? json_encode($input['amenities']) : null;
+
+        if (empty($name) || empty($address)) {
+            jsonResponse(false, 'Venue Name and Address are required', null, 400);
+        }
+
+        if ($amenities !== null) {
+            $stmt = $db->prepare("UPDATE venues SET name=?, venue_type=?, address=?, district=?, capacity=?, base_rate=?, service_fee_pct=?, additional_hour_rate=?, description=?, amenities=?, status=? WHERE id=?");
+            $stmt->execute([$name, $venueType, $address, $district, $capacity, $baseRate, $serviceFee, $extraHour, $description, $amenities, $status, $id]);
+        } else {
+            $stmt = $db->prepare("UPDATE venues SET name=?, venue_type=?, address=?, district=?, capacity=?, base_rate=?, service_fee_pct=?, additional_hour_rate=?, description=?, status=? WHERE id=?");
+            $stmt->execute([$name, $venueType, $address, $district, $capacity, $baseRate, $serviceFee, $extraHour, $description, $status, $id]);
+        }
+
+        jsonResponse(true, 'Venue updated successfully');
+        break;
+
     default:
         jsonResponse(false, 'Invalid venue action', null, 400);
         break;

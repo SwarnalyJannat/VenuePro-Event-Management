@@ -34,6 +34,28 @@ WHERE u.role = 'caterer'
 GROUP BY u.id 
 ORDER BY total_cat_rev DESC LIMIT 5");
 $catererContrib = $stmtCatContrib->fetchAll();
+
+$stmtMonthly = $db->query(
+    "SELECT DATE_FORMAT(event_date, '%b %Y') AS month_label,
+            DATE_FORMAT(event_date, '%b') AS short_month,
+            DATE_FORMAT(event_date, '%Y-%m') AS ym,
+            COUNT(*) AS total_count,
+            COALESCE(SUM(total_amount), 0) AS volume
+     FROM bookings
+     WHERE booking_status != 'cancelled'
+     GROUP BY ym
+     ORDER BY ym ASC"
+);
+$monthlyTxns = $stmtMonthly->fetchAll();
+
+$stmtTxn = $db->query(
+    "SELECT b.*, u.name AS client_name, v.name AS venue_name
+     FROM bookings b
+     JOIN users u ON b.customer_id = u.id
+     JOIN venues v ON b.venue_id = v.id
+     ORDER BY b.created_at DESC LIMIT 20"
+);
+$transactions = $stmtTxn->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -110,9 +132,6 @@ $catererContrib = $stmtCatContrib->fetchAll();
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
-                  <a href="admin-policy-management.php" class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Legal &amp; Policies
-        </a>
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
@@ -121,7 +140,7 @@ $catererContrib = $stmtCatContrib->fetchAll();
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
           </div>
         </div>
@@ -160,50 +179,25 @@ $catererContrib = $stmtCatContrib->fetchAll();
 
 <!-- Monthly Transaction Chart -->
 <div class="card mb-24">
-  <div class="card-header">
-    <div class="card-title">Monthly Transaction Volume</div>
-    <span class="stat-badge neutral">January – September 2026</span>
+  <div class="card-header" style="flex-wrap:wrap; gap:12px;">
+    <div>
+      <div class="card-title">Monthly Transaction Volume</div>
+      <span class="text-xs text-muted" id="chartFilterSubtitle">Showing interactive transaction volume breakdown</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <label class="text-xs text-muted font-semibold" for="txnPeriodFilter">Select Period:</label>
+      <select id="txnPeriodFilter" class="form-control" style="width:auto; padding:6px 12px; font-size:0.85rem;" onchange="updateTransactionGraph(this.value)">
+        <option value="6m" selected>Last 6 Months</option>
+        <option value="12m">Last 12 Months</option>
+        <option value="2026">Year 2026</option>
+        <option value="all">All Time</option>
+      </select>
+    </div>
   </div>
-  <div class="chart-wrap" style="margin-top:16px;">
-    <div class="chart-bar-col"><div class="chart-bar" style="height:38%;"></div><div class="chart-val">$21k</div><div class="chart-label">JAN</div></div>
-    <div class="chart-bar-col"><div class="chart-bar" style="height:52%;"></div><div class="chart-val">$29k</div><div class="chart-label">FEB</div></div>
-    <div class="chart-bar-col"><div class="chart-bar" style="height:45%;"></div><div class="chart-val">$25k</div><div class="chart-label">MAR</div></div>
-    <div class="chart-bar-col"><div class="chart-bar" style="height:68%;"></div><div class="chart-val">$38k</div><div class="chart-label">APR</div></div>
-    <div class="chart-bar-col"><div class="chart-bar" style="height:80%;"></div><div class="chart-val">$45k</div><div class="chart-label">MAY</div></div>
-    <div class="chart-bar-col"><div class="chart-bar peak" style="height:100%;"></div><div class="chart-val">$56k</div><div class="chart-label">JUN</div></div>
-    <div class="chart-bar-col"><div class="chart-bar" style="height:72%;"></div><div class="chart-val">$40k</div><div class="chart-label">JUL</div></div>
-    <div class="chart-bar-col"><div class="chart-bar" style="height:88%;"></div><div class="chart-val">$49k</div><div class="chart-label">AUG</div></div>
-    <div class="chart-bar-col"><div class="chart-bar" style="height:62%;"></div><div class="chart-val">$35k</div><div class="chart-label">SEP</div></div>
+  <div id="txnChartWrap" class="chart-wrap" style="margin-top:20px; min-height:180px; align-items:flex-end;">
+    <!-- Rendered dynamically by updateTransactionGraph -->
   </div>
-</div>
-
-<!-- Filter Bar -->
-<div class="card mb-16" style="padding:16px 20px;">
-  <div class="filter-bar">
-    <label>Filter by:</label>
-    <select>
-      <option>All Months</option>
-      <option>January 2026</option>
-      <option>February 2026</option>
-      <option>March 2026</option>
-      <option>April 2026</option>
-      <option>May 2026</option>
-      <option>June 2026</option>
-      <option>July 2026</option>
-      <option>August 2026</option>
-      <option selected>September 2026</option>
-    </select>
-    <label>— or date range —</label>
-    <label>From: <input type="date" value="2026-01-01"></label>
-    <label>To: <input type="date" value="2026-09-07"></label>
-    <select>
-      <option>All Types</option>
-      <option>Bookings</option>
-      <option>Catering Orders</option>
-      <option>Venue Hire</option>
-    </select>
-    <button class="btn btn-primary btn-sm">Apply Filters</button>
-    <button class="btn btn-ghost btn-sm">Reset</button>
+  <div id="txnChartSummary" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:12px; border-top:1px solid var(--gray-200); font-size:0.85rem; color:var(--gray-600);">
   </div>
 </div>
 
@@ -228,73 +222,36 @@ $catererContrib = $stmtCatContrib->fetchAll();
         </tr>
       </thead>
       <tbody>
+        <?php if (empty($transactions)): ?>
+        <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray-400);">No transactions found in records.</td></tr>
+        <?php else: foreach ($transactions as $tx):
+          $txnCode = 'TXN-' . str_pad($tx['id'], 4, '0', STR_PAD_LEFT);
+          $txDate  = date('M j, Y', strtotime($tx['created_at']));
+          $isPaid  = in_array($tx['booking_status'], ['confirmed', 'completed']);
+          $statusTxt = $isPaid ? 'PAID' : strtoupper($tx['booking_status']);
+          $statusCls = $isPaid ? 'confirmed' : ($tx['booking_status'] === 'cancelled' ? 'cancelled' : 'pending');
+        ?>
         <tr>
-          <td class="font-bold text-primary">#TXN-0091</td>
-          <td>Sep 06, 2026</td>
-          <td>Jane Doe Events</td>
-          <td>Grand Ballroom</td>
+          <td class="font-bold text-primary">#<?= e($txnCode) ?></td>
+          <td><?= $txDate ?></td>
+          <td><?= e($tx['client_name']) ?></td>
+          <td><?= e($tx['venue_name']) ?></td>
           <td><span class="pill pill-in-progress">Booking</span></td>
-          <td class="font-bold">$4,890.00</td>
-          <td><span class="pill pill-confirmed">PAID</span></td>
-          <td><button class="btn btn-ghost btn-sm" onclick="showTransactionModal('TXN-0091', 'Sep 06, 2026', 'Jane Doe Events', 'Grand Ballroom', 'Booking Reservation', '$4,890.00', 'Visa •••• 4242', 'ch_3M4o9281a9', 'PAID')">View</button></td>
+          <td class="font-bold">$<?= number_format((float)$tx['total_amount'], 2) ?></td>
+          <td><span class="pill pill-<?= $statusCls ?>"><?= $statusTxt ?></span></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="showTransactionModal('<?= e($txnCode) ?>', '<?= $txDate ?>', '<?= addslashes(e($tx['client_name'])) ?>', '<?= addslashes(e($tx['venue_name'])) ?>', 'Venue Hire &amp; Events', '$<?= number_format((float)$tx['total_amount'], 2) ?>', 'Credit Card / Visa', 'ref_bk_<?= $tx['id'] ?>', '<?= $statusTxt ?>')">View</button></td>
         </tr>
-        <tr>
-          <td class="font-bold text-primary">#TXN-0090</td>
-          <td>Sep 05, 2026</td>
-          <td>TechCorp Global</td>
-          <td>Sky Terrace</td>
-          <td><span class="pill pill-in-progress">Booking</span></td>
-          <td class="font-bold">$8,400.00</td>
-          <td><span class="pill pill-pending">PENDING</span></td>
-          <td><a href="admin-booking-approval.php" class="btn btn-ghost btn-sm">View</a></td>
-        </tr>
-        <tr>
-          <td class="font-bold text-primary">#TXN-0089</td>
-          <td>Sep 04, 2026</td>
-          <td>Luxe Media Inc.</td>
-          <td>Riverside Suite</td>
-          <td><span class="pill pill-in-progress">Booking</span></td>
-          <td class="font-bold">$3,450.00</td>
-          <td><span class="pill pill-confirmed">PAID</span></td>
-          <td><button class="btn btn-ghost btn-sm" onclick="showTransactionModal('TXN-0089', 'Sep 04, 2026', 'Luxe Media Inc.', 'Riverside Suite', 'Executive Booking', '$3,450.00', 'Mastercard •••• 8812', 'ch_9Kp2841v9', 'PAID')">View</button></td>
-        </tr>
-        <tr>
-          <td class="font-bold text-primary">#TXN-0088</td>
-          <td>Sep 03, 2026</td>
-          <td>Artisan Catering</td>
-          <td>Grand Ballroom</td>
-          <td><span class="pill" style="background:#fef9c3;color:#854d0e;">Catering</span></td>
-          <td class="font-bold">$1,850.00</td>
-          <td><span class="pill pill-confirmed">PAID</span></td>
-          <td><button class="btn btn-ghost btn-sm" onclick="showTransactionModal('TXN-0088', 'Sep 03, 2026', 'Artisan Catering', 'Grand Ballroom', 'Catering Service Package', '$1,850.00', 'Direct ACH Transfer', 'ach_41872911b', 'PAID')">View</button></td>
-        </tr>
-        <tr>
-          <td class="font-bold text-primary">#TXN-0087</td>
-          <td>Sep 02, 2026</td>
-          <td>Vanguard Financial</td>
-          <td>Grand Ballroom</td>
-          <td><span class="pill pill-in-progress">Booking</span></td>
-          <td class="font-bold">$12,800.00</td>
-          <td><span class="pill pill-pending">PENDING</span></td>
-          <td><a href="admin-booking-approval.php" class="btn btn-ghost btn-sm">View</a></td>
-        </tr>
+        <?php endforeach; endif; ?>
       </tbody>
     </table>
   </div>
   <div class="flex-between" style="padding:12px 0 0; font-size:.8rem; color:var(--gray-500);">
-    <span>Showing 5 of 347 transactions</span>
-    <div class="flex gap-8">
-      <a href="#" class="btn btn-ghost btn-sm">‹ Prev</a>
-      <a href="#" class="btn btn-primary btn-sm">1</a>
-      <a href="#" class="btn btn-ghost btn-sm">2</a>
-      <a href="#" class="btn btn-ghost btn-sm">3</a>
-      <a href="#" class="btn btn-ghost btn-sm">Next ›</a>
-    </div>
+    <span>Showing <?= count($transactions) ?> recorded transactions</span>
   </div>
 </div>
 
 <!-- Staff & Caterer Quick Links -->
-<div class="grid-2 gap-20 mb-24">
+<!-- <div class="grid-2 gap-20 mb-24">
   <div class="card">
     <div class="card-header">
       <div class="card-title">Staff Performance Overview</div>
@@ -337,8 +294,7 @@ $catererContrib = $stmtCatContrib->fetchAll();
       </tbody>
     </table>
   </div>
-</div>
-
+</div> -->
 <!-- Bookings Summary -->
 <div class="card">
   <div class="card-header">
@@ -377,9 +333,6 @@ $catererContrib = $stmtCatContrib->fetchAll();
       </main>
                         <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
-        <div class="footer-links">
-          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
-        </div>
       </footer>
     </div>
   </div>
@@ -474,6 +427,119 @@ $catererContrib = $stmtCatContrib->fetchAll();
     function closeTxnModal() {
       document.getElementById('txn-modal').style.display = 'none';
     }
+
+    const rawMonthlyData = <?= json_encode($monthlyTxns) ?>;
+
+    function updateTransactionGraph(period) {
+      const wrap = document.getElementById('txnChartWrap');
+      const summary = document.getElementById('txnChartSummary');
+      const subtitle = document.getElementById('chartFilterSubtitle');
+      if (!wrap) return;
+
+      const defaultMonths = [
+        { label: 'Jan', ym: '2026-01', volume: 21500, count: 8 },
+        { label: 'Feb', ym: '2026-02', volume: 29000, count: 11 },
+        { label: 'Mar', ym: '2026-03', volume: 25400, count: 9 },
+        { label: 'Apr', ym: '2026-04', volume: 38200, count: 14 },
+        { label: 'May', ym: '2026-05', volume: 45000, count: 16 },
+        { label: 'Jun', ym: '2026-06', volume: 56000, count: 20 },
+        { label: 'Jul', ym: '2026-07', volume: 40200, count: 15 },
+        { label: 'Aug', ym: '2026-08', volume: 49500, count: 18 },
+        { label: 'Sep', ym: '2026-09', volume: 35000, count: 13 },
+        { label: 'Oct', ym: '2026-10', volume: 42000, count: 15 },
+        { label: 'Nov', ym: '2026-11', volume: 51000, count: 19 },
+        { label: 'Dec', ym: '2026-12', volume: 64000, count: 24 }
+      ];
+
+      let dataMap = {};
+      defaultMonths.forEach(m => dataMap[m.ym] = { ...m });
+      if (Array.isArray(rawMonthlyData)) {
+        rawMonthlyData.forEach(row => {
+          if (row.ym) {
+            dataMap[row.ym] = {
+              label: row.short_month || row.month_label,
+              ym: row.ym,
+              volume: parseFloat(row.volume) || 0,
+              count: parseInt(row.total_count, 10) || 0
+            };
+          }
+        });
+      }
+
+      let allItems = Object.values(dataMap);
+      let filtered = [];
+      if (period === '6m') {
+        filtered = allItems.slice(3, 9);
+        if (subtitle) subtitle.textContent = 'Showing Last 6 Months (April 2026 – September 2026)';
+      } else if (period === '12m') {
+        filtered = allItems.slice(0, 12);
+        if (subtitle) subtitle.textContent = 'Showing Full 12 Months (January – December 2026)';
+      } else if (period === '2026') {
+        filtered = allItems.filter(m => m.ym.startsWith('2026')).slice(0, 9);
+        if (subtitle) subtitle.textContent = 'Year-to-Date 2026 Volume (January – September)';
+      } else {
+        filtered = allItems;
+        if (subtitle) subtitle.textContent = 'All Historical & Projected Transactions';
+      }
+
+      let maxVol = Math.max(...filtered.map(d => d.volume), 1000);
+      let totalVol = filtered.reduce((acc, d) => acc + d.volume, 0);
+      let totalCount = filtered.reduce((acc, d) => acc + d.count, 0);
+      let peakItem = filtered.reduce((max, d) => d.volume > max.volume ? d : max, filtered[0] || {volume:0});
+
+      wrap.innerHTML = '';
+      filtered.forEach(d => {
+        let pct = Math.round((d.volume / maxVol) * 100);
+        let isPeak = (d.volume === peakItem.volume && peakItem.volume > 0);
+        let col = document.createElement('div');
+        col.className = 'chart-bar-col';
+        col.style.flex = '1';
+        col.style.display = 'flex';
+        col.style.flexDirection = 'column';
+        col.style.alignItems = 'center';
+        col.style.height = '100%';
+        col.style.justifyContent = 'flex-end';
+
+        let val = document.createElement('div');
+        val.className = 'chart-val';
+        val.style.fontSize = '0.75rem';
+        val.style.fontWeight = '600';
+        val.style.marginBottom = '6px';
+        val.textContent = '$' + (d.volume >= 1000 ? Math.round(d.volume / 1000) + 'k' : d.volume);
+
+        let bar = document.createElement('div');
+        bar.className = 'chart-bar' + (isPeak ? ' peak' : '');
+        bar.style.height = pct + '%';
+        bar.style.width = '100%';
+        bar.style.maxWidth = '38px';
+        bar.style.borderRadius = '4px 4px 0 0';
+        bar.style.background = isPeak ? 'var(--primary)' : '#93c5fd';
+        bar.style.transition = 'height 0.4s ease';
+        bar.title = d.label + ': $' + Math.round(d.volume).toLocaleString() + ' (' + d.count + ' transactions)';
+
+        let lbl = document.createElement('div');
+        lbl.className = 'chart-label';
+        lbl.style.fontSize = '0.72rem';
+        lbl.style.color = 'var(--gray-500)';
+        lbl.style.marginTop = '6px';
+        lbl.style.textTransform = 'uppercase';
+        lbl.textContent = d.label;
+
+        col.appendChild(val);
+        col.appendChild(bar);
+        col.appendChild(lbl);
+        wrap.appendChild(col);
+      });
+
+      if (summary) {
+        summary.innerHTML = '<div>Total Volume: <strong style="color:var(--primary); font-size:1rem;">$' + Math.round(totalVol).toLocaleString() + '</strong> across <strong>' + totalCount + '</strong> transactions</div>' +
+                             '<div>Period Peak: <strong>' + peakItem.label + ' ($' + Math.round(peakItem.volume).toLocaleString() + ')</strong></div>';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      updateTransactionGraph('6m');
+    });
   </script>
 <script src="../js/app.js"></script>
 </body>

@@ -19,8 +19,14 @@ switch ($action) {
             jsonResponse(false, 'Please provide both email and password.', null, 400);
         }
 
-        $stmt = $db->prepare("SELECT * FROM users WHERE email = ? AND status = 'active' LIMIT 1");
-        $stmt->execute([$email]);
+        $stmt = $db->prepare("
+            SELECT u.* FROM users u 
+            LEFT JOIN staff_profiles sp ON u.id = sp.user_id 
+            WHERE (LOWER(u.email) = ? OR LOWER(sp.staff_code) = ?) 
+              AND u.status = 'active' 
+            LIMIT 1
+        ");
+        $stmt->execute([$email, $email]);
         $user = $stmt->fetch();
 
         if (!$user || !password_verify($password, $user['password_hash'])) {

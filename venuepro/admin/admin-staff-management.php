@@ -182,7 +182,7 @@ $staffMembers = $stmtS->fetchAll();
               <div class="user-avatar" style="background: #0f172a"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
               <div class="user-info">
                 <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-                <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+                <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
               </div>
             </div>
           </div>
@@ -191,9 +191,9 @@ $staffMembers = $stmtS->fetchAll();
           <div class="flex-between mb-24">
             <div>
               <h1>Staff Directory & Management</h1>
-              <p>
+              <!-- <p>
                 Active coordinators, AV technicians, and on-site logistics crew.
-              </p>
+              </p> -->
             </div>
             <a href="admin-add-staff.php" class="btn btn-primary"
               >+ Add New Staff Member</a
@@ -207,10 +207,10 @@ $staffMembers = $stmtS->fetchAll();
                   <tr>
                     <th>MEMBER</th>
                     <!-- <th>ROLE</th> -->
-                    <th>EMAIL</th>
                     <th>ASSIGNED VENUES</th>
-                    <th>STATUS</th>
-                    <th>ACTION</th>
+                    <th>EMAIL</th>
+                    <!-- <th>STATUS</th> -->
+                    <!-- <th>ACTION</th> -->
                   </tr>
                 </thead>
                 <tbody>
@@ -231,12 +231,11 @@ $staffMembers = $stmtS->fetchAll();
   </td>
   <td><?= ucfirst(e($s['department'] ?? 'Event Operations')) ?></td>
   <td><?= e($s['email']) ?></td>
-  <td><?= (int)$s['assigned_events'] ?></td>
-  <td><span class="pill pill-<?= $statusClass ?>"><?= strtoupper($s['active_status'] ?? 'active') ?></span></td>
-  <td style="display:flex;gap:8px;">
-    <a href="admin-add-staff.php?edit=<?= $s['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:0.78rem;">Edit</a>
-    <button class="btn btn-sm" style="padding:4px 10px;font-size:0.78rem;background:#fee2e2;color:#dc2626;border:none;cursor:pointer;border-radius:6px;"
-      onclick="deactivateStaff(<?= $s['id'] ?>, '<?= e($s['name']) ?>')">Deactivate</button>
+  <!-- <td><?= (int)$s['assigned_events'] ?></td> -->
+  <td >
+    <a href="admin-edit-staff.php?id=<?= $s['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:0.78rem;">Edit</a>
+    <!-- <button class="btn btn-sm" style="padding:4px 10px;font-size:0.78rem;background:#fee2e2;color:#dc2626;border:none;cursor:pointer;border-radius:6px;"
+      onclick="deactivateStaff(<?= $s['id'] ?>, '<?= e($s['name']) ?>')">Deactivate</button> -->
   </td>
 </tr>
 <?php endforeach; endif; ?>
@@ -246,10 +245,7 @@ $staffMembers = $stmtS->fetchAll();
           </div>
         </main>
               <footer class="page-footer">
-        <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
-        <div class="footer-links">
-          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
-        </div>
+        <div>© 2026 VenuePro Enterprise Administration.</div>
       </footer>
       </div>
     </div>

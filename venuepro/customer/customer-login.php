@@ -46,7 +46,7 @@ if (isLoggedIn()) {
         </div>
         <div class="input-wrap">
           <span class="input-icon">🔒</span>
-          <input type="password" class="form-control with-icon" value="••••••••••••" placeholder="Enter password" required>
+          <input type="password" class="form-control with-icon" placeholder="••••••••••••" required>
         </div>
       </div>
 

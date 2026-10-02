@@ -4,6 +4,19 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('admin', 'admin-login.php');
 $db = getDBConnection();
+
+$catererId = (int)($_GET['id'] ?? 0);
+$caterer = null;
+if ($catererId > 0) {
+    $stmtC = $db->prepare("SELECT u.*, cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization, cp.approval_status FROM users u JOIN caterer_profiles cp ON u.id = cp.user_id WHERE u.id = ? AND u.role = 'caterer' LIMIT 1");
+    $stmtC->execute([$catererId]);
+    $caterer = $stmtC->fetch();
+}
+if (!$caterer) {
+    $stmtC = $db->query("SELECT u.*, cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization, cp.approval_status FROM users u JOIN caterer_profiles cp ON u.id = cp.user_id WHERE u.role = 'caterer' ORDER BY (cp.approval_status = 'under_review' OR cp.approval_status = 'pending') DESC, cp.id DESC LIMIT 1");
+    $caterer = $stmtC ? $stmtC->fetch() : null;
+    $catererId = $caterer ? (int)$caterer['id'] : 0;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -63,9 +76,6 @@ $db = getDBConnection();
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
-                  <a href="admin-policy-management.php" class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Legal &amp; Policies
-        </a>
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
@@ -74,7 +84,7 @@ $db = getDBConnection();
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
           </div>
         </div>
@@ -89,9 +99,9 @@ $db = getDBConnection();
 <div class="flex-between mb-24">
   <div>
     <h1>Review Catering Application</h1>
-    <p>Applicant: <strong>Epicurean Events Co.</strong> (Chef Marcus Vance)</p>
+    <p>Applicant: <strong><?= e($caterer['business_name'] ?? 'Epicurean Events Co.') ?></strong> (<?= e($caterer['owner_name'] ?? ($caterer['name'] ?? 'Chef')) ?>)</p>
   </div>
-  <span class="pill pill-pending">COMPLIANCE REVIEW</span>
+  <span class="pill pill-<?= ($caterer['approval_status'] ?? '') === 'approved' ? 'confirmed' : 'pending' ?>"><?= strtoupper($caterer['approval_status'] ?? 'PENDING') ?></span>
 </div>
 
 <div class="grid-2" style="grid-template-columns: 2fr 1.2fr; gap:24px;">
@@ -99,11 +109,15 @@ $db = getDBConnection();
     <h3 class="mb-16">Culinary Credentials & Commercial License</h3>
     <div class="mb-16">
       <div class="text-xs text-muted">Kitchen Facility</div>
-      <div class="font-semibold text-sm">Suite 400, 782 Culinary Way, Downtown</div>
+      <div class="font-semibold text-sm"><?= e($caterer['kitchen_address'] ?? 'Suite 400, 782 Culinary Way, Downtown') ?></div>
     </div>
     <div class="mb-16">
       <div class="text-xs text-muted">Specialization</div>
-      <div class="font-semibold text-sm">Contemporary Fine Dining & Plated Service</div>
+      <div class="font-semibold text-sm"><?= e($caterer['specialization'] ?? 'Contemporary Fine Dining') ?></div>
+    </div>
+    <div class="mb-16">
+      <div class="text-xs text-muted">Contact Information</div>
+      <div class="font-semibold text-sm"><?= e($caterer['email'] ?? '') ?> • <?= e($caterer['phone'] ?? '') ?></div>
     </div>
     <div class="card" style="background:var(--gray-50);">
       <div class="font-bold text-sm mb-8">Verified Documentation</div>
@@ -115,9 +129,10 @@ $db = getDBConnection();
 
   <div class="card" style="background:var(--gray-50);">
     <h3 class="mb-16">Application Decision</h3>
-    <a href="admin-catering-management.php" class="btn btn-primary btn-full mb-12" style="background:#16a34a; border-color:#16a34a;">✓ Grant Certified Caterer Badge</a>
-    <a href="admin-catering-management.php" class="btn btn-danger btn-outline btn-full mb-12">✗ Reject Application</a>
-    <button id="btn-request-inspection" class="btn btn-ghost btn-full" onclick="toggleInspectionBox()">Request Additional Inspection</button>
+    <div id="decision-alert" style="display:none; padding:12px; border-radius:6px; margin-bottom:12px; font-size:0.9rem; font-weight:600;"></div>
+    <button type="button" id="btn-approve-caterer" class="btn btn-primary btn-full mb-12" style="background:#16a34a; border-color:#16a34a;" onclick="updateCatererStatus('approved')">✓ Grant Certified Caterer Badge</button>
+    <button type="button" id="btn-reject-caterer" class="btn btn-danger btn-outline btn-full mb-12" onclick="updateCatererStatus('rejected')">✗ Reject Application</button>
+    <!-- <button id="btn-request-inspection" class="btn btn-ghost btn-full" onclick="toggleInspectionBox()">Request Additional Inspection</button> -->
     
     <div id="inspection-form-container" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--gray-200);">
       <label class="form-label" style="font-weight:600; margin-bottom:8px; display:block;">Specify Inspection Requirements / Notes:</label>
@@ -127,7 +142,7 @@ $db = getDBConnection();
         <button type="button" class="btn btn-ghost btn-sm" onclick="toggleInspectionBox()">Cancel</button>
       </div>
       <div id="inspection-sent-alert" style="display:none; margin-top:12px; padding:10px 14px; background:#dcfce7; color:#166534; border:1px solid #bbf7d0; border-radius:6px; font-size:13px; font-weight:600;">
-        ✓ Additional inspection request sent to Epicurean Events Co.
+        ✓ Additional inspection request sent to <?= e($caterer['business_name'] ?? 'caterer') ?>.
       </div>
     </div>
   </div>
@@ -135,13 +150,59 @@ $db = getDBConnection();
 </main>
                         <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
-        <div class="footer-links">
-          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
-        </div>
       </footer>
     </div>
   </div>
   <script>
+    async function updateCatererStatus(newStatus) {
+      const alertBox = document.getElementById('decision-alert');
+      const btnApprove = document.getElementById('btn-approve-caterer');
+      const btnReject = document.getElementById('btn-reject-caterer');
+      if (btnApprove) btnApprove.disabled = true;
+      if (btnReject) btnReject.disabled = true;
+
+      try {
+        const res = await fetch('../api/caterers.php?action=update_status', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            caterer_id: <?= $catererId ?>,
+            status: newStatus
+          })
+        });
+        const d = await res.json();
+        if (d.success) {
+          alertBox.style.display = 'block';
+          if (newStatus === 'approved') {
+            alertBox.style.background = '#dcfce7';
+            alertBox.style.color = '#166534';
+            alertBox.textContent = '✓ Caterer certified and approved! Redirecting...';
+          } else {
+            alertBox.style.background = '#fee2e2';
+            alertBox.style.color = '#991b1b';
+            alertBox.textContent = '✗ Caterer application rejected. Redirecting...';
+          }
+          setTimeout(() => {
+            window.location.href = 'admin-catering-management.php';
+          }, 800);
+        } else {
+          alertBox.style.display = 'block';
+          alertBox.style.background = '#fee2e2';
+          alertBox.style.color = '#991b1b';
+          alertBox.textContent = '⚠️ ' + (d.message || 'Error updating status');
+          if (btnApprove) btnApprove.disabled = false;
+          if (btnReject) btnReject.disabled = false;
+        }
+      } catch(err) {
+        alertBox.style.display = 'block';
+        alertBox.style.background = '#fee2e2';
+        alertBox.style.color = '#991b1b';
+        alertBox.textContent = '⚠️ Connection error. Please try again.';
+        if (btnApprove) btnApprove.disabled = false;
+        if (btnReject) btnReject.disabled = false;
+      }
+    }
+
     function toggleInspectionBox() {
       const box = document.getElementById('inspection-form-container');
       const isHidden = box.style.display === 'none';

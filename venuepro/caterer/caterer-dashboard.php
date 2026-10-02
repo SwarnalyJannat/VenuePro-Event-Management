@@ -210,7 +210,7 @@ $recentOrders = $stmtRO->fetchAll();
 </div>
 
 <!-- Order Detail Panel -->
-<div class="grid-2" style="gap:24px; align-items:start;">
+<!-- <div class="grid-2" style="gap:24px; align-items:start;">
   <div class="order-detail">
     <div class="flex-between mb-16">
       <div>
@@ -248,7 +248,7 @@ $recentOrders = $stmtRO->fetchAll();
     </div>
   </div>
 </div>
-
+ -->
       </main>
                         <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>

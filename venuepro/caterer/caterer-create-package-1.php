@@ -109,13 +109,13 @@ $db = getDBConnection();
         </div>
         <div class="form-group">
           <label class="form-label">Max Capacity (Guests) *</label>
-          <input type="number" class="form-control" value="300" required>
+          <input type="number" class="form-control" placeholder="e.g. 300" required>
         </div>
       </div>
 
       <div class="form-group">
         <label class="form-label">Package Description *</label>
-        <textarea class="form-control" rows="3">A lavish four-course culinary experience featuring sustainable local seafood, prime cut dry-aged tenderloin, and molecular dessert pairings.</textarea>
+        <textarea class="form-control" rows="3" placeholder="Describe the culinary experience, course features, and presentation style..."></textarea>
       </div>
 
       <div class="form-group">

@@ -107,13 +107,45 @@ $db = getDBConnection();
     
   </div>
 
+<?php
+$venueId = (int)($_GET['id'] ?? 1);
+$stmt = $db->prepare("SELECT * FROM venues WHERE id = ? LIMIT 1");
+$stmt->execute([$venueId]);
+$venue = $stmt->fetch();
+if (!$venue) {
+    $venue = $db->query("SELECT * FROM venues WHERE status = 'active' LIMIT 1")->fetch();
+    $venueId = $venue ? (int)$venue['id'] : 1;
+}
+
+$stockImages = [
+  'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80',
+  'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80',
+  'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
+  'https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=800&q=80',
+  'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80',
+  'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80',
+  'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
+];
+$heroImg = !empty($venue['image_url']) ? $venue['image_url'] : $stockImages[$venueId % count($stockImages)];
+$subImg1 = $stockImages[($venueId + 1) % count($stockImages)];
+$subImg2 = $stockImages[($venueId + 2) % count($stockImages)];
+$subImg3 = $stockImages[($venueId + 3) % count($stockImages)];
+$subImg4 = $stockImages[($venueId + 4) % count($stockImages)];
+
+$baseRate = (float)($venue['base_rate'] ?? 2000);
+$capacity = (int)($venue['max_capacity'] ?? 200);
+$essentialRate = round($baseRate * 0.5);
+$enterpriseRate = round($baseRate);
+$eliteRate = round($baseRate * 1.75);
+?>
+
   <main class="public-page">
     <div class="breadcrumb mb-16">
       <a href="index.php">Home</a>
       <span class="breadcrumb-sep">›</span>
       <a href="venues.php">Venues</a>
       <span class="breadcrumb-sep">›</span>
-      <span class="breadcrumb-current">Grand Emerald Ballroom</span>
+      <span class="breadcrumb-current"><?= e($venue['name'] ?? 'Venue Details') ?></span>
     </div>
 
     <div class="grid-2" style="grid-template-columns: 2.2fr 1fr; align-items:start; gap:28px;">
@@ -121,24 +153,24 @@ $db = getDBConnection();
         <div class="mb-16">
           <span class="stat-badge positive mb-8">Available for 2026 Reservations</span>
           <div class="flex-between">
-            <h1 style="font-size:2.4rem; font-weight:800; margin:0 0 4px;">Grand Emerald Ballroom</h1>
+            <h1 style="font-size:2.4rem; font-weight:800; margin:0 0 4px;"><?= e($venue['name'] ?? 'Venue Details') ?></h1>
           </div>
           <div class="flex-center gap-16 text-sm text-muted mt-8">
-            <span>📍 Downtown District, Level 4</span>
-            <span>👥 Up to 600 Attendees</span>
+            <span>📍 <?= e($venue['district'] ?? '') ?><?= !empty($venue['address']) ? ', ' . e($venue['address']) : '' ?></span>
+            <span>👥 Up to <?= number_format($capacity) ?> Attendees</span>
           </div>
         </div>
 
         <!-- Gallery Preview -->
         <div class="grid-2 mb-32" style="gap:12px; height:380px;">
-          <div style="background:url('https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80') center/cover; border-radius:var(--radius); height:100%; position:relative;">
-            <span style="position:absolute; bottom:12px; left:12px; background:rgba(0,0,0,0.6); color:#fff; font-size:0.75rem; padding:4px 10px; border-radius:4px;">Main Ballroom Floor</span>
+          <div style="background:url('<?= e($heroImg) ?>') center/cover; border-radius:var(--radius); height:100%; position:relative;">
+            <span style="position:absolute; bottom:12px; left:12px; background:rgba(0,0,0,0.6); color:#fff; font-size:0.75rem; padding:4px 10px; border-radius:4px;"><?= e($venue['name']) ?> Main Space</span>
           </div>
           <div style="display:flex; flex-direction:column; gap:12px; height:100%;">
-            <div style="flex:1; background:url('https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=600&q=80') center/cover; border-radius:var(--radius); position:relative;">
-              <span style="position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.6); color:#fff; font-size:0.7rem; padding:3px 8px; border-radius:4px;">Crystal Chandeliers</span>
+            <div style="flex:1; background:url('<?= e($subImg1) ?>') center/cover; border-radius:var(--radius); position:relative;">
+              <span style="position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.6); color:#fff; font-size:0.7rem; padding:3px 8px; border-radius:4px;">Interior &amp; Lighting Setup</span>
             </div>
-            <a href="#photo-gallery" style="flex:1; background:url('https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=600&q=80') center/cover; border-radius:var(--radius); position:relative; overflow:hidden; text-decoration:none; display:block;">
+            <a href="#photo-gallery" style="flex:1; background:url('<?= e($subImg2) ?>') center/cover; border-radius:var(--radius); position:relative; overflow:hidden; text-decoration:none; display:block;">
               <div style="position:absolute; inset:0; background:rgba(15,23,42,0.65); display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; font-weight:700;">
                 <span style="font-size:2rem; margin-bottom:4px;">📸</span>
                 <span style="font-size:1.2rem;">+14 PHOTOS</span>
@@ -151,8 +183,8 @@ $db = getDBConnection();
         <!-- About -->
         <div class="card mb-24">
           <h3 class="mb-12">About the Venue</h3>
-          <p class="mb-12">The Grand Emerald Ballroom stands as the crown jewel of our enterprise property collection. Spanning 8,500 square feet of pillar-free luxury, it integrates neo-classical gilded mouldings with cutting-edge architectural acoustics. Designed to comfortably host up to 600 banquet attendees or 800 theater-style guests.</p>
-          <p>Equipped with dual green rooms for VIP speakers, private load-in docks, and a private terrace overlooking the downtown skyline.</p>
+          <p class="mb-12"><?= nl2br(e($venue['description'] ?? 'A premier event venue designed for high-profile corporate summits, banquets, and celebrations.')) ?></p>
+          <p>📍 Location: <?= e($venue['address'] ?? '') ?> · Maximum Capacity: <?= number_format($capacity) ?> Guests · Rating: ★<?= number_format($venue['rating'] ?? 4.8, 1) ?></p>
         </div>
 
         <!-- Pricing Tiers -->
@@ -161,18 +193,18 @@ $db = getDBConnection();
           <div class="grid-3 gap-16">
             <div class="card" style="background:var(--gray-50);">
               <div class="font-bold text-sm mb-4">Essential Half-Day</div>
-              <div class="font-bold text-primary" style="font-size:1.3rem;">$2,400</div>
-              <div class="text-xs text-muted mb-8">6 Hours · AV Access</div>
+              <div class="font-bold text-primary" style="font-size:1.3rem;">$<?= number_format($essentialRate, 0) ?></div>
+              <div class="text-xs text-muted mb-8">6 Hours · Standard Setup</div>
             </div>
             <div class="card" style="border:2px solid var(--primary); background:#eff6ff;">
               <div class="font-bold text-sm mb-4">Enterprise Full-Day</div>
-              <div class="font-bold text-primary" style="font-size:1.3rem;">$4,800</div>
-              <div class="text-xs text-muted mb-8">12 Hours · Tech Support</div>
+              <div class="font-bold text-primary" style="font-size:1.3rem;">$<?= number_format($enterpriseRate, 0) ?></div>
+              <div class="text-xs text-muted mb-8">12 Hours · Full Tech Support</div>
             </div>
             <div class="card" style="background:var(--gray-50);">
               <div class="font-bold text-sm mb-4">Elite Gala Weekend</div>
-              <div class="font-bold text-primary" style="font-size:1.3rem;">$8,500</div>
-              <div class="text-xs text-muted mb-8">Full Weekend · Terrace</div>
+              <div class="font-bold text-primary" style="font-size:1.3rem;">$<?= number_format($eliteRate, 0) ?></div>
+              <div class="text-xs text-muted mb-8">24 Hours Exclusive · VIP Lounge</div>
             </div>
           </div>
         </div>
@@ -186,21 +218,21 @@ $db = getDBConnection();
 
           <div class="form-group">
             <label class="form-label">Event Date</label>
-            <input type="date" class="form-control" value="2026-11-20">
+            <input type="date" class="form-control" placeholder="Select date">
           </div>
           <div class="form-group">
-            <label class="form-label">Attendees</label>
-            <input type="number" class="form-control" value="150">
+            <label class="form-label">Expected Attendees</label>
+            <input type="number" class="form-control" placeholder="e.g. 150" max="<?= $capacity ?>">
           </div>
 
           <div style="border-top:1px solid var(--gray-200); padding-top:14px; margin-bottom:16px;">
             <div class="flex-between text-sm mb-6">
               <span class="text-muted">Enterprise Day Rate</span>
-              <span class="font-semibold">$4,800.00</span>
+              <span class="font-semibold">$<?= number_format($enterpriseRate, 2) ?></span>
             </div>
             <div class="flex-between font-bold" style="font-size:1.2rem; color:var(--primary); margin-top:8px;">
-              <span>Estimated Total</span>
-              <span>$4,800.00</span>
+              <span>Base Venue Cost</span>
+              <span>$<?= number_format($enterpriseRate, 2) ?></span>
             </div>
           </div>
 
@@ -210,12 +242,6 @@ $db = getDBConnection();
           </a>
           <div class="text-xs text-center text-muted">Sign in required to hold dates and submit booking contracts.</div>
         </div>
-
-        <!-- <div class="card text-center" style="background:var(--gray-50);">
-          <div class="font-bold text-sm mb-4">Need Catering Too?</div>
-          <p class="text-xs text-muted mb-12">Pair this ballroom with certified fine dining, plated banquets, or bespoke menus.</p>
-          <a href="packages.php" class="btn btn-outline btn-sm btn-full">Explore Catering Packages →</a>
-        </div> -->
       </div>
     </div>
   </main>
@@ -225,41 +251,41 @@ $db = getDBConnection();
     <div class="gallery-lightbox-content">
       <div class="flex-between pb-12" style="border-bottom:1px solid rgba(255,255,255,0.15);">
         <div>
-          <h2 style="font-size:1.6rem; font-weight:800; color:#fff; margin:0 0 4px;">Grand Emerald Ballroom — Photo Gallery</h2>
-          <p style="margin:0; font-size:0.85rem; color:#94a3b8;">High-resolution interior spaces, banquet layouts, lighting, and architectural specs.</p>
+          <h2 style="font-size:1.6rem; font-weight:800; color:#fff; margin:0 0 4px;"><?= e($venue['name']) ?> — Photo Gallery</h2>
+          <p style="margin:0; font-size:0.85rem; color:#94a3b8;">High-resolution interior spaces, seating configurations, lighting, and architectural specs.</p>
         </div>
         <a href="#" class="btn btn-outline btn-sm" style="color:#fff; border-color:rgba(255,255,255,0.3);">✕ Close Gallery</a>
       </div>
 
       <div class="gallery-photo-grid">
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80" alt="Main Ballroom Floor">
-          <div class="gallery-card-cap">Main Ballroom Floor — Banquet Round Setup (600 Max Capacity)</div>
+          <img src="<?= e($heroImg) ?>" alt="<?= e($venue['name']) ?>">
+          <div class="gallery-card-cap"><?= e($venue['name']) ?> — Primary Space (Up to <?= number_format($capacity) ?> Guests)</div>
         </div>
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80" alt="Crystal Chandelier & Stage">
-          <div class="gallery-card-cap">Crystal Chandeliers &amp; Elevated Keynote Stage</div>
+          <img src="<?= e($subImg1) ?>" alt="Main Setup">
+          <div class="gallery-card-cap">Architectural Lighting &amp; Staging Rig</div>
         </div>
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80" alt="VIP Mezzanine Lounge">
-          <div class="gallery-card-cap">VIP Mezzanine Lounge &amp; Champagne Bar</div>
+          <img src="<?= e($subImg2) ?>" alt="Reception Area">
+          <div class="gallery-card-cap">Cocktail Reception &amp; Guest Arrival Foyer</div>
         </div>
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=800&q=80" alt="Evening Gala Ambiance">
-          <div class="gallery-card-cap">Evening Gala Ambiance with Customizable RGB Lighting</div>
+          <img src="<?= e($subImg3) ?>" alt="Breakout Space">
+          <div class="gallery-card-cap">Breakout Lounge &amp; Executive Suite</div>
         </div>
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80" alt="A/V Control Rig">
-          <div class="gallery-card-cap">State-of-the-Art Bose Sound &amp; Multi-Angle Projection Feeds</div>
+          <img src="<?= e($subImg4) ?>" alt="Evening Lighting">
+          <div class="gallery-card-cap">Evening Ambiance with Programmed Colorwash</div>
         </div>
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80" alt="Outdoor Sunset Terrace">
-          <div class="gallery-card-cap">Connected Outdoor Sunset Terrace for Cocktail Receptions</div>
+          <img src="<?= e($stockImages[($venueId + 5) % count($stockImages)]) ?>" alt="Exterior View">
+          <div class="gallery-card-cap">Property Terrace &amp; Surrounding Skyline</div>
         </div>
       </div>
 
       <div class="flex-between mt-24 pt-16" style="border-top:1px solid rgba(255,255,255,0.15);">
-        <div class="text-xs" style="color:#94a3b8;">High-definition verified property photographs.</div>
+        <div class="text-xs" style="color:#94a3b8;">High-definition verified property photographs for <?= e($venue['name']) ?>.</div>
         <a href="#signin-modal" class="btn btn-primary btn-sm">Sign In to Book This Venue →</a>
       </div>
     </div>

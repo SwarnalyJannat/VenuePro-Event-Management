@@ -204,7 +204,7 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
           <li>✓ Basic A/V setup</li>
           <li>✓ Tables & Chairs</li>
         </ul>
-        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>" class="btn btn-outline btn-full">Select Plan</a>
+        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>&plan=essential" class="btn btn-outline btn-full">Select Plan</a>
       </div>
 
       <div class="pricing-card featured" style="border-color:var(--primary); background:#eff6ff;">
@@ -217,7 +217,7 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
           <li>✓ Basic Beverage Package</li>
           <li>✓ Logistics Manager</li>
         </ul>
-        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>" class="btn btn-primary btn-full">Select Plan</a>
+        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>&plan=enterprise" class="btn btn-primary btn-full">Select Plan</a>
       </div>
 
       <div class="pricing-card">
@@ -229,7 +229,7 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
           <li>✓ Valet & Security Detail</li>
           <li>✓ Post-event Cleaning</li>
         </ul>
-        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>" class="btn btn-outline btn-full">Select Plan</a>
+        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>&plan=elite" class="btn btn-outline btn-full">Select Plan</a>
       </div>
     </div>
   </div>
@@ -237,16 +237,61 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
 
       </main>
 
-                        <footer class="page-footer">
-        <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
-        <div class="footer-links">
-          <a href="../privacy-policy.php">Privacy Policy</a>
-          <a href="../terms-of-service.php">Terms of Service</a>
-          <a href="../contact-support.php">Contact Support</a>
+  <!-- Interactive Photo Gallery Lightbox Modal -->
+  <div id="venue-gallery" class="gallery-modal-backdrop">
+    <div class="gallery-modal-card">
+      <div class="flex-between pb-12" style="border-bottom:1px solid rgba(255,255,255,0.15);">
+        <div>
+          <h2 style="font-size:1.5rem; font-weight:800; color:#fff; margin:0 0 4px;"><?= e($venueRow['name'] ?? 'Venue') ?> — Photo Gallery</h2>
+          <p style="margin:0; font-size:0.85rem; color:#94a3b8;">High-resolution interior photography, banquet round staging, and architectural highlights.</p>
         </div>
-      </footer>
+        <a href="#" class="btn btn-outline btn-sm" style="color:#fff; border-color:rgba(255,255,255,0.3);">✕ Close</a>
+      </div>
+
+      <div class="gallery-grid">
+        <div class="gallery-item">
+          <img src="<?= e($heroImg) ?>" alt="<?= e($venueRow['name']) ?>">
+          <div class="gallery-item-caption">Primary Staging &amp; Main Space Floor</div>
+        </div>
+        <div class="gallery-item">
+          <img src="https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80" alt="Chandelier Lighting">
+          <div class="gallery-item-caption">Architectural Crystal Chandeliers</div>
+        </div>
+        <div class="gallery-item">
+          <img src="https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80" alt="Cocktail Foyer">
+          <div class="gallery-item-caption">VIP Cocktail Foyer &amp; Reception Area</div>
+        </div>
+        <div class="gallery-item">
+          <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=800&q=80" alt="Lounge Area">
+          <div class="gallery-item-caption">Executive Breakout Suite</div>
+        </div>
+        <div class="gallery-item">
+          <img src="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80" alt="Evening Ambiance">
+          <div class="gallery-item-caption">Evening Mood Lighting Rig</div>
+        </div>
+        <div class="gallery-item">
+          <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80" alt="Balcony Terrace">
+          <div class="gallery-item-caption">Connected Skyline Balcony Terrace</div>
+        </div>
+      </div>
+
+      <div class="flex-between mt-24 pt-16" style="border-top:1px solid rgba(255,255,255,0.15);">
+        <div class="text-xs" style="color:#94a3b8;">High-definition verified property photographs.</div>
+        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>" class="btn btn-primary btn-sm">Book This Venue Now →</a>
+      </div>
     </div>
   </div>
+
+  <footer class="page-footer">
+    <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+    <div class="footer-links">
+      <a href="../privacy-policy.php">Privacy Policy</a>
+      <a href="../terms-of-service.php">Terms of Service</a>
+      <a href="../contact-support.php">Contact Support</a>
+    </div>
+  </footer>
+</div>
+</div>
 <script src="../js/app.js"></script>
 <script>
 // Store venue_id in sessionStorage when this page loads

@@ -65,7 +65,7 @@ if (isLoggedIn()) {
         </select>
       </div>
 
-      <div class="form-row">
+      <!-- <div class="form-row">
         <div class="form-group">
           <label class="form-label">Create Password</label>
           <input type="password" class="form-control" placeholder="••••••••" required>
@@ -74,10 +74,10 @@ if (isLoggedIn()) {
           <label class="form-label">Confirm Password</label>
           <input type="password" class="form-control" placeholder="••••••••" required>
         </div>
-      </div>
+      </div> -->
 
       <button type="submit" class="btn btn-primary btn-full mb-8" style="background:#059669; border-color:#059669;">Submit Caterer Application →</button>
-      <div class="form-hint text-center">Applications are vetted by our compliance team within 2 business days.</div>
+      <!-- <div class="form-hint text-center">Applications are vetted by our compliance team within 2 business days.</div> -->
     </form>
   </div>
 <script src="../js/app.js"></script>

@@ -350,7 +350,7 @@ foreach ($allOrders as $ord) {
             <div class="user-avatar" style="background:#059669;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'caterer')) ?></div>
             </div>
           </div>
         </div>
@@ -366,7 +366,7 @@ foreach ($allOrders as $ord) {
         <div class="flex-between mb-20">
           <div>
             <h1 style="font-size:1.85rem; font-weight:800; margin-bottom:4px;">Order Approvals &amp; Specifications</h1>
-            <p>Review incoming customer orders. Accept or reject catering packages and singular add-on items individually.</p>
+            <!-- <p>Review incoming customer orders. Accept or reject catering packages and singular add-on items individually.</p> -->
           </div>
           <a href="caterer-dashboard.php" class="btn btn-ghost btn-sm">← Back to Overview</a>
         </div>
@@ -386,8 +386,8 @@ foreach ($allOrders as $ord) {
             <div id="ocard-<?= e($code) ?>" class="order-select-card <?= $isFirst ? 'active' : '' ?>" onclick="loadOrder('<?= e($code) ?>')">
               <div class="flex-between mb-2">
                 <span class="font-bold text-primary" style="font-size:1.05rem;">#<?= e($code) ?></span>
-                <span id="olist-badge-<?= e($code) ?>" class="pill pill-<?= $ord['package_decision']==='Accepted' ? 'confirmed' : 'inquiry' ?>" style="font-size:0.65rem;">
-                  <?= $ord['package_decision']==='Accepted' ? 'Accepted' : 'Action Needed' ?>
+                <span id="olist-badge-<?= e($code) ?>" class="pill pill-<?= $ord['package_decision']==='Accepted' ? 'confirmed' : 'cancelled' ?>" style="font-size:0.65rem;">
+                  <?= $ord['package_decision']==='Accepted' ? 'Accepted' : 'Rejected' ?>
                 </span>
               </div>
               <div class="font-semibold text-xs" style="color:var(--navy-900);"><?= e($ord['event_name']) ?></div>
@@ -516,83 +516,35 @@ foreach ($allOrders as $ord) {
         </div>
 
         <!-- ============================================================== -->
-        <!-- 3. PACKAGE COURSE MENU ITEMS SPECIFICATION                      -->
+        <!-- 3. DYNAMICALLY CALCULATED TOTAL ORDER REVENUE CARD              -->
         <!-- ============================================================== -->
-        <div class="grid-2" style="gap:24px; align-items:flex-start; grid-template-columns: 2fr 1fr;">
-          <!-- Left: Standard Package Menu Course Items Table -->
-          <div class="card">
-            <div class="card-header">
-              <h3 class="card-title">Package Menu Course Items</h3>
-              <span id="package-covers-badge" class="text-xs text-muted">Gold Package — 320 covers</span>
+        <div class="card mb-24" style="background:#ffffff; border:1.5px solid var(--gray-200); border-radius:var(--radius); padding:24px;">
+          <div class="flex-between mb-16" style="border-bottom:1px solid var(--gray-200); padding-bottom:12px;">
+            <div class="flex-center gap-8">
+              <span style="font-size:1.4rem;">💰</span>
+              <div>
+                <h3 style="font-size:1.15rem; font-weight:800; margin:0;">Dynamically Calculated Total Revenue</h3>
+                <div class="text-xs text-muted">Comprehensive revenue summary: Package base price plus singular add-on menu items</div>
+              </div>
             </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Qty</th>
-                    <th>Notes</th>
-                    <th style="text-align:right;">Unit Price</th>
-                  </tr>
-                </thead>
-                <tbody id="order-items-tbody">
-                  <!-- Dynamically populated -->
-                </tbody>
-              </table>
-            </div>
-
-            <div style="border-top:1px solid var(--gray-100); margin-top:8px; padding-top:14px; display:flex; justify-content:flex-end;">
-              <div class="text-sm font-bold" style="color:var(--primary); font-size:1.1rem;" id="order-total-display">Total: $13,260.00</div>
-            </div>
+            <span class="pill pill-confirmed" style="font-size:0.8rem; font-weight:700;">NET REVENUE</span>
           </div>
 
-          <!-- Right: Order Actions & Timeline -->
-          <div style="display:flex;flex-direction:column;gap:16px;">
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title">Kitchen Operational Status</h3>
-              </div>
-              <div style="display:flex;flex-direction:column;gap:10px;">
-                <button type="button" class="btn btn-primary btn-full" onclick="updateOrderStatus('Preparing')">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                  Mark as Preparing
-                </button>
-                <button type="button" class="btn btn-success btn-full" onclick="updateOrderStatus('Delivering')">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                  Mark Ready for Delivery
-                </button>
-              </div>
+          <div class="grid-3 gap-16">
+            <div class="card" style="background:#f8fafc; padding:16px; border:1px solid var(--gray-200);">
+              <div class="text-xs text-muted font-bold mb-4" style="text-transform:uppercase;">1. Catering Package Price</div>
+              <div class="font-bold text-primary" style="font-size:1.35rem;" id="rev-package-price">$0.00</div>
+              <div class="text-xs text-muted mt-4" id="rev-package-name">Base menu service</div>
             </div>
-
-            <div class="card">
-              <div class="card-header"><h3 class="card-title">Order Timeline</h3></div>
-              <div class="timeline">
-                <div class="timeline-item done">
-                  <div class="timeline-dot"></div>
-                  <div class="timeline-title">Order Received</div>
-                  <div class="timeline-meta">Sep 6, 2026 · 9:02 AM</div>
-                </div>
-                <div class="timeline-item done">
-                  <div class="timeline-dot"></div>
-                  <div class="timeline-title">Ingredients Confirmed</div>
-                  <div class="timeline-meta">Sep 7, 2026 · 2:15 PM</div>
-                </div>
-                <div class="timeline-item active">
-                  <div class="timeline-dot"></div>
-                  <div class="timeline-title">Kitchen Preparation</div>
-                  <div class="timeline-meta">In Progress — Station 2 Active</div>
-                </div>
-                <div class="timeline-item">
-                  <div class="timeline-dot"></div>
-                  <div class="timeline-title">Ready for Delivery</div>
-                  <div class="timeline-meta">Expected: 6:45 PM</div>
-                </div>
-                <div class="timeline-item">
-                  <div class="timeline-dot"></div>
-                  <div class="timeline-title">Service Complete</div>
-                  <div class="timeline-meta">Expected: 11:00 PM</div>
-                </div>
-              </div>
+            <div class="card" style="background:#f8fafc; padding:16px; border:1px solid var(--gray-200);">
+              <div class="text-xs text-muted font-bold mb-4" style="text-transform:uppercase;">2. Singular Add-on Items</div>
+              <div class="font-bold" style="font-size:1.35rem; color:#059669;" id="rev-singular-price">$0.00</div>
+              <div class="text-xs text-muted mt-4" id="rev-singular-count">0 items selected</div>
+            </div>
+            <div class="card" style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color:#fff; padding:16px; border:none;">
+              <div class="text-xs font-bold mb-4" style="text-transform:uppercase; color:#94a3b8;">Total Calculated Revenue</div>
+              <div class="font-bold text-success" style="font-size:1.5rem; color:#6ee7b7;" id="rev-total-price">$0.00</div>
+              <div class="text-xs mt-4" style="color:#cbd5e1;">Sum of package + singular items</div>
             </div>
           </div>
         </div>
@@ -635,8 +587,10 @@ foreach ($allOrders as $ord) {
       document.getElementById('meta-time').innerText = order.time;
       document.getElementById('meta-guests').innerText = order.guests;
       document.getElementById('meta-package').innerText = order.package;
-      document.getElementById('package-covers-badge').innerText = order.coversText;
-      document.getElementById('order-total-display').innerText = order.total;
+      const pcb = document.getElementById('package-covers-badge');
+      if (pcb) pcb.innerText = order.coversText;
+      const otd = document.getElementById('order-total-display');
+      if (otd) otd.innerText = order.total;
 
       const badge = document.getElementById('order-status-badge');
       badge.innerText = order.status;
@@ -648,20 +602,8 @@ foreach ($allOrders as $ord) {
       // 2. Render Singular Items
       renderSingularItems();
 
-      // 3. Render Course Items
-      const tbody = document.getElementById('order-items-tbody');
-      tbody.innerHTML = '';
-      order.items.forEach(item => {
-        const tr = document.createElement('tr');
-        const dietHtml = item.diet ? `<br><span class="diet-tag ${item.diet === 'GF' ? 'diet-gf' : 'diet-veg'}">${item.diet}</span>` : '';
-        tr.innerHTML = `
-          <td><strong>${item.name}</strong>${dietHtml}</td>
-          <td>${item.qty}</td>
-          <td class="text-sm text-muted">${item.note}</td>
-          <td style="text-align:right;font-weight:600;">${item.price}</td>
-        `;
-        tbody.appendChild(tr);
-      });
+      // 3. Update Dynamically Calculated Total Revenue
+      updateTotalRevenue();
     }
 
     // -------------------------------------------------------------
@@ -830,6 +772,41 @@ foreach ($allOrders as $ord) {
       document.getElementById('si-total-requested').textContent = '$' + requested.toFixed(2);
       document.getElementById('si-total-accepted').textContent = '$' + accepted.toFixed(2);
       document.getElementById('si-total-rejected').textContent = '$' + rejected.toFixed(2);
+
+      updateTotalRevenue();
+    }
+
+    function updateTotalRevenue() {
+      const order = orderStore[activeOrderKey];
+      if (!order) return;
+
+      let pkgPrice = 0;
+      if (order.packagePrice) {
+        pkgPrice = parseFloat(String(order.packagePrice).replace(/[^0-9.-]+/g, '')) || 0;
+      }
+
+      let singTotal = 0;
+      let count = 0;
+      (order.singularItems || []).forEach(item => {
+        if (item.status !== 'Rejected') {
+          singTotal += (item.qty * item.unitPrice);
+          count++;
+        }
+      });
+
+      let totalRev = pkgPrice + singTotal;
+
+      const pkgEl = document.getElementById('rev-package-price');
+      const pkgNameEl = document.getElementById('rev-package-name');
+      const singEl = document.getElementById('rev-singular-price');
+      const singCountEl = document.getElementById('rev-singular-count');
+      const totalEl = document.getElementById('rev-total-price');
+
+      if (pkgEl) pkgEl.textContent = '$' + pkgPrice.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      if (pkgNameEl) pkgNameEl.textContent = (order.package || 'Catering Package') + ' Base';
+      if (singEl) singEl.textContent = '$' + singTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      if (singCountEl) singCountEl.textContent = count + ' add-on item(s) included';
+      if (totalEl) totalEl.textContent = '$' + totalRev.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
     function updateSelectorBadge(key) {
@@ -837,16 +814,12 @@ foreach ($allOrders as $ord) {
       const order = orderStore[key];
       if (!badge || !order) return;
 
-      const hasPendingItems = (order.singularItems || []).some(si => si.status === 'Pending');
-      if (order.packageDecision === 'Accepted' && !hasPendingItems) {
+      if (order.packageDecision === 'Accepted') {
         badge.className = 'pill pill-confirmed';
         badge.textContent = 'Accepted';
-      } else if (order.packageDecision === 'Rejected') {
+      } else {
         badge.className = 'pill pill-canceled';
         badge.textContent = 'Rejected';
-      } else {
-        badge.className = 'pill pill-inquiry';
-        badge.textContent = 'Action Needed';
       }
     }
 
@@ -860,7 +833,8 @@ foreach ($allOrders as $ord) {
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      loadOrder('ORD-2045');
+      const firstKey = Object.keys(orderStore)[0];
+      if (firstKey) loadOrder(firstKey);
     });
   </script>
 <script src="../js/app.js"></script>

@@ -116,13 +116,13 @@ $db = getDBConnection();
           <option>5 Business Days</option>
         </select>
       </div>
-      <div class="form-group">
+      <!-- <div class="form-group">
         <label class="form-label">Catalog Status</label>
         <select class="form-control">
           <option>Active / Immediately Bookable</option>
           <option>Draft / Hidden from Catalog</option>
         </select>
-      </div>
+      </div> -->
     </div>
 
     <div class="flex gap-12 mt-24">

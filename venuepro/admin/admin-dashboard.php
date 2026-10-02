@@ -86,9 +86,6 @@ $recentBookings = $stmtRecent->fetchAll();
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
-                  <a href="admin-policy-management.php" class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Legal &amp; Policies
-        </a>
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
@@ -97,7 +94,7 @@ $recentBookings = $stmtRecent->fetchAll();
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
           </div>
         </div>
@@ -225,50 +222,34 @@ $recentBookings = $stmtRecent->fetchAll();
           <th>CUSTOMER</th>
           <th>VENUE</th>
           <th>DATE</th>
+          <th>EST. VALUE</th>
           <th>STATUS</th>
           <th>ACTION</th>
         </tr>
       </thead>
       <tbody>
+        <?php if (empty($recentBookings)): ?>
+        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray-400);">No booking requests found.</td></tr>
+        <?php else: foreach ($recentBookings as $bk):
+          $statusClass = strtolower($bk['booking_status']);
+          $eventDate   = date('M j, Y', strtotime($bk['event_date']));
+          $initials    = strtoupper(substr($bk['customer_name'] ?? 'U', 0, 2));
+        ?>
         <tr>
-          <td class="font-bold text-primary">#BK-9021</td>
+          <td class="font-bold text-primary"><?= e($bk['booking_code']) ?></td>
           <td>
             <div class="flex-center gap-8">
-              <div class="user-avatar" style="background:#3b82f6; width:28px; height:28px; font-size:0.7rem;">JD</div>
-              <span>Jane Doe Events</span>
+              <div class="user-avatar" style="background:#3b82f6; width:28px; height:28px; font-size:0.7rem; color:#fff; display:inline-flex; align-items:center; justify-content:center; border-radius:50%;"><?= e($initials) ?></div>
+              <span><?= e($bk['customer_name']) ?></span>
             </div>
           </td>
-          <td>Grand Ballroom</td>
-          <td>Oct 12, 2026</td>
-          <td><span class="pill pill-pending">PENDING</span></td>
-          <td><a href="admin-booking-approval.php" class="btn btn-outline btn-sm">View Details</a></td>
+          <td><?= e($bk['venue_name']) ?></td>
+          <td><?= $eventDate ?></td>
+          <td class="font-semibold">$<?= number_format((float)$bk['total_amount'], 2) ?></td>
+          <td><span class="pill pill-<?= $statusClass ?>"><?= strtoupper($statusClass) ?></span></td>
+          <td><a href="admin-booking-approval.php?booking_id=<?= $bk['id'] ?>" class="btn btn-outline btn-sm">View Details</a></td>
         </tr>
-        <tr>
-          <td class="font-bold text-primary">#BK-8843</td>
-          <td>
-            <div class="flex-center gap-8">
-              <div class="user-avatar" style="background:#3b82f6; width:28px; height:28px; font-size:0.7rem;">TC</div>
-              <span>TechCorp Global</span>
-            </div>
-          </td>
-          <td>Sky Terrace</td>
-          <td>Nov 04, 2026</td>
-          <td><span class="pill pill-pending">PENDING</span></td>
-          <td><a href="admin-booking-approval.php" class="btn btn-outline btn-sm">View Details</a></td>
-        </tr>
-        <tr>
-          <td class="font-bold text-primary">#BK-9011</td>
-          <td>
-            <div class="flex-center gap-8">
-              <div class="user-avatar" style="background:#3b82f6; width:28px; height:28px; font-size:0.7rem;">LM</div>
-              <span>Luxe Media Inc.</span>
-            </div>
-          </td>
-          <td>Riverside Suite</td>
-          <td>Oct 28, 2026</td>
-          <td><span class="pill pill-pending">PENDING</span></td>
-          <td><a href="admin-booking-approval.php" class="btn btn-outline btn-sm">View Details</a></td>
-        </tr>
+        <?php endforeach; endif; ?>
       </tbody>
     </table>
   </div>
@@ -276,9 +257,6 @@ $recentBookings = $stmtRecent->fetchAll();
 </main>
                         <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
-        <div class="footer-links">
-          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
-        </div>
       </footer>
     </div>
   </div>

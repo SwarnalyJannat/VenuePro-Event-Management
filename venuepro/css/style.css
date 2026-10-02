@@ -678,3 +678,33 @@ tbody tr:hover td { background: var(--gray-50); }
 .sidebar-logo-img { height: 36px; width: auto; flex-shrink: 0; display: block; object-fit: contain; }
 .header-logo-img  { height: 38px; width: auto; display: block; object-fit: contain; }
 .auth-logo-img    { height: 80px; width: auto; margin: 0 auto 8px; display: block; object-fit: contain; }
+
+/* ── Password Show / Hide Toggle ── */
+.password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.password-wrap input {
+  padding-right: 42px !important;
+}
+.password-toggle-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-400);
+  transition: color 0.15s ease;
+  z-index: 5;
+}
+.password-toggle-btn:hover {
+  color: var(--gray-800);
+}

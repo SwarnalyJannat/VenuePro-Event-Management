@@ -73,9 +73,6 @@ $totalVenues = count($venues);
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
-                  <a href="admin-policy-management.php" class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Legal &amp; Policies
-        </a>
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
@@ -84,7 +81,7 @@ $totalVenues = count($venues);
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+              <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Admin')) ?></div>
             </div>
           </div>
         </div>
@@ -98,6 +95,13 @@ $totalVenues = count($venues);
   <a href="add-new-venue.php" class="btn btn-primary">+ Add New Venue</a>
 </div>
 
+<?php
+$stmtActB = $db->query("SELECT COUNT(*) FROM bookings WHERE booking_status IN ('confirmed','pending')");
+$totalActiveBookings = (int)$stmtActB->fetchColumn();
+$stmtGross = $db->query("SELECT COALESCE(SUM(total_amount), 0) FROM bookings WHERE booking_status != 'cancelled'");
+$totalGross = (float)$stmtGross->fetchColumn();
+?>
+
 <div class="stats-grid mb-24">
   <div class="stat-card">
     <div class="stat-label">Total Properties</div>
@@ -106,8 +110,8 @@ $totalVenues = count($venues);
   </div>
   <div class="stat-card">
     <div class="stat-label">Active Bookings</div>
-    <div class="stat-value">34</div>
-    <span class="stat-badge positive">Current month</span>
+    <div class="stat-value"><?= $totalActiveBookings ?></div>
+    <span class="stat-badge positive">Current volume</span>
   </div>
   <div class="stat-card green">
     <div class="stat-label">Average Occupancy</div>
@@ -115,55 +119,42 @@ $totalVenues = count($venues);
     <span class="stat-badge positive">+6.2% vs last month</span>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Monthly Gross</div>
-    <div class="stat-value">$124.5k</div>
-    <span class="stat-badge neutral">September</span>
+    <div class="stat-label">Total Volume</div>
+    <div class="stat-value">$<?= number_format($totalGross, 0) ?></div>
+    <span class="stat-badge neutral">All-time</span>
   </div>
 </div>
 
 <div class="grid-2 gap-20">
-  <div class="card">
+  <?php if (empty($venues)): ?>
+    <div class="card" style="grid-column: 1 / -1; text-align:center; padding:48px; color:var(--gray-400);">
+      No venues found in inventory.
+    </div>
+  <?php else: foreach ($venues as $v):
+    $occ = min(98, max(20, (int)($v['booking_count'] * 18 + 35)));
+  ?>
+  <div class="card venue-card-item">
     <div class="flex-between mb-12">
       <div>
-        <span class="pill pill-confirmed mb-4">ACTIVE VENUE</span>
-        <h3>Grand Emerald Ballroom</h3>
-        <div class="text-xs text-muted">Downtown District • Max Capacity: 600 Guests</div>
+        <span class="pill pill-<?= $v['status'] === 'active' ? 'confirmed' : 'pending' ?> mb-4"><?= strtoupper($v['status']) ?> VENUE</span>
+        <h3 class="venue-card-title"><?= e($v['name']) ?></h3>
+        <div class="text-xs text-muted"><?= e($v['district'] ?? '') ?> • Max Capacity: <?= (int)$v['capacity'] ?> Guests</div>
       </div>
       <div class="text-right">
-        <div class="font-bold text-primary">$1,200.00 / day</div>
-        <div class="text-xs text-muted">Occupancy: 92%</div>
+        <div class="font-bold text-primary">$<?= number_format((float)$v['base_rate'], 2) ?> / day</div>
+        <div class="text-xs text-muted">Bookings: <?= (int)$v['booking_count'] ?></div>
       </div>
     </div>
-    <div class="progress-bar mb-16"><div class="progress-fill" style="width:92%;"></div></div>
+    <div class="progress-bar mb-16"><div class="progress-fill" style="width:<?= $occ ?>%;"></div></div>
     <div>
-      <a href="add-new-venue.php" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center;">Edit Properties</a>
+      <a href="admin-edit-venue.php?id=<?= $v['id'] ?>" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center;">Edit Properties</a>
     </div>
   </div>
-
-  <div class="card">
-    <div class="flex-between mb-12">
-      <div>
-        <span class="pill pill-confirmed mb-4">ACTIVE VENUE</span>
-        <h3>Skyline Vista Lounge</h3>
-        <div class="text-xs text-muted">North Waterfront District • Max Capacity: 200 Guests</div>
-      </div>
-      <div class="text-right">
-        <div class="font-bold text-primary">$2,450.00 / day</div>
-        <div class="text-xs text-muted">Occupancy: 78%</div>
-      </div>
-    </div>
-    <div class="progress-bar mb-16"><div class="progress-fill" style="width:78%;"></div></div>
-    <div>
-      <a href="add-new-venue.php" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center;">Edit Properties</a>
-    </div>
-  </div>
+  <?php endforeach; endif; ?>
 </div>
 </main>
-                        <footer class="page-footer">
+      <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Administration. SOC-2 Certified.</div>
-        <div class="footer-links">
-          <a href="admin-policy-management.php">✎ Policy &amp; Legal Editor</a>
-        </div>
       </footer>
     </div>
   </div>

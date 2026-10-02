@@ -105,69 +105,173 @@ if (!$venueData) {
 </div>
 
 <div class="grid-2" style="max-width:960px; margin:0 auto; gap:28px;">
-  <div class="card">
-    <h2 class="mb-4">Select Date & Guests</h2>
-    <p class="mb-24">Configure the timeframe and attendance for Grand Emerald Ballroom.</p>
+<?php
+$venueId = (int)($_GET['venue_id'] ?? 1);
+$stmtVD = $db->prepare("SELECT * FROM venues WHERE id = ? LIMIT 1");
+$stmtVD->execute([$venueId]);
+$venueData = $stmtVD->fetch();
+if (!$venueData) {
+    $stmtVD2 = $db->query("SELECT * FROM venues WHERE status='active' LIMIT 1");
+    $venueData = $stmtVD2->fetch();
+    $venueId = $venueData ? (int)$venueData['id'] : 1;
+}
 
-    <form action="booking-catering-packages.php">
+$selectedPlan = strtolower(trim($_GET['plan'] ?? 'enterprise'));
+if (!in_array($selectedPlan, ['essential', 'enterprise', 'elite'])) {
+    $selectedPlan = 'enterprise';
+}
+
+$baseRate = (float)($venueData['base_rate'] ?? 2000);
+$maxCapacity = (int)($venueData['max_capacity'] ?? 200);
+$planPricing = [
+    'essential'  => ['name' => 'Essential Half-Day', 'duration' => 6,  'rate' => round($baseRate * 0.5),  'hours' => '6 Hours',  'desc' => 'Standard floor access & basic AV rig'],
+    'enterprise' => ['name' => 'Enterprise Full-Day', 'duration' => 12, 'rate' => round($baseRate),        'hours' => '12 Hours', 'desc' => 'Full day access, AV tech & manager'],
+    'elite'      => ['name' => 'Elite Gala Extended', 'duration' => 24, 'rate' => round($baseRate * 1.75), 'hours' => '24 Hours', 'desc' => 'Full day/night access & VIP suite'],
+];
+
+$stockImages = [
+  'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=300&q=80',
+  'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=300&q=80',
+  'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=300&q=80',
+  'https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=300&q=80',
+  'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=300&q=80',
+];
+$summaryImg = !empty($venueData['image_url']) ? '../' . $venueData['image_url'] : $stockImages[$venueId % count($stockImages)];
+?>
+
+<div class="steps">
+  <div class="step active">
+    <div class="step-circle">1</div>
+    <div class="step-label">Venue &amp; Plan</div>
+  </div>
+  <div class="step-line"></div>
+  <div class="step">
+    <div class="step-circle">2</div>
+    <div class="step-label">Catering</div>
+  </div>
+  <div class="step-line"></div>
+  <div class="step">
+    <div class="step-circle">3</div>
+    <div class="step-label">Payment</div>
+  </div>
+</div>
+
+<!-- Plan Selection Cards -->
+<div class="mb-24" style="max-width:960px; margin:0 auto 24px;">
+  <div class="flex-between mb-12">
+    <div>
+      <h3 style="font-size:1.25rem; font-weight:800; margin:0 0 4px;">1. Select Venue Rental Plan</h3>
+      <p style="margin:0; font-size:0.85rem; color:var(--gray-500);">Tier pricing dynamically loaded from property catalog for <?= e($venueData['name']) ?>.</p>
+    </div>
+  </div>
+  <div class="grid-3 gap-16" id="plan-cards-container">
+    <?php foreach ($planPricing as $key => $p):
+      $isSel = ($key === $selectedPlan);
+    ?>
+    <div class="card plan-card <?= $isSel ? 'plan-card-selected' : '' ?>" data-plan="<?= $key ?>" data-rate="<?= $p['rate'] ?>" data-duration="<?= $p['duration'] ?>" data-name="<?= e($p['name']) ?>" style="cursor:pointer; border:2px solid <?= $isSel ? 'var(--primary)' : 'var(--gray-200)' ?>; background:<?= $isSel ? '#eff6ff' : '#fff' ?>; transition:all 0.2s ease; padding:18px;">
+      <div class="flex-between mb-8">
+        <span class="font-bold text-sm" style="color:var(--gray-900);"><?= strtoupper($key) ?></span>
+        <?php if ($key === 'enterprise'): ?>
+        <span class="pill pill-confirmed" style="font-size:0.65rem;">POPULAR</span>
+        <?php endif; ?>
+      </div>
+      <div class="font-bold text-primary mb-4" style="font-size:1.4rem;">$<?= number_format($p['rate'], 0) ?></div>
+      <div class="text-xs font-semibold text-muted mb-8">⏱ <?= e($p['hours']) ?> Access</div>
+      <div class="text-xs text-muted"><?= e($p['desc']) ?></div>
+      <div class="mt-12 text-xs font-bold" style="color:<?= $isSel ? 'var(--primary)' : 'var(--gray-400)' ?>;">
+        <?= $isSel ? '● Selected Plan' : '○ Choose Plan' ?>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+</div>
+
+<div class="grid-2" style="max-width:960px; margin:0 auto; gap:28px;">
+  <div class="card">
+    <h2 class="mb-4">2. Event Date &amp; Logistics</h2>
+    <p class="mb-20 text-muted text-sm">Specify schedule and attendance for <strong><?= e($venueData['name']) ?></strong>.</p>
+
+    <form id="booking-step1-form" action="booking-catering-packages.php" method="GET">
+      <input type="hidden" name="venue_id" value="<?= $venueId ?>">
+      <input type="hidden" name="plan" id="input-plan" value="<?= $selectedPlan ?>">
+      <input type="hidden" name="plan_rate" id="input-plan-rate" value="<?= $planPricing[$selectedPlan]['rate'] ?>">
+      <input type="hidden" name="duration_hours" id="input-duration" value="<?= $planPricing[$selectedPlan]['duration'] ?>">
+
       <div class="form-group">
-        <label class="form-label">Event Date</label>
-        <input type="date" class="form-control" value="2026-11-20" required>
+        <label class="form-label">Event Date *</label>
+        <input type="date" name="date" id="event-date-input" class="form-control" min="<?= date('Y-m-d') ?>" required>
       </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Start Time</label>
-          <input type="time" class="form-control" value="10:00" required>
+          <label class="form-label">Start Time *</label>
+          <input type="time" name="start_time" id="start-time-input" class="form-control" value="10:00" required>
         </div>
         <div class="form-group">
-          <label class="form-label">End Time</label>
-          <input type="time" class="form-control" value="22:00" required>
+          <label class="form-label">End Time *</label>
+          <input type="time" name="end_time" id="end-time-input" class="form-control" value="22:00" required>
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Expected Guest Count</label>
-        <input type="number" class="form-control" value="150" min="20" max="600" required>
-        <small class="form-hint">Maximum venue capacity is 600 attendees.</small>
+        <label class="form-label">Expected Guest Count *</label>
+        <input type="number" name="guests" id="guest-count-input" class="form-control" placeholder="e.g. 100" min="10" max="<?= $maxCapacity ?>" required>
+        <small class="form-hint">Maximum verified venue capacity is <?= number_format($maxCapacity) ?> attendees.</small>
       </div>
 
       <div class="form-group">
         <label class="form-label">Event Format</label>
-        <select class="form-control">
+        <select name="format" class="form-control">
           <option>Corporate Summit / Conference</option>
-          <option>Gala Dinner & Awards</option>
-          <option>Product Launch & Reception</option>
-          <option>Private Celebration</option>
+          <option>Gala Dinner &amp; Awards Ceremony</option>
+          <option>Product Launch &amp; Reception</option>
+          <option>Private Celebration / Wedding</option>
         </select>
       </div>
 
+      <div id="availability-status" style="margin-top:12px;"></div>
+
       <div class="flex gap-12 mt-24">
-        <a href="venue-details.php" class="btn btn-ghost" style="flex:1;">Back to Details</a>
+        <button type="button" id="btn-check-availability" class="btn btn-outline" style="flex:1;">Check Availability</button>
         <button type="submit" class="btn btn-primary" style="flex:2;">Continue to Catering →</button>
       </div>
     </form>
   </div>
 
-  <div class="card" style="background:var(--gray-50);">
+  <div class="card" style="background:var(--gray-50); position:sticky; top:90px;">
     <h3 class="mb-16">Booking Summary</h3>
     <div class="flex gap-12 mb-16">
-      <div style="width:70px; height:70px; border-radius:var(--radius-sm); background:url('https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=300&q=80') center/cover;"></div>
+      <div style="width:70px; height:70px; border-radius:var(--radius-sm); background:url('<?= e($summaryImg) ?>') center/cover;"></div>
       <div>
-        <div class="font-bold">Grand Emerald Ballroom</div>
-        <div class="text-xs text-muted">Downtown District</div>
-        <div class="text-xs font-semibold text-primary mt-4">$1,200.00 / day base</div>
+        <div class="font-bold text-sm"><?= e($venueData['name']) ?></div>
+        <div class="text-xs text-muted">📍 <?= e($venueData['district']) ?></div>
+        <div class="text-xs font-semibold text-primary mt-4">$<?= number_format($baseRate, 2) ?> base / day</div>
       </div>
     </div>
     <div style="border-top:1px solid var(--gray-200); padding-top:14px;">
-      <div class="flex-between text-sm mb-8"><span class="text-muted">Selected Tier</span><span class="font-semibold">Enterprise</span></div>
-      <div class="flex-between text-sm mb-8"><span class="text-muted">Estimated Guests</span><span class="font-semibold">150 people</span></div>
-      <div class="flex-between text-sm mb-8"><span class="text-muted">Estimated Duration</span><span class="font-semibold">12 Hours</span></div>
+      <div class="flex-between text-sm mb-8">
+        <span class="text-muted">Selected Tier</span>
+        <strong id="summary-tier-name"><?= e($planPricing[$selectedPlan]['name']) ?></strong>
+      </div>
+      <div class="flex-between text-sm mb-8">
+        <span class="text-muted">Rental Duration</span>
+        <span class="font-semibold" id="summary-duration"><?= e($planPricing[$selectedPlan]['hours']) ?></span>
+      </div>
+      <div class="flex-between text-sm mb-8">
+        <span class="text-muted">Venue Cost</span>
+        <strong class="text-primary font-bold" id="summary-cost">$<?= number_format($planPricing[$selectedPlan]['rate'], 2) ?></strong>
+      </div>
+      <div class="flex-between text-sm mb-8">
+        <span class="text-muted">Max Capacity</span>
+        <span class="font-semibold"><?= number_format($maxCapacity) ?> Guests</span>
+      </div>
+    </div>
+    <div class="mt-16 pt-12" style="border-top:1px dashed var(--gray-300);">
+      <div class="text-xs text-muted">Next step: Browse and select gourmet catering packages or singular dining add-ons.</div>
     </div>
   </div>
 </div>
-
-      </main>
+</main>
 
                         <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
@@ -182,61 +286,94 @@ if (!$venueData) {
 <script src="../js/app.js"></script>
 <script>
 // Store venue_id from URL for booking flow
-var vpVenueId = new URLSearchParams(window.location.search).get('venue_id') || '1';
+var vpVenueId = new URLSearchParams(window.location.search).get('venue_id') || '<?= $venueId ?>';
 sessionStorage.setItem('vp_venue_id', vpVenueId);
 
-// Wire availability check button
 document.addEventListener('DOMContentLoaded', function() {
-  var checkBtn = document.querySelector('.btn-check-avail, button[class*="btn"]');
-  var dateInput = document.querySelector('input[type="date"], input[type="text"][placeholder*="mm/dd"]');
-  var timeSelect = document.querySelector('select[id*="duration"], select');
-
-  document.querySelectorAll('button, a.btn').forEach(function(btn) {
-    if (btn.textContent.toLowerCase().includes('check availability') || btn.textContent.toLowerCase().includes('check avail')) {
-      btn.addEventListener('click', async function(e) {
-        e.preventDefault();
-        var dateVal = dateInput ? dateInput.value : '';
-        if (!dateVal) { alert('Please select a date first.'); return; }
-        // Convert MM/DD/YYYY to YYYY-MM-DD if needed
-        if (dateVal.includes('/')) {
-          var parts = dateVal.split('/');
-          dateVal = parts[2] + '-' + parts[0].padStart(2,'0') + '-' + parts[1].padStart(2,'0');
-        }
-        try {
-          var res = await fetch('../api/bookings.php?action=check_availability&venue_id=' + vpVenueId + '&date=' + dateVal + '&start_time=18:00:00&end_time=22:00:00');
-          var d = await res.json();
-          if (d.data && d.data.available) {
-            alert('Date is available! Proceed to select catering package.');
-            sessionStorage.setItem('vp_event_date', dateVal);
-            window.location.href = 'booking-catering-packages.php?venue_id=' + vpVenueId + '&date=' + dateVal;
-          } else {
-            // Show conflict visually
-            var existing = document.querySelector('.conflict-alert');
-            if (!existing) {
-              var alertDiv = document.createElement('div');
-              alertDiv.className = 'conflict-alert';
-              alertDiv.style.cssText = 'background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:16px;margin-top:16px;color:#92400e;';
-              alertDiv.innerHTML = '<strong>Date Conflict Detected</strong><br>' + (d.message || 'This venue is already booked on the selected date/time.');
-              dateInput.parentNode.insertBefore(alertDiv, dateInput.nextSibling);
-            } else {
-              existing.innerHTML = '<strong>Date Conflict Detected</strong><br>' + (d.message || 'This venue is already booked on the selected date/time.');
-            }
-          }
-        } catch(err) {
-          console.error(err);
-        }
+  // Plan card selection handler
+  document.querySelectorAll('.plan-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+      document.querySelectorAll('.plan-card').forEach(function(c) {
+        c.style.border = '2px solid var(--gray-200)';
+        c.style.background = '#fff';
+        var label = c.querySelector('.mt-12');
+        if (label) { label.textContent = '○ Choose Plan'; label.style.color = 'var(--gray-400)'; }
       });
-    }
-  });
+      card.style.border = '2px solid var(--primary)';
+      card.style.background = '#eff6ff';
+      var label = card.querySelector('.mt-12');
+      if (label) { label.textContent = '● Selected Plan'; label.style.color = 'var(--primary)'; }
 
-  // "Book Now" / Continue buttons
-  document.querySelectorAll('a[href*="booking-catering"], a[href*="booking-summary"]').forEach(function(a) {
-    a.addEventListener('click', function(e) {
-      if (dateInput && dateInput.value) {
-        sessionStorage.setItem('vp_event_date', dateInput.value);
-      }
+      var planKey = card.dataset.plan;
+      var planRate = parseFloat(card.dataset.rate);
+      var planDuration = parseInt(card.dataset.duration);
+      var planName = card.dataset.name;
+
+      document.getElementById('input-plan').value = planKey;
+      document.getElementById('input-plan-rate').value = planRate;
+      document.getElementById('input-duration').value = planDuration;
+
+      document.getElementById('summary-tier-name').textContent = planName;
+      document.getElementById('summary-duration').textContent = planDuration + ' Hours';
+      document.getElementById('summary-cost').textContent = '$' + planRate.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+      sessionStorage.setItem('vp_venue_plan', planKey);
+      sessionStorage.setItem('vp_venue_cost', planRate);
     });
   });
+
+  // Availability checking
+  var checkBtn = document.getElementById('btn-check-availability');
+  var dateInput = document.getElementById('event-date-input');
+  var startTimeInput = document.getElementById('start-time-input');
+  var endTimeInput = document.getElementById('end-time-input');
+  var statusBox = document.getElementById('availability-status');
+
+  if (checkBtn) {
+    checkBtn.addEventListener('click', async function(e) {
+      e.preventDefault();
+      var dateVal = dateInput ? dateInput.value : '';
+      if (!dateVal) {
+        statusBox.innerHTML = '<div style="background:#fee2e2; border:1px solid #f87171; border-radius:6px; padding:10px 14px; color:#991b1b; font-size:0.85rem; font-weight:600;">⚠️ Please select an event date first.</div>';
+        dateInput.focus();
+        return;
+      }
+      checkBtn.disabled = true;
+      checkBtn.textContent = 'Checking...';
+      try {
+        var start = startTimeInput ? startTimeInput.value + ':00' : '10:00:00';
+        var end = endTimeInput ? endTimeInput.value + ':00' : '22:00:00';
+        var res = await fetch('../api/bookings.php?action=check_availability&venue_id=' + vpVenueId + '&date=' + dateVal + '&start_time=' + start + '&end_time=' + end);
+        var d = await res.json();
+        if (d.data && d.data.available) {
+          statusBox.innerHTML = '<div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:10px 14px; color:#166534; font-size:0.85rem; font-weight:600;">✓ ' + (d.message || 'Date and time slot is available for booking!') + '</div>';
+          sessionStorage.setItem('vp_event_date', dateVal);
+          sessionStorage.setItem('vp_start_time', start);
+          sessionStorage.setItem('vp_end_time', end);
+        } else {
+          statusBox.innerHTML = '<div style="background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; padding:10px 14px; color:#92400e; font-size:0.85rem; font-weight:600;">⚠️ ' + (d.message || 'Time-slot conflict detected for this date.') + '</div>';
+        }
+      } catch(err) {
+        statusBox.innerHTML = '<div style="background:#fee2e2; border:1px solid #f87171; border-radius:6px; padding:10px 14px; color:#991b1b; font-size:0.85rem;">Server connection error.</div>';
+      } finally {
+        checkBtn.disabled = false;
+        checkBtn.textContent = 'Check Availability';
+      }
+    });
+  }
+
+  // Form submission: save to sessionStorage and forward
+  var form = document.getElementById('booking-step1-form');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      if (dateInput && dateInput.value) {
+        sessionStorage.setItem('vp_event_date', dateInput.value);
+        sessionStorage.setItem('vp_guest_count', document.getElementById('guest-count-input').value);
+        sessionStorage.setItem('vp_start_time', startTimeInput.value);
+        sessionStorage.setItem('vp_end_time', endTimeInput.value);
+      }
+    });
+  }
 });
 </script>
 </body>

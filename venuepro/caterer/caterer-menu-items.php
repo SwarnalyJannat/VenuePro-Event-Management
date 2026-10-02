@@ -497,7 +497,7 @@ $db = getDBConnection();
 
       <div class="form-group mb-14">
         <label class="form-label">Short Description</label>
-        <textarea class="form-control" rows="2">Freshly grilled with garlic butter and lemon zest. GF friendly.</textarea>
+        <textarea class="form-control" rows="2" placeholder="Describe the item, preparation style, ingredients..."></textarea>
       </div>
 
       <div class="form-group mb-14">

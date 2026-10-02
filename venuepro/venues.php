@@ -80,165 +80,91 @@ $db = getDBConnection();
   </div>
 
   <main class="public-page">
+    <?php
+    $sortBy = htmlspecialchars($_GET['sort'] ?? 'popular', ENT_QUOTES);
+    $orderMap = [
+        'popular'       => 'rating DESC, id ASC',
+        'capacity_desc' => 'max_capacity DESC',
+        'price_asc'     => 'base_rate ASC',
+        'price_desc'    => 'base_rate DESC',
+        'rating'        => 'rating DESC',
+    ];
+    $orderClause = $orderMap[$sortBy] ?? 'rating DESC, id ASC';
+
+    $search = trim(htmlspecialchars($_GET['search'] ?? '', ENT_QUOTES));
+    if (!empty($search)) {
+        $stmtVenues = $db->prepare("SELECT * FROM venues WHERE status = 'active' AND (name LIKE ? OR district LIKE ? OR description LIKE ?) ORDER BY $orderClause");
+        $stmtVenues->execute(["%$search%", "%$search%", "%$search%"]);
+    } else {
+        $stmtVenues = $db->query("SELECT * FROM venues WHERE status = 'active' ORDER BY $orderClause");
+    }
+    $venues = $stmtVenues ? $stmtVenues->fetchAll() : [];
+    ?>
+
     <div class="flex-between mb-24">
       <div>
         <h1 style="font-size:2.2rem; font-weight:800; margin-bottom:6px;">Enterprise Venues Catalog</h1>
         <p>Explore luxury ballrooms, skyline terraces, and tech pavilions. Click any venue to view high-res photo galleries.</p>
       </div>
       <div class="flex-center gap-12">
-        <span class="text-sm text-muted">Sort by:</span>
-        <select class="form-control" style="width:160px;">
-          <option>Most Popular</option>
-          <option>Capacity: High to Low</option>
-          <option>Price: Low to High</option>
-        </select>
+        <form method="GET" action="venues.php" id="sort-form" style="display:flex; align-items:center; gap:8px;">
+          <input type="text" name="search" class="form-control" placeholder="Search venues..." value="<?= e($search) ?>" style="width:190px;">
+          <span class="text-sm text-muted">Sort by:</span>
+          <select name="sort" class="form-control" style="width:180px;" onchange="this.form.submit()">
+            <option value="popular" <?= $sortBy==='popular' ? 'selected' : '' ?>>Most Popular</option>
+            <option value="capacity_desc" <?= $sortBy==='capacity_desc' ? 'selected' : '' ?>>Capacity: High to Low</option>
+            <option value="price_asc" <?= $sortBy==='price_asc' ? 'selected' : '' ?>>Price: Low to High</option>
+            <option value="price_desc" <?= $sortBy==='price_desc' ? 'selected' : '' ?>>Price: High to Low</option>
+            <option value="rating" <?= $sortBy==='rating' ? 'selected' : '' ?>>Highest Rated</option>
+          </select>
+        </form>
       </div>
     </div>
 
     <div class="grid-3 gap-24">
-      <!-- Venue 1 -->
+      <?php
+      $stockImages = [
+        'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80',
+        'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80',
+        'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
+        'https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=800&q=80',
+        'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80',
+        'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80',
+        'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
+      ];
+      if (empty($venues)): ?>
+      <div style="grid-column:1/-1; text-align:center; padding:60px 24px; color:var(--gray-400);">
+        <div style="font-size:3.5rem; margin-bottom:12px;">🏛️</div>
+        <div style="font-size:1.1rem; font-weight:600;">No venues found matching your criteria.</div>
+      </div>
+      <?php else:
+      foreach ($venues as $idx => $v):
+        $img = !empty($v['image_url']) ? $v['image_url'] : $stockImages[$idx % count($stockImages)];
+        $badge = !empty($v['badge']) ? $v['badge'] : strtoupper($v['venue_type'] ?? 'VENUE');
+      ?>
       <div class="venue-card">
-        <div class="venue-card-img" style="background-image:url('https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80'); position:relative;">
-          <span class="venue-badge">PREMIUM BALLROOM</span>
+        <div class="venue-card-img" style="background-image:url('<?= e($img) ?>'); position:relative;">
+          <span class="venue-badge"><?= e($badge) ?></span>
         </div>
         <div class="venue-card-body">
           <div class="flex-between mb-8">
-            <h3 class="venue-card-title">Grand Emerald Ballroom</h3>
+            <h3 class="venue-card-title"><?= e($v['name']) ?></h3>
           </div>
-          <p class="venue-card-loc">📍 Downtown District, Level 4 · 600 Guests Capacity</p>
-          <p class="text-xs text-muted mb-16">Unobstructed 8,500 sq ft hall with crystal chandeliers, acoustic Bose audio rig, and private VIP terrace.</p>
+          <p class="venue-card-loc">📍 <?= e($v['district']) ?> · <?= number_format($v['max_capacity']) ?> Guests Capacity</p>
+          <p class="text-xs text-muted mb-16"><?= e(mb_strimwidth($v['description'] ?? '', 0, 120, '...')) ?></p>
           <div class="flex-between">
             <div>
-              <div class="venue-card-price">$1,200<small>/day base</small></div>
-              <span class="text-xs text-success">✓ In-house Catering</span>
+              <div class="venue-card-price">$<?= number_format($v['base_rate'], 0) ?><small>/day base</small></div>
+              <span class="text-xs text-success">✓ Verified Property</span>
             </div>
             <div class="flex gap-8">
-              <a href="venue-details.php" class="btn btn-outline btn-sm">View Photos (14+)</a>
+              <a href="venue-details.php?id=<?= $v['id'] ?>#photo-gallery" class="btn btn-outline btn-sm">View Photos (14+)</a>
               <a href="#signin-modal" class="btn btn-primary btn-sm">🔒 Book Now</a>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- Venue 2 -->
-      <div class="venue-card">
-        <div class="venue-card-img" style="background-image:url('https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80');">
-          <span class="venue-badge">PANORAMIC ROOFTOP</span>
-        </div>
-        <div class="venue-card-body">
-          <div class="flex-between mb-8">
-            <h3 class="venue-card-title">Skyline Vista Lounge</h3>
-          </div>
-          <p class="venue-card-loc">📍 North Waterfront District · 250 Guests Capacity</p>
-          <p class="text-xs text-muted mb-16">360-degree glass perimeter with sunset views, wrap-around cocktail deck, and ambient architectural lighting.</p>
-          <div class="flex-between">
-            <div>
-              <div class="venue-card-price">$2,450<small>/day base</small></div>
-              <span class="text-xs text-success">✓ Open Bar Setup</span>
-            </div>
-            <div class="flex gap-8">
-              <a href="venue-details.php" class="btn btn-outline btn-sm">View Photos (10+)</a>
-              <a href="#signin-modal" class="btn btn-primary btn-sm">🔒 Book Now</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Venue 3 -->
-      <div class="venue-card">
-        <div class="venue-card-img" style="background-image:url('https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80');">
-          <span class="venue-badge">TECH PAVILION</span>
-        </div>
-        <div class="venue-card-body">
-          <div class="flex-between mb-8">
-            <h3 class="venue-card-title">Crystal Tech Pavilion</h3>
-          </div>
-          <p class="venue-card-loc">📍 Innovation Park District · 400 Guests Capacity</p>
-          <p class="text-xs text-muted mb-16">High-tech auditorium equipped with ultra-wide 8K LED video wall, fiber connectivity, and live stream rigs.</p>
-          <div class="flex-between">
-            <div>
-              <div class="venue-card-price">$3,200<small>/day base</small></div>
-              <span class="text-xs text-success">✓ Full A/V Team</span>
-            </div>
-            <div class="flex gap-8">
-              <a href="venue-details.php" class="btn btn-outline btn-sm">View Photos (8+)</a>
-              <a href="#signin-modal" class="btn btn-primary btn-sm">🔒 Book Now</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Venue 4 -->
-      <div class="venue-card">
-        <div class="venue-card-img" style="background-image:url('https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=800&q=80');">
-          <span class="venue-badge">HISTORIC LOFT</span>
-        </div>
-        <div class="venue-card-body">
-          <div class="flex-between mb-8">
-            <h3 class="venue-card-title">The Brick &amp; Steel Gallery</h3>
-          </div>
-          <p class="venue-card-loc">📍 Arts &amp; Cultural Quarter · 300 Guests Capacity</p>
-          <p class="text-xs text-muted mb-16">Industrial chic aesthetic with exposed century-old red brick, polished concrete floors, and museum track lighting.</p>
-          <div class="flex-between">
-            <div>
-              <div class="venue-card-price">$1,800<small>/day base</small></div>
-              <span class="text-xs text-success">✓ Flexible Layout</span>
-            </div>
-            <div class="flex gap-8">
-              <a href="venue-details.php" class="btn btn-outline btn-sm">View Photos (12+)</a>
-              <a href="#signin-modal" class="btn btn-primary btn-sm">🔒 Book Now</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Venue 5 -->
-      <div class="venue-card">
-        <div class="venue-card-img" style="background-image:url('https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80');">
-          <span class="venue-badge">BOTANICAL GARDEN</span>
-        </div>
-        <div class="venue-card-body">
-          <div class="flex-between mb-8">
-            <h3 class="venue-card-title">Grand Emerald Garden</h3>
-          </div>
-          <p class="venue-card-loc">📍 East Garden District · 450 Guests Capacity</p>
-          <p class="text-xs text-muted mb-16">Lush manicured lawn, climate-controlled glass marquee, and evening fountain illuminations for galas.</p>
-          <div class="flex-between">
-            <div>
-              <div class="venue-card-price">$2,100<small>/day base</small></div>
-              <span class="text-xs text-success">✓ Marquee Canopy</span>
-            </div>
-            <div class="flex gap-8">
-              <a href="venue-details.php" class="btn btn-outline btn-sm">View Photos (15+)</a>
-              <a href="#signin-modal" class="btn btn-primary btn-sm">🔒 Book Now</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Venue 6 -->
-      <div class="venue-card">
-        <div class="venue-card-img" style="background-image:url('https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80');">
-          <span class="venue-badge">HARBOR SUITE</span>
-        </div>
-        <div class="venue-card-body">
-          <div class="flex-between mb-8">
-            <h3 class="venue-card-title">Riverside Suite</h3>
-          </div>
-          <p class="venue-card-loc">📍 South Marina District · 200 Guests Capacity</p>
-          <p class="text-xs text-muted mb-16">Private waterfront dock, natural daylight floor-to-ceiling windows, and integrated presentation boardroom.</p>
-          <div class="flex-between">
-            <div>
-              <div class="venue-card-price">$1,650<small>/day base</small></div>
-              <span class="text-xs text-success">✓ Marina Access</span>
-            </div>
-            <div class="flex gap-8">
-              <a href="venue-details.php" class="btn btn-outline btn-sm">View Photos (9+)</a>
-              <a href="#signin-modal" class="btn btn-primary btn-sm">🔒 Book Now</a>
-            </div>
-          </div>
-        </div>
-      </div>
+      <?php endforeach; endif; ?>
     </div>
   </main>
 

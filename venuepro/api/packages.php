@@ -81,6 +81,49 @@ switch ($action) {
         jsonResponse(true, 'Catering package created successfully', ['package_id' => $db->lastInsertId()], 201);
         break;
 
+    case 'update':
+        requireRole(['caterer', 'admin']);
+        $user = getCurrentUser();
+        $input = !empty($_POST) ? $_POST : getJsonInput();
+        $id = (int)($input['id'] ?? ($_GET['id'] ?? 0));
+        if ($id <= 0) {
+            jsonResponse(false, 'Missing package ID', null, 400);
+        }
+
+        $stmtChk = $db->prepare("SELECT * FROM catering_packages WHERE id = ? LIMIT 1");
+        $stmtChk->execute([$id]);
+        $pkg = $stmtChk->fetch();
+        if (!$pkg) {
+            jsonResponse(false, 'Package not found', null, 404);
+        }
+
+        $title = sanitize($input['title'] ?? '');
+        $tier = sanitize($input['tier'] ?? 'Gold');
+        $priceEvent = (float)($input['price_per_event'] ?? 1200.00);
+        $priceGuest = (float)($input['price_per_guest'] ?? 24.00);
+        $minGuests = (int)($input['min_guests'] ?? 30);
+        $maxCapacity = (int)($input['max_capacity'] ?? 500);
+        $description = sanitize($input['description'] ?? '');
+        $cuisine = sanitize($input['cuisine_type'] ?? 'Fine Dining');
+        $service = sanitize($input['service_style'] ?? 'Plated Dinner');
+        $status = sanitize($input['status'] ?? 'published');
+        $features = isset($input['features']) && is_array($input['features']) ? json_encode($input['features']) : null;
+
+        if (empty($title) || empty($description)) {
+            jsonResponse(false, 'Package Title and Description are required', null, 400);
+        }
+
+        if ($features !== null) {
+            $stmt = $db->prepare("UPDATE catering_packages SET title=?, tier=?, price_per_event=?, price_per_guest=?, min_guests=?, max_capacity=?, description=?, cuisine_type=?, service_style=?, features=?, status=? WHERE id=?");
+            $stmt->execute([$title, $tier, $priceEvent, $priceGuest, $minGuests, $maxCapacity, $description, $cuisine, $service, $features, $status, $id]);
+        } else {
+            $stmt = $db->prepare("UPDATE catering_packages SET title=?, tier=?, price_per_event=?, price_per_guest=?, min_guests=?, max_capacity=?, description=?, cuisine_type=?, service_style=?, status=? WHERE id=?");
+            $stmt->execute([$title, $tier, $priceEvent, $priceGuest, $minGuests, $maxCapacity, $description, $cuisine, $service, $status, $id]);
+        }
+
+        jsonResponse(true, 'Catering package updated successfully!');
+        break;
+
     default:
         jsonResponse(false, 'Invalid package action', null, 400);
         break;

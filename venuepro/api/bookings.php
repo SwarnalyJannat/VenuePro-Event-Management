@@ -346,9 +346,19 @@ switch ($action) {
             jsonResponse(false, 'Unauthorized: You may not cancel this booking', null, 403);
         }
 
-        // Cannot cancel already-completed or already-cancelled bookings
-        if (in_array($bk['booking_status'], ['completed', 'cancelled'])) {
-            jsonResponse(false, "Booking is already {$bk['booking_status']} and cannot be cancelled", null, 409);
+        // Customers can ONLY cancel 'pending' or 'inquiry' bookings.
+        // Confirmed bookings cannot be cancelled by customers.
+        if (!$isAdmin) {
+            if ($bk['booking_status'] === 'confirmed') {
+                jsonResponse(false, "Confirmed reservations cannot be cancelled online. Please contact VenuePro administration.", null, 403);
+            }
+            if (!in_array($bk['booking_status'], ['pending', 'inquiry'])) {
+                jsonResponse(false, "Only pending reservations may be cancelled. Current status: " . ucfirst($bk['booking_status']) . ".", null, 409);
+            }
+        } else {
+            if (in_array($bk['booking_status'], ['completed', 'cancelled'])) {
+                jsonResponse(false, "Booking is already {$bk['booking_status']} and cannot be cancelled", null, 409);
+            }
         }
 
         $stmtCancel = $db->prepare(

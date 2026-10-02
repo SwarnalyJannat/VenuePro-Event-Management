@@ -174,43 +174,144 @@
     });
 
     // Detect Logout links
-    document.querySelectorAll('a[href*="login-role"], .btn-logout').forEach(link => {
-      if (link.textContent.toLowerCase().includes('log out') || link.textContent.toLowerCase().includes('exit')) {
-        link.addEventListener('click', async function (e) {
+    document.querySelectorAll('a[href*="login-role"], .btn-logout, a.nav-item[href*="login"]').forEach(link => {
+      const text = link.textContent.toLowerCase();
+      if (text.includes('log out') || text.includes('logout') || text.includes('sign out') || text.includes('exit') || link.classList.contains('btn-logout')) {
+        link.addEventListener('click', function (e) {
           e.preventDefault();
-          try {
-            await fetch(API_BASE + 'auth.php?action=logout');
-          } catch (err) {}
-          window.location.href = isSubfolder ? '../login-role.php' : 'login-role.php';
+          link.style.opacity = '0.6';
+          link.style.pointerEvents = 'none';
+          
+          // Clear client storage
+          try { sessionStorage.clear(); } catch(err) {}
+
+          const targetUrl = isSubfolder ? '../login-role.php' : 'login-role.php';
+          const logoutUrl = API_BASE + 'auth.php?action=logout';
+
+          let redirected = false;
+          function doRedirect() {
+            if (!redirected) {
+              redirected = true;
+              window.location.href = targetUrl;
+            }
+          }
+
+          // Guaranteed fast transition within 350ms
+          setTimeout(doRedirect, 350);
+
+          fetch(logoutUrl, { method: 'POST', keepalive: true })
+            .then(() => doRedirect())
+            .catch(() => doRedirect());
         });
       }
     });
   }
 
   // ============================================================
-  // 2. VENUE SEARCH & FILTERS (venue-listings & venues.php)
+  // 2. UNIVERSAL REAL-TIME SEARCH & FILTERS
   // ============================================================
-  function initVenueFilters() {
-    const searchInput = document.querySelector('.topbar-search input, input[placeholder*="Search event venues" i]');
-    if (!searchInput) return;
+  function initGlobalSearch() {
+    const searchInputs = document.querySelectorAll(
+      '.topbar-search input, input[type="search"], input[name="search"], input[placeholder*="search" i]'
+    );
+    if (!searchInputs || searchInputs.length === 0) return;
 
     let debounceTimer;
-    searchInput.addEventListener('input', function () {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        filterVenues(searchInput.value.trim());
-      }, 300);
-    });
 
-    function filterVenues(term) {
-      const cards = document.querySelectorAll('.venue-card, .venue-item');
-      if (cards.length === 0) return;
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function performGlobalFilter(term, sourceInput) {
       const lower = term.toLowerCase();
-      cards.forEach(card => {
-        const text = card.textContent.toLowerCase();
-        card.style.display = text.includes(lower) ? '' : 'none';
+
+      // 1. Sync other search inputs on the page without triggering loop
+      searchInputs.forEach(input => {
+        if (input !== sourceInput && input.value !== term) {
+          input.value = term;
+        }
+      });
+
+      // 2. Table rows filtering (Admin tables, Staff tables, Order tables, Recent activities, etc.)
+      const tables = document.querySelectorAll('table');
+      tables.forEach(table => {
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const rows = Array.from(tbody.querySelectorAll('tr')).filter(tr => 
+          !tr.classList.contains('no-filter') && 
+          !tr.classList.contains('vp-search-empty-row')
+        );
+        if (rows.length === 0) return;
+
+        let visibleCount = 0;
+        rows.forEach(tr => {
+          const matches = !lower || tr.textContent.toLowerCase().includes(lower);
+          tr.style.display = matches ? '' : 'none';
+          if (matches) visibleCount++;
+        });
+
+        // Manage empty state indicator row
+        let emptyRow = tbody.querySelector('.vp-search-empty-row');
+        if (visibleCount === 0 && lower) {
+          if (!emptyRow) {
+            emptyRow = document.createElement('tr');
+            emptyRow.className = 'vp-search-empty-row';
+            const colSpan = (table.querySelector('thead tr') || rows[0]).children.length || 7;
+            emptyRow.innerHTML = `<td colspan="${colSpan}" style="text-align:center; padding:32px 16px; color:var(--gray-400);">
+              <div style="font-size:1.5rem; margin-bottom:6px;">🔍</div>
+              <div>No matching records found for "<strong>${escapeHtml(term)}</strong>"</div>
+            </td>`;
+            tbody.appendChild(emptyRow);
+          }
+        } else if (emptyRow) {
+          emptyRow.remove();
+        }
+      });
+
+      // 3. Venue cards filtering (venues.php, customer/venue-listings.php)
+      const venueCards = document.querySelectorAll('.venue-card, .venue-item, .venue-card-item');
+      if (venueCards.length > 0) {
+        venueCards.forEach(card => {
+          const matches = !lower || card.textContent.toLowerCase().includes(lower);
+          card.style.display = matches ? '' : 'none';
+        });
+      }
+
+      // 4. Catalog cards & grid items (Caterers, Packages, Staff, Notification center items)
+      const catalogCards = document.querySelectorAll(
+        '.grid-3 > .card, .grid-2 > .card, .order-select-card, .caterer-card, .staff-card, .notif-item'
+      );
+      catalogCards.forEach(card => {
+        if (card.querySelector('form') || card.closest('#pkg-decision-card') || card.classList.contains('vp-no-search')) return;
+        const matches = !lower || card.textContent.toLowerCase().includes(lower);
+        card.style.display = matches ? '' : 'none';
       });
     }
+
+    searchInputs.forEach(searchInput => {
+      // Real-time input filtering with short debounce
+      searchInput.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          performGlobalFilter(searchInput.value.trim(), searchInput);
+        }, 150);
+      });
+
+      // Handle Enter keypress for submission if applicable
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          const term = searchInput.value.trim();
+          const filterForm = document.getElementById('venue-filter-form') || document.getElementById('sort-form');
+          if (filterForm && !searchInput.closest('form')) {
+            const formSearch = filterForm.querySelector('input[name="search"]');
+            if (formSearch) {
+              formSearch.value = term;
+              filterForm.submit();
+            }
+          }
+        }
+      });
+    });
   }
 
   // ============================================================
@@ -473,10 +574,53 @@
     }
   }
 
+  // ============================================================
+  // 9. PASSWORD SHOW / HIDE TOGGLE
+  // ============================================================
+  function initPasswordToggles() {
+    document.querySelectorAll('input[type="password"]').forEach(input => {
+      if (input.dataset.hasToggle) return;
+      input.dataset.hasToggle = 'true';
+
+      let container = input.parentElement;
+      if (!container.classList.contains('input-wrap') && !container.classList.contains('password-wrap')) {
+        const wrap = document.createElement('div');
+        wrap.className = 'password-wrap';
+        input.parentNode.insertBefore(wrap, input);
+        wrap.appendChild(input);
+        container = wrap;
+      } else {
+        container.style.position = 'relative';
+      }
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'password-toggle-btn';
+      btn.setAttribute('aria-label', 'Toggle password visibility');
+      btn.title = 'Show/Hide Password';
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (input.type === 'password') {
+          input.type = 'text';
+          btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+        } else {
+          input.type = 'password';
+          btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+        }
+      });
+
+      container.appendChild(btn);
+    });
+  }
+
   // DOMContentLoaded Initializer
   document.addEventListener('DOMContentLoaded', function () {
     initAuthForms();
-    initVenueFilters();
+    initPasswordToggles();
+    initGlobalSearch();
     initBookingPayment();
     initCatererMenuItems();
     initCatererOrderSync();

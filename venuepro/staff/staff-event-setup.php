@@ -253,7 +253,7 @@ $checklistItems = $defaultChecklist;
               <div class="user-avatar" style="background: #7c3aed"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
               <div class="user-info">
                 <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
-                <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
+                <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'staff')) ?></div>
               </div>
             </div>
           </div>

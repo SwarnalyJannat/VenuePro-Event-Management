@@ -123,9 +123,11 @@ if (empty($dashBookings)): ?>
   <td><span class="pill pill-<?= $statusClass ?>"><?= $statusLabel ?></span></td>
   <td style="text-align:center;">
     <a href="booking-status-timeline.php?booking_id=<?= $bk['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;" title="View Progress">📊 View</a>
-    <?php if (in_array($bk['booking_status'], ['confirmed','pending'])): ?>
+    <?php if (in_array($bk['booking_status'], ['pending', 'inquiry'])): ?>
     <button class="btn btn-sm" style="padding:4px 10px;font-size:0.75rem;background:#fee2e2;color:#dc2626;border:none;cursor:pointer;border-radius:6px;"
       onclick="cancelBooking(<?= $bk['id'] ?>, '<?= e($bk['event_name']) ?>')">✕ Cancel</button>
+    <?php elseif ($bk['booking_status'] === 'confirmed'): ?>
+    <span class="text-xs" style="color:#16a34a; font-weight:600; padding:4px 6px;">✓ Locked</span>
     <?php endif; ?>
   </td>
 </tr>

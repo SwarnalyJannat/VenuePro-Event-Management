@@ -215,9 +215,11 @@ if ($selectedId > 0) {
 
               <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
                 <a href="client-invoice.php?booking_id=<?= $selected['id'] ?>" class="btn btn-outline" style="font-size:0.85rem;">📄 View Invoice</a>
-                <?php if (in_array(strtolower($selected['booking_status']), ['confirmed','pending'])): ?>
+                <?php if (in_array(strtolower($selected['booking_status']), ['pending', 'inquiry'])): ?>
                 <button class="btn" style="font-size:0.85rem;background:#fee2e2;color:#dc2626;border:none;cursor:pointer;border-radius:6px;padding:8px 16px;"
                   onclick="cancelBooking(<?= $selected['id'] ?>, '<?= e($selected['event_name']) ?>')">✕ Cancel Booking</button>
+                <?php elseif (strtolower($selected['booking_status']) === 'confirmed'): ?>
+                <span class="pill pill-confirmed" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:0.85rem;">✓ Confirmed — Non-Cancellable</span>
                 <?php endif; ?>
               </div>
             </div>
