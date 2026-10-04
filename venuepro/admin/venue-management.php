@@ -57,7 +57,7 @@ $totalVenues = count($venues);
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -147,7 +147,8 @@ $totalGross = (float)$stmtGross->fetchColumn();
     </div>
     <!-- <div class="progress-bar mb-16"><div class="progress-fill" style="width:<?= $occ ?>%;"></div></div> -->
     <div>
-      <a href="admin-edit-venue.php?id=<?= $v['id'] ?>" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center;">Edit Properties</a>
+      <a href="admin-edit-venue.php?id=<?= $v['id'] ?>" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center; margin-bottom:6px;">Edit Properties</a>
+      <button onclick="deleteVenue(<?= (int)$v['id'] ?>, this)" class="btn btn-sm btn-full" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;cursor:pointer;border-radius:6px;padding:6px 12px;font-size:0.8rem;width:100%;">🗑 Remove Venue</button>
     </div>
   </div>
   <?php endforeach; endif; ?>
@@ -159,5 +160,28 @@ $totalGross = (float)$stmtGross->fetchColumn();
     </div>
   </div>
 <script src="../js/app.js"></script>
+<script>
+async function deleteVenue(id, btn) {
+  if (!confirm('Remove this venue from the catalog? It will be set to inactive.')) return;
+  btn.disabled = true; btn.textContent = 'Removing...';
+  try {
+    var res = await fetch('../api/venues.php?action=delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ id: id })
+    });
+    var d = await res.json();
+    if (d.success) {
+      var card = btn.closest('.venue-card-item, .card');
+      if (card) { card.style.opacity='0'; card.style.transition='opacity .3s'; setTimeout(function(){ card.remove(); }, 320); }
+    } else {
+      alert(d.message || 'Failed to remove venue.');
+      btn.disabled = false; btn.textContent = '🗑 Remove Venue';
+    }
+  } catch(e) {
+    alert('Connection error.');
+    btn.disabled = false; btn.textContent = '🗑 Remove Venue';
+  }
+}
+</script>
 </body>
-</html>
+</html>

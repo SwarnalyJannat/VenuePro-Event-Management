@@ -60,7 +60,7 @@ $allVenues = $stmtVenues->fetchAll();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -148,25 +148,31 @@ $allVenues = $stmtVenues->fetchAll();
                   <?php endforeach; ?>
                 </select>
               </div>
-              <div class="form-group">
-                <label class="form-label">Primary Assigned Venue</label>
-                <select name="assigned_venues" class="form-control">
-                  <option value="">-- All Venues (Floating) --</option>
-                  <?php foreach ($allVenues as $v):
-                    $sel = (($staff['assigned_venues'] ?? '') === $v['name']) ? 'selected' : '';
-                  ?>
-                    <option value="<?= e($v['name']) ?>" <?= $sel ?>><?= e($v['name']) ?></option>
-                  <?php endforeach; ?>
-                </select>
-              </div>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Account Status</label>
-              <select name="status" class="form-control">
-                <option value="active" <?= ($staff['status'] === 'active') ? 'selected' : '' ?>>Active Staff</option>
-                <option value="inactive" <?= ($staff['status'] === 'inactive') ? 'selected' : '' ?>>Inactive / On Leave</option>
-              </select>
+            <!-- Multi-venue assignment -->
+            <div class="form-group" style="margin-top:8px;">
+              <label class="form-label">Assigned Venues</label>
+              <p class="text-xs text-muted mb-8">Select one or more venues for this staff member.</p>
+              <?php
+              // Parse current assigned venue IDs
+              $assignedIds = [];
+              $raw = $staff['assigned_venues'] ?? '';
+              foreach (explode(',', $raw) as $vid) {
+                  $vid = trim($vid);
+                  if (is_numeric($vid) && (int)$vid > 0) $assignedIds[] = (int)$vid;
+              }
+              ?>
+              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:8px; margin-top:4px;">
+                <?php if (empty($allVenues)): ?>
+                <p class="text-sm text-muted">No venues found.</p>
+                <?php else: foreach ($allVenues as $v): $checked = in_array((int)$v['id'], $assignedIds) ? 'checked' : ''; ?>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; border:1.5px solid var(--gray-200); border-radius:6px; cursor:pointer; <?= $checked ? 'border-color:var(--primary); background:#eff6ff;' : '' ?>">
+                  <input type="checkbox" name="assigned_venues[]" value="<?= (int)$v['id'] ?>" <?= $checked ?> style="accent-color:var(--primary);">
+                  <span class="text-sm font-semibold"><?= e($v['name']) ?></span>
+                </label>
+                <?php endforeach; endif; ?>
+              </div>
             </div>
 
             <div class="flex gap-12 mt-24">
@@ -174,6 +180,7 @@ $allVenues = $stmtVenues->fetchAll();
               <button type="submit" id="saveStaffBtn" class="btn btn-primary" style="flex:2;">Save Staff Changes →</button>
             </div>
           </form>
+
         </div>
       </main>
 
@@ -196,6 +203,13 @@ $allVenues = $stmtVenues->fetchAll();
       saveBtn.textContent = 'Saving Changes...';
       alertBox.style.display = 'none';
 
+      // Collect multi-venue IDs
+      var venueIds = [];
+      form.querySelectorAll('[name="assigned_venues[]"]:checked').forEach(function(cb) {
+        venueIds.push(parseInt(cb.value));
+      });
+      var venueStr = venueIds.join(',');
+
       var data = {
         id:              form.querySelector('[name="id"]').value,
         name:            form.querySelector('[name="name"]').value.trim(),
@@ -203,8 +217,8 @@ $allVenues = $stmtVenues->fetchAll();
         email:           form.querySelector('[name="email"]').value.trim(),
         phone:           form.querySelector('[name="phone"]').value.trim(),
         department:      form.querySelector('[name="department"]').value,
-        assigned_venues: form.querySelector('[name="assigned_venues"]').value,
-        status:          form.querySelector('[name="status"]').value
+        assigned_venues: venueStr,
+        status:          'active'
       };
 
       try {
@@ -218,7 +232,7 @@ $allVenues = $stmtVenues->fetchAll();
           alertBox.style.display = 'block';
           alertBox.style.background = '#dcfce7';
           alertBox.style.color = '#166534';
-          alertBox.textContent = '✓ Staff member information updated successfully! Redirecting...';
+          alertBox.textContent = '✓ Staff member updated successfully! Redirecting...';
           setTimeout(function() {
             window.location.href = 'admin-staff-management.php';
           }, 800);
@@ -243,3 +257,4 @@ $allVenues = $stmtVenues->fetchAll();
   </script>
 </body>
 </html>
+

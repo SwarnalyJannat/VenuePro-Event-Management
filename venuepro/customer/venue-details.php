@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -11,10 +11,15 @@ $stmtVR  = $db->prepare("SELECT * FROM venues WHERE id = ? LIMIT 1");
 $stmtVR->execute([$venueId]);
 $venueRow = $stmtVR->fetch();
 if (!$venueRow) {
-    // fallback to first active venue
     $venueRow = $db->query("SELECT * FROM venues WHERE status='active' LIMIT 1")->fetch();
     $venueId  = $venueRow ? (int)$venueRow['id'] : 1;
 }
+
+// Load photos from DB
+$stmtPh = $db->prepare("SELECT * FROM venue_photos WHERE venue_id = ? ORDER BY sort_order ASC, id ASC");
+$stmtPh->execute([$venueId]);
+$dbPhotos = $stmtPh->fetchAll();
+
 $stockImages = [
     'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80',
     'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
@@ -26,7 +31,25 @@ $heroImg  = !empty($venueRow['image_url']) ? '../'.$venueRow['image_url'] : $sto
 $rating   = number_format($venueRow['rating'] ?? 4.8, 1);
 $capacity = number_format($venueRow['max_capacity'] ?? 0);
 $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
+
+// Build gallery photo list
+$galleryPhotos = [];
+foreach ($dbPhotos as $ph) {
+    $galleryPhotos[] = ['id' => $ph['id'], 'url' => $ph['photo_url'], 'caption' => $ph['caption'] ?? '', 'from_db' => true];
+}
+$galleryPhotos = array_merge(
+    [['id' => null, 'url' => $heroImg, 'caption' => ($venueRow['name'] ?? 'Venue') . ' — Main Space', 'from_db' => false]],
+    $galleryPhotos
+);
+$stockCaptions = ['Interior & Lighting Setup', 'Cocktail Reception Foyer', 'Breakout Lounge', 'Evening Ambiance', 'Property Terrace'];
+$si = 1;
+while (count($galleryPhotos) < 6) {
+    $galleryPhotos[] = ['id' => null, 'url' => $stockImages[($venueId + $si) % count($stockImages)], 'caption' => $stockCaptions[($si-1) % count($stockCaptions)], 'from_db' => false];
+    $si++;
+}
+$totalPhotos = count($galleryPhotos);
 ?>
+
 ﻿<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -119,7 +142,7 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -176,11 +199,19 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
 
   <!-- Gallery -->
   <div class="grid-2 mb-32" style="gap:12px; height:380px;">
-    <div style="background:url('<?= $heroImg ?>') center/cover; border-radius:var(--radius); height:100%;"></div>
+    <div style="background:url('<?= e($galleryPhotos[0]['url']) ?>') center/cover; border-radius:var(--radius); height:100%; position:relative;">
+      <span style="position:absolute;bottom:12px;left:12px;background:rgba(0,0,0,0.6);color:#fff;font-size:0.75rem;padding:4px 10px;border-radius:4px;"><?= e($venueRow['name']) ?> Main Space</span>
+    </div>
     <div style="display:flex; flex-direction:column; gap:12px; height:100%;">
-      <div style="flex:1; background:url('https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=600&q=80') center/cover; border-radius:var(--radius);"></div>
-      <div style="flex:1; background:url('https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=600&q=80') center/cover; border-radius:var(--radius); position:relative; overflow:hidden;">
-        <a href="#venue-gallery" style="position:absolute; inset:0; background:rgba(0,0,0,0.5); display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:1.15rem; text-decoration:none; transition:background 0.2s;"><span style="font-size:1.8rem; margin-bottom:4px;">📸</span><span>+14 PHOTOS</span><span style="font-size:0.75rem; font-weight:400; opacity:0.9;">Click to Open Gallery</span></a>
+      <div style="flex:1; background:url('<?= e($galleryPhotos[1]['url']) ?>') center/cover; border-radius:var(--radius); position:relative;">
+        <span style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:0.7rem;padding:3px 8px;border-radius:4px;"><?= e($galleryPhotos[1]['caption']) ?></span>
+      </div>
+      <div style="flex:1; background:url('<?= e($galleryPhotos[2]['url']) ?>') center/cover; border-radius:var(--radius); position:relative; overflow:hidden;">
+        <a href="#venue-gallery" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.15rem;text-decoration:none;">
+          <span style="font-size:1.8rem; margin-bottom:4px;">📸</span>
+          <span>+<?= $totalPhotos ?> PHOTOS</span>
+          <span style="font-size:0.75rem; font-weight:400; opacity:0.9;">Click to Open Gallery</span>
+        </a>
       </div>
     </div>
   </div>
@@ -188,7 +219,7 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
   <!-- About Section -->
   <div class="card mb-24">
     <h3 class="mb-12">About the Venue</h3>
-    <p class="mb-12"><?= e($venueRow['description'] ?? 'A premium event venue offering world-class facilities and services.') ?> Spanning over 8,500 square feet of unobstructed space, it features a unique blend of neo-classical architecture and modern technological integration. Designed to host up to 600 guests, the ballroom offers state-of-the-art acoustics, a dedicated VIP lounge, and private access elevators for high-profile attendees.</p>
+    <p class="mb-12"><?= e($venueRow['description'] ?? 'A premium event venue offering world-class facilities and services.') ?></p>
     <p>📍 <?= e($venueRow['address'] ?? '') ?> &nbsp;·&nbsp; Capacity: <?= $capacity ?> guests &nbsp;·&nbsp; ★<?= $rating ?></p>
   </div>
 
@@ -202,7 +233,7 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
         <ul class="pricing-features">
           <li>✓ Venue Access (6h)</li>
           <li>✓ Basic A/V setup</li>
-          <li>✓ Tables & Chairs</li>
+          <li>✓ Tables &amp; Chairs</li>
         </ul>
         <a href="booking-date-guests.php?venue_id=<?= $venueId ?>&plan=essential" class="btn btn-outline btn-full">Select Plan</a>
       </div>
@@ -213,7 +244,7 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
         <div class="pricing-price">$<?= $rate ?> <span>/session</span></div>
         <ul class="pricing-features">
           <li>✓ Full Day Access (12h)</li>
-          <li>✓ Premium A/V & Tech</li>
+          <li>✓ Premium A/V &amp; Tech</li>
           <li>✓ Basic Beverage Package</li>
           <li>✓ Logistics Manager</li>
         </ul>
@@ -226,7 +257,7 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
         <ul class="pricing-features">
           <li>✓ 24h Exclusive Access</li>
           <li>✓ Full Custom Catering</li>
-          <li>✓ Valet & Security Detail</li>
+          <li>✓ Valet &amp; Security Detail</li>
           <li>✓ Post-event Cleaning</li>
         </ul>
         <a href="booking-date-guests.php?venue_id=<?= $venueId ?>&plan=elite" class="btn btn-outline btn-full">Select Plan</a>
@@ -237,42 +268,24 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
 
       </main>
 
-  <!-- Interactive Photo Gallery Lightbox Modal -->
+  <!-- Dynamic Photo Gallery Lightbox -->
   <div id="venue-gallery" class="gallery-modal-backdrop">
     <div class="gallery-modal-card">
       <div class="flex-between pb-12" style="border-bottom:1px solid rgba(255,255,255,0.15);">
         <div>
           <h2 style="font-size:1.5rem; font-weight:800; color:#fff; margin:0 0 4px;"><?= e($venueRow['name'] ?? 'Venue') ?> — Photo Gallery</h2>
-          <p style="margin:0; font-size:0.85rem; color:#94a3b8;">High-resolution interior photography, banquet round staging, and architectural highlights.</p>
+          <p style="margin:0; font-size:0.85rem; color:#94a3b8;" id="photo-count-label"><?= $totalPhotos ?> photos — high-resolution interior photography, banquet staging &amp; architectural highlights.</p>
         </div>
         <a href="#" class="btn btn-outline btn-sm" style="color:#fff; border-color:rgba(255,255,255,0.3);">✕ Close</a>
       </div>
 
-      <div class="gallery-grid">
+      <div class="gallery-grid" id="galleryGrid">
+        <?php foreach ($galleryPhotos as $ph): ?>
         <div class="gallery-item">
-          <img src="<?= e($heroImg) ?>" alt="<?= e($venueRow['name']) ?>">
-          <div class="gallery-item-caption">Primary Staging &amp; Main Space Floor</div>
+          <img src="<?= e($ph['url']) ?>" alt="<?= e($ph['caption']) ?>" loading="lazy" onerror="this.src='<?= e($stockImages[0]) ?>'">
+          <div class="gallery-item-caption"><?= e($ph['caption']) ?></div>
         </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80" alt="Chandelier Lighting">
-          <div class="gallery-item-caption">Architectural Crystal Chandeliers</div>
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80" alt="Cocktail Foyer">
-          <div class="gallery-item-caption">VIP Cocktail Foyer &amp; Reception Area</div>
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=800&q=80" alt="Lounge Area">
-          <div class="gallery-item-caption">Executive Breakout Suite</div>
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80" alt="Evening Ambiance">
-          <div class="gallery-item-caption">Evening Mood Lighting Rig</div>
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80" alt="Balcony Terrace">
-          <div class="gallery-item-caption">Connected Skyline Balcony Terrace</div>
-        </div>
+        <?php endforeach; ?>
       </div>
 
       <div class="flex-between mt-24 pt-16" style="border-top:1px solid rgba(255,255,255,0.15);">
@@ -294,7 +307,6 @@ $rate     = number_format($venueRow['base_rate'] ?? 0, 0);
 </div>
 <script src="../js/app.js"></script>
 <script>
-// Store venue_id in sessionStorage when this page loads
 var vpVenueId = new URLSearchParams(window.location.search).get('id') || '1';
 sessionStorage.setItem('vp_venue_id', vpVenueId);
 </script>

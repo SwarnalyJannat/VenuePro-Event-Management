@@ -62,7 +62,7 @@ $caterers = $stmtC->fetchAll();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -123,13 +123,16 @@ foreach ($caterers as $c) {
         <thead><tr><th>KITCHEN</th><th>SPECIALTY</th><th>ORDERS</th><th>STATUS</th></tr></thead>
         <tbody>
           <?php if (empty($approvedCaterers)): ?>
-          <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--gray-400);">No approved caterers found.</td></tr>
+          <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--gray-400);">No approved caterers found.</td></tr>
           <?php else: foreach ($approvedCaterers as $c): ?>
-          <tr>
+          <tr id="caterer-row-<?= (int)$c['id'] ?>">
             <td><strong><?= e($c['business_name'] ?: $c['name']) ?></strong></td>
             <td><?= e($c['specialization'] ?? 'Fine Dining') ?></td>
             <td><?= (int)$c['active_orders'] ?></td>
             <td><span class="pill pill-confirmed">VERIFIED</span></td>
+            <td>
+              <button onclick="deleteCaterer(<?= (int)$c['id'] ?>, '<?= e(addslashes($c['business_name'] ?: $c['name'])) ?>')" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;cursor:pointer;border-radius:6px;padding:4px 10px;font-size:0.78rem;">Remove</button>
+            </td>
           </tr>
           <?php endforeach; endif; ?>
         </tbody>
@@ -162,5 +165,31 @@ foreach ($caterers as $c) {
     </div>
   </div>
 <script src="../js/app.js"></script>
+<script>
+async function deleteCaterer(id, name) {
+  if (!confirm('Remove caterer "' + name + '" from the platform? They will be set to inactive.')) return;
+  try {
+    var res = await fetch('../api/caterers.php?action=delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ caterer_id: id })
+    });
+    var d = await res.json();
+    if (d.success) {
+      var row = document.getElementById('caterer-row-' + id);
+      if (row) { row.style.opacity = '0'; row.style.transition = 'opacity .3s'; setTimeout(function() { row.remove(); }, 320); }
+      var toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#166534;color:#fff;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,.2);';
+      toast.textContent = '✓ ' + name + ' removed.';
+      document.body.appendChild(toast);
+      setTimeout(function() { toast.remove(); }, 3000);
+    } else {
+      alert(d.message || 'Failed to remove caterer.');
+    }
+  } catch(e) {
+    alert('Connection error.');
+  }
+}
+</script>
 </body>
-</html>
+</html>

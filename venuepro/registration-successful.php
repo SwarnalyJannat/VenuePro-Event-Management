@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/helpers.php';
@@ -18,7 +18,7 @@ $db = getDBConnection();
     <div style="width:72px; height:72px; border-radius:50%; background:#dcfce7; color:#16a34a; display:flex; align-items:center; justify-content:center; font-size:36px; margin:0 auto 20px;">✓</div>
     <h2 class="mb-8">Registration Successful!</h2>
     <p class="mb-24">Your profile has been created. You can now sign in and access the full capabilities of the VenuePro enterprise suite.</p>
-    <a href="login-role.php" class="btn btn-primary btn-full">Proceed to Sign In →</a>
+    <a href="venues.php" class="btn btn-primary btn-full">Proceed to Sign In →</a>
   </div>
 <script src="js/app.js"></script>
 </body>

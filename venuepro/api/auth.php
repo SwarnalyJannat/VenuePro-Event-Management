@@ -114,8 +114,15 @@ switch ($action) {
             if ($role === 'staff') {
                 $staffCode = sanitize($input['staff_id'] ?? 'STF-' . rand(1000, 9999));
                 $dept = sanitize($input['department'] ?? 'Event Operations');
-                $stmtStaff = $db->prepare("INSERT INTO staff_profiles (user_id, staff_code, department, active_status) VALUES (?, ?, ?, 'active')");
-                $stmtStaff->execute([$userId, $staffCode, $dept]);
+                // assigned_venues can come as array of IDs or comma-separated string
+                $venueInput = $input['assigned_venues'] ?? [];
+                if (is_array($venueInput)) {
+                    $venueStr = implode(',', array_map('intval', $venueInput));
+                } else {
+                    $venueStr = sanitize((string)$venueInput);
+                }
+                $stmtStaff = $db->prepare("INSERT INTO staff_profiles (user_id, staff_code, department, assigned_venues, active_status) VALUES (?, ?, ?, ?, 'active')");
+                $stmtStaff->execute([$userId, $staffCode, $dept, $venueStr]);
             }
 
             $db->commit();

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/helpers.php';
@@ -94,7 +94,7 @@ $db = getDBConnection();
     <nav class="flex-center gap-20">
       <a href="venues.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Venues</a>
       <a href="packages.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Catering Packages</a>
-      <a href="login-role.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
+      <a href="venues.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
       <a href="signup-role.php" class="btn btn-primary btn-sm" style="font-weight:600;">Sign Up</a>
     </nav>
   </header>
@@ -117,6 +117,12 @@ if (!$venue) {
     $venueId = $venue ? (int)$venue['id'] : 1;
 }
 
+// Load photos from DB
+$stmtPh = $db->prepare("SELECT * FROM venue_photos WHERE venue_id = ? ORDER BY sort_order ASC, id ASC");
+$stmtPh->execute([$venueId]);
+$dbPhotos = $stmtPh->fetchAll();
+
+// Merge: DB photos first, then stock fallbacks to always have ≥6 images for preview
 $stockImages = [
   'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80',
   'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80',
@@ -127,16 +133,34 @@ $stockImages = [
   'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
 ];
 $heroImg = !empty($venue['image_url']) ? $venue['image_url'] : $stockImages[$venueId % count($stockImages)];
-$subImg1 = $stockImages[($venueId + 1) % count($stockImages)];
-$subImg2 = $stockImages[($venueId + 2) % count($stockImages)];
-$subImg3 = $stockImages[($venueId + 3) % count($stockImages)];
-$subImg4 = $stockImages[($venueId + 4) % count($stockImages)];
+
+// Build merged gallery list: DB photos + hero + stock fallbacks
+$galleryPhotos = [];
+if (!empty($dbPhotos)) {
+    foreach ($dbPhotos as $ph) {
+        $galleryPhotos[] = ['id' => $ph['id'], 'url' => $ph['photo_url'], 'caption' => $ph['caption'] ?? '', 'from_db' => true];
+    }
+}
+// Always prepend hero if not already in DB photos
+$galleryPhotos = array_merge(
+    [['id' => null, 'url' => $heroImg, 'caption' => $venue['name'] . ' — Main Space', 'from_db' => false]],
+    $galleryPhotos
+);
+// Add stock images until we have at least 6
+$stockCaptions = ['Interior & Lighting Setup', 'Cocktail Reception Foyer', 'Breakout Lounge & Executive Suite', 'Evening Ambiance', 'Property Terrace & Skyline', 'AV Stage & Podium'];
+$si = 1;
+while (count($galleryPhotos) < 6) {
+    $galleryPhotos[] = ['id' => null, 'url' => $stockImages[($venueId + $si) % count($stockImages)], 'caption' => $stockCaptions[($si - 1) % count($stockCaptions)], 'from_db' => false];
+    $si++;
+}
 
 $baseRate = (float)($venue['base_rate'] ?? 2000);
 $capacity = (int)($venue['max_capacity'] ?? 200);
 $essentialRate = round($baseRate * 0.5);
 $enterpriseRate = round($baseRate);
 $eliteRate = round($baseRate * 1.75);
+$isAdmin = ($currentUser && ($currentUser['role'] ?? '') === 'admin');
+$totalPhotos = count($galleryPhotos);
 ?>
 
   <main class="public-page">
@@ -161,20 +185,20 @@ $eliteRate = round($baseRate * 1.75);
           </div>
         </div>
 
-        <!-- Gallery Preview -->
+        <!-- Gallery Preview Strip -->
         <div class="grid-2 mb-32" style="gap:12px; height:380px;">
-          <div style="background:url('<?= e($heroImg) ?>') center/cover; border-radius:var(--radius); height:100%; position:relative;">
-            <span style="position:absolute; bottom:12px; left:12px; background:rgba(0,0,0,0.6); color:#fff; font-size:0.75rem; padding:4px 10px; border-radius:4px;"><?= e($venue['name']) ?> Main Space</span>
+          <div style="background:url('<?= e($galleryPhotos[0]['url']) ?>') center/cover; border-radius:var(--radius); height:100%; position:relative;">
+            <span style="position:absolute;bottom:12px;left:12px;background:rgba(0,0,0,0.6);color:#fff;font-size:0.75rem;padding:4px 10px;border-radius:4px;"><?= e($venue['name']) ?> Main Space</span>
           </div>
           <div style="display:flex; flex-direction:column; gap:12px; height:100%;">
-            <div style="flex:1; background:url('<?= e($subImg1) ?>') center/cover; border-radius:var(--radius); position:relative;">
-              <span style="position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.6); color:#fff; font-size:0.7rem; padding:3px 8px; border-radius:4px;">Interior &amp; Lighting Setup</span>
+            <div style="flex:1; background:url('<?= e($galleryPhotos[1]['url']) ?>') center/cover; border-radius:var(--radius); position:relative;">
+              <span style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:0.7rem;padding:3px 8px;border-radius:4px;"><?= e($galleryPhotos[1]['caption']) ?></span>
             </div>
-            <a href="#photo-gallery" style="flex:1; background:url('<?= e($subImg2) ?>') center/cover; border-radius:var(--radius); position:relative; overflow:hidden; text-decoration:none; display:block;">
-              <div style="position:absolute; inset:0; background:rgba(15,23,42,0.65); display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; font-weight:700;">
+            <a href="#photo-gallery" style="flex:1; background:url('<?= e($galleryPhotos[2]['url']) ?>') center/cover; border-radius:var(--radius); position:relative; overflow:hidden; text-decoration:none; display:block;">
+              <div style="position:absolute;inset:0;background:rgba(15,23,42,0.65);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-weight:700;">
                 <span style="font-size:2rem; margin-bottom:4px;">📸</span>
-                <span style="font-size:1.2rem;">+14 PHOTOS</span>
-                <span style="font-size:0.75rem; font-weight:400; opacity:0.9;">Click to Open Full Lightbox</span>
+                <span style="font-size:1.2rem;">+<?= $totalPhotos ?> PHOTOS</span>
+                <span style="font-size:0.75rem; font-weight:400; opacity:0.9;">Click to Open Full Gallery</span>
               </div>
             </a>
           </div>
@@ -184,7 +208,7 @@ $eliteRate = round($baseRate * 1.75);
         <div class="card mb-24">
           <h3 class="mb-12">About the Venue</h3>
           <p class="mb-12"><?= nl2br(e($venue['description'] ?? 'A premier event venue designed for high-profile corporate summits, banquets, and celebrations.')) ?></p>
-          <p>📍 Location: <?= e($venue['address'] ?? '') ?> · Maximum Capacity: <?= number_format($capacity) ?> Guests · Rating: ★<?= number_format($venue['rating'] ?? 4.8, 1) ?></p>
+          <p>📍 <?= e($venue['address'] ?? '') ?> · Maximum Capacity: <?= number_format($capacity) ?> Guests · Rating: ★<?= number_format($venue['rating'] ?? 4.8, 1) ?></p>
         </div>
 
         <!-- Pricing Tiers -->
@@ -215,7 +239,6 @@ $eliteRate = round($baseRate * 1.75);
         <div class="card mb-16" style="border:2px solid var(--primary); box-shadow:var(--shadow-md);">
           <h3 class="mb-4">Reserve This Venue</h3>
           <p class="text-xs text-muted mb-16">Check available dates &amp; rates</p>
-
           <div class="form-group">
             <label class="form-label">Event Date</label>
             <input type="date" class="form-control" placeholder="Select date">
@@ -224,7 +247,6 @@ $eliteRate = round($baseRate * 1.75);
             <label class="form-label">Expected Attendees</label>
             <input type="number" class="form-control" placeholder="e.g. 150" max="<?= $capacity ?>">
           </div>
-
           <div style="border-top:1px solid var(--gray-200); padding-top:14px; margin-bottom:16px;">
             <div class="flex-between text-sm mb-6">
               <span class="text-muted">Enterprise Day Rate</span>
@@ -235,8 +257,6 @@ $eliteRate = round($baseRate * 1.75);
               <span>$<?= number_format($enterpriseRate, 2) ?></span>
             </div>
           </div>
-
-          <!-- Sign in required button -->
           <a href="#signin-modal" class="btn btn-primary btn-full mb-10 font-bold" style="padding:12px;">
             🔒 Sign In to Book Venue →
           </a>
@@ -246,42 +266,51 @@ $eliteRate = round($baseRate * 1.75);
     </div>
   </main>
 
-  <!-- Full Photo Gallery Modal -->
+  <!-- ============================================================ -->
+  <!-- FULL PHOTO GALLERY LIGHTBOX (Dynamic from DB)               -->
+  <!-- ============================================================ -->
   <div id="photo-gallery" class="gallery-lightbox">
     <div class="gallery-lightbox-content">
-      <div class="flex-between pb-12" style="border-bottom:1px solid rgba(255,255,255,0.15);">
+      <div class="flex-between pb-12" style="border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:20px;">
         <div>
           <h2 style="font-size:1.6rem; font-weight:800; color:#fff; margin:0 0 4px;"><?= e($venue['name']) ?> — Photo Gallery</h2>
-          <p style="margin:0; font-size:0.85rem; color:#94a3b8;">High-resolution interior spaces, seating configurations, lighting, and architectural specs.</p>
+          <p style="margin:0; font-size:0.85rem; color:#94a3b8;" id="photo-count-label"><?= $totalPhotos ?> photos — high-resolution interior spaces, seating configurations, lighting &amp; architecture.</p>
         </div>
         <a href="#" class="btn btn-outline btn-sm" style="color:#fff; border-color:rgba(255,255,255,0.3);">✕ Close Gallery</a>
       </div>
 
-      <div class="gallery-photo-grid">
-        <div class="gallery-card">
-          <img src="<?= e($heroImg) ?>" alt="<?= e($venue['name']) ?>">
-          <div class="gallery-card-cap"><?= e($venue['name']) ?> — Primary Space (Up to <?= number_format($capacity) ?> Guests)</div>
+      <?php if ($isAdmin): ?>
+      <!-- Admin: Add Photo Form -->
+      <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); border-radius:8px; padding:16px; margin-bottom:20px;">
+        <div class="font-bold text-sm mb-8" style="color:#94a3b8; text-transform:uppercase; letter-spacing:.05em;">🛡 Admin — Add Photo to Gallery</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+          <div style="flex:2; min-width:200px;">
+            <label style="display:block; font-size:0.78rem; color:#94a3b8; margin-bottom:4px;">Image URL *</label>
+            <input type="url" id="newPhotoUrl" class="form-control" placeholder="e.g. https://images.unsplash.com/photo-...">
+          </div>
+          <div style="flex:1; min-width:140px;">
+            <label style="display:block; font-size:0.78rem; color:#94a3b8; margin-bottom:4px;">Caption (optional)</label>
+            <input type="text" id="newPhotoCaption" class="form-control" placeholder="e.g. Grand Hall Setup">
+          </div>
+          <button onclick="addPhoto()" class="btn btn-primary btn-sm" style="white-space:nowrap; padding:8px 16px;">+ Add Photo</button>
         </div>
-        <div class="gallery-card">
-          <img src="<?= e($subImg1) ?>" alt="Main Setup">
-          <div class="gallery-card-cap">Architectural Lighting &amp; Staging Rig</div>
+        <div id="addPhotoMsg" style="margin-top:8px; font-size:0.82rem; display:none;"></div>
+      </div>
+      <?php endif; ?>
+
+      <!-- Photo Grid -->
+      <div class="gallery-photo-grid" id="galleryGrid">
+        <?php foreach ($galleryPhotos as $ph): ?>
+        <div class="gallery-card" id="photo-card-<?= $ph['id'] ?? 's-' . md5($ph['url']) ?>">
+          <img src="<?= e($ph['url']) ?>" alt="<?= e($ph['caption']) ?>" loading="lazy" onerror="this.src='<?= e($stockImages[0]) ?>'">
+          <div class="gallery-card-cap"><?= e($ph['caption']) ?></div>
+          <?php if ($isAdmin && $ph['from_db'] && $ph['id']): ?>
+          <button onclick="removePhoto(<?= (int)$ph['id'] ?>, this)"
+            style="position:absolute; top:8px; right:8px; background:rgba(220,38,38,0.9); color:#fff; border:none; border-radius:50%; width:26px; height:26px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:700;"
+            title="Remove photo">✕</button>
+          <?php endif; ?>
         </div>
-        <div class="gallery-card">
-          <img src="<?= e($subImg2) ?>" alt="Reception Area">
-          <div class="gallery-card-cap">Cocktail Reception &amp; Guest Arrival Foyer</div>
-        </div>
-        <div class="gallery-card">
-          <img src="<?= e($subImg3) ?>" alt="Breakout Space">
-          <div class="gallery-card-cap">Breakout Lounge &amp; Executive Suite</div>
-        </div>
-        <div class="gallery-card">
-          <img src="<?= e($subImg4) ?>" alt="Evening Lighting">
-          <div class="gallery-card-cap">Evening Ambiance with Programmed Colorwash</div>
-        </div>
-        <div class="gallery-card">
-          <img src="<?= e($stockImages[($venueId + 5) % count($stockImages)]) ?>" alt="Exterior View">
-          <div class="gallery-card-cap">Property Terrace &amp; Surrounding Skyline</div>
-        </div>
+        <?php endforeach; ?>
       </div>
 
       <div class="flex-between mt-24 pt-16" style="border-top:1px solid rgba(255,255,255,0.15);">
@@ -291,7 +320,7 @@ $eliteRate = round($baseRate * 1.75);
     </div>
   </div>
 
-  <!-- Sign In Required Modal (for Guest Mode) -->
+  <!-- Sign In Modal -->
   <div id="signin-modal" class="modal-backdrop">
     <div class="modal-card">
       <a href="#" class="modal-close">✕</a>
@@ -299,16 +328,89 @@ $eliteRate = round($baseRate * 1.75);
       <h3 style="font-size:1.35rem; font-weight:800; margin-bottom:8px; color:var(--gray-900);">Sign In Required</h3>
       <p class="text-sm text-muted mb-20">You are browsing in <strong>Guest Mode</strong>. You can view all venues, inspect high-resolution photo galleries, and explore catering menus freely.<br><br>To place a reservation or order catering, please sign in to your account.</p>
       <div class="flex gap-12 mb-12">
-        <a href="login-role.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
+        <a href="venues.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
         <a href="signup-role.php" class="btn btn-outline btn-full font-semibold">Create Account</a>
       </div>
       <div class="text-xs text-muted">Authorized access for Customers, Staff, Caterers &amp; Admins.</div>
     </div>
   </div>
 
-        <footer class="page-footer">
+  <footer class="page-footer">
     <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
   </footer>
+
 <script src="js/app.js"></script>
+<script>
+var VENUE_ID = <?= (int)$venueId ?>;
+var IS_ADMIN = <?= $isAdmin ? 'true' : 'false' ?>;
+
+async function addPhoto() {
+  var url = document.getElementById('newPhotoUrl').value.trim();
+  var caption = document.getElementById('newPhotoCaption').value.trim();
+  var msg = document.getElementById('addPhotoMsg');
+  if (!url) { showMsg(msg, '⚠️ Image URL is required.', '#fef3c7', '#92400e'); return; }
+
+  try {
+    var res = await fetch('api/venue-photos.php?action=add', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ venue_id: VENUE_ID, photo_url: url, caption: caption })
+    });
+    var d = await res.json();
+    if (d.success) {
+      showMsg(msg, '✓ Photo added!', '#dcfce7', '#166534');
+      document.getElementById('newPhotoUrl').value = '';
+      document.getElementById('newPhotoCaption').value = '';
+      // Inject card into grid
+      var grid = document.getElementById('galleryGrid');
+      var card = document.createElement('div');
+      card.className = 'gallery-card';
+      card.id = 'photo-card-' + d.data.id;
+      card.style.position = 'relative';
+      card.innerHTML = '<img src="' + url + '" alt="' + caption + '" style="width:100%;height:100%;object-fit:cover;">' +
+        '<div class="gallery-card-cap">' + (caption || 'Venue Photo') + '</div>' +
+        '<button onclick="removePhoto(' + d.data.id + ', this)" style="position:absolute;top:8px;right:8px;background:rgba(220,38,38,0.9);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;cursor:pointer;font-weight:700;" title="Remove photo">✕</button>';
+      grid.appendChild(card);
+      // Update count label
+      var lbl = document.getElementById('photo-count-label');
+      if (lbl) { var n = grid.querySelectorAll('.gallery-card').length; lbl.textContent = n + ' photos — high-resolution interior spaces, seating configurations, lighting & architecture.'; }
+    } else {
+      showMsg(msg, '⚠️ ' + (d.message || 'Failed to add photo.'), '#fee2e2', '#991b1b');
+    }
+  } catch(e) {
+    showMsg(msg, '⚠️ Connection error.', '#fee2e2', '#991b1b');
+  }
+}
+
+async function removePhoto(id, btn) {
+  if (!confirm('Remove this photo from the gallery?')) return;
+  btn.disabled = true;
+  try {
+    var res = await fetch('api/venue-photos.php?action=delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ id: id })
+    });
+    var d = await res.json();
+    if (d.success) {
+      var card = document.getElementById('photo-card-' + id);
+      if (card) { card.style.opacity = '0'; card.style.transition = 'opacity .3s'; setTimeout(function(){ card.remove(); }, 320); }
+    } else {
+      alert(d.message || 'Could not remove photo.');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Connection error.');
+    btn.disabled = false;
+  }
+}
+
+function showMsg(el, text, bg, color) {
+  el.style.display = 'block';
+  el.style.background = bg;
+  el.style.color = color;
+  el.style.padding = '8px 12px';
+  el.style.borderRadius = '6px';
+  el.textContent = text;
+}
+</script>
 </body>
 </html>

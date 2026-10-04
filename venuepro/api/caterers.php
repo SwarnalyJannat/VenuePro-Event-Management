@@ -72,7 +72,9 @@ switch ($action) {
         break;
 
     case 'create':
-        requireRole('admin');
+        if (!isLoggedIn() || (getCurrentUser()['role'] ?? '') !== 'admin') {
+            jsonResponse(false, 'Admin authentication required. Please log in.', null, 401);
+        }
         $input = !empty($_POST) ? $_POST : getJsonInput();
         $businessName = sanitize($input['business_name'] ?? '');
         $ownerName = sanitize($input['owner_name'] ?? ($input['name'] ?? ''));
@@ -96,7 +98,7 @@ switch ($action) {
         $hashed = password_hash($password, PASSWORD_DEFAULT);
         $avatarText = strtoupper(substr($ownerName ?: $businessName, 0, 2));
 
-        $stmtUser = $db->prepare("INSERT INTO users (name, email, password, phone, role, avatar_text, status) VALUES (?, ?, ?, ?, 'caterer', ?, 'active')");
+        $stmtUser = $db->prepare("INSERT INTO users (name, email, password_hash, phone, role, avatar_text, status) VALUES (?, ?, ?, ?, 'caterer', ?, 'active')");
         $stmtUser->execute([$ownerName ?: $businessName, $email, $hashed, $phone, $avatarText]);
         $newUserId = (int)$db->lastInsertId();
 
@@ -104,6 +106,20 @@ switch ($action) {
         $stmtProfile->execute([$newUserId, $businessName, $ownerName, $kitchenAddress, $specialization]);
 
         jsonResponse(true, 'Caterer registered and approved successfully', ['caterer_id' => $newUserId], 201);
+        break;
+
+    case 'delete':
+        if (!isLoggedIn() || (getCurrentUser()['role'] ?? '') !== 'admin') {
+            jsonResponse(false, 'Admin authentication required.', null, 401);
+        }
+        $input = !empty($_POST) ? $_POST : getJsonInput();
+        $catererId = (int)($input['caterer_id'] ?? ($_GET['caterer_id'] ?? ($_GET['id'] ?? 0)));
+        if ($catererId <= 0) {
+            jsonResponse(false, 'Valid caterer ID is required', null, 400);
+        }
+        $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
+        $db->prepare("UPDATE caterer_profiles SET approval_status = 'rejected' WHERE user_id = ?")->execute([$catererId]);
+        jsonResponse(true, 'Caterer removed successfully.');
         break;
 
     default:

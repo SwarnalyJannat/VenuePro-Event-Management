@@ -27,7 +27,22 @@ $activeEvents = (int)$stmtActive->fetchColumn();
 $stmtRecent   = $db->prepare("SELECT b.*, u.name AS customer_name, v.name AS venue_name FROM bookings b JOIN users u ON b.customer_id=u.id JOIN venues v ON b.venue_id=v.id ORDER BY b.created_at DESC LIMIT 8");
 $stmtRecent->execute();
 $recentBookings = $stmtRecent->fetchAll();
+
+// --- Dynamic Venue Occupancy (bookings per venue / 30-day window) ---
+$stmtOcc = $db->query(
+    "SELECT v.id, v.name,
+     COUNT(b.id) AS booking_count,
+     v.capacity
+     FROM venues v
+     LEFT JOIN bookings b ON v.id = b.venue_id
+       AND b.booking_status IN ('confirmed','pending')
+       AND b.event_date BETWEEN CURDATE() - INTERVAL 30 DAY AND CURDATE() + INTERVAL 30 DAY
+     WHERE v.status = 'active'
+     GROUP BY v.id ORDER BY booking_count DESC LIMIT 6"
+);
+$venueOccupancy = $stmtOcc->fetchAll();
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -70,7 +85,7 @@ $recentBookings = $stmtRecent->fetchAll();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -170,43 +185,33 @@ $recentBookings = $stmtRecent->fetchAll();
     </div>
   </div>
 
-  <!-- Venue Occupancy -->
+  <!-- Venue Occupancy — Dynamic from DB -->
   <div class="card">
     <div class="card-header">
       <div class="card-title">Venue Occupancy</div>
+      <span class="stat-badge neutral">30-Day Window</span>
     </div>
     <div style="display:flex; flex-direction:column; gap:16px;">
+      <?php if (empty($venueOccupancy)): ?>
+      <div style="text-align:center;padding:20px;color:var(--gray-400);">No venue data yet.</div>
+      <?php else: foreach ($venueOccupancy as $vo):
+        $occ = $vo['booking_count'] > 0
+          ? min(98, max(5, (int)(($vo['booking_count'] / max(1, 30)) * 100)))
+          : 5;
+        $occColor = $occ >= 80 ? '#059669' : ($occ >= 50 ? '#2563eb' : '#94a3b8');
+      ?>
       <div>
         <div class="flex-between text-sm mb-4">
-          <span class="font-semibold">Grand Ballroom</span>
-          <span class="font-bold">92%</span>
+          <span class="font-semibold"><?= e($vo['name']) ?></span>
+          <span class="font-bold"><?= $occ ?>%</span>
         </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:92%;"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:<?= $occ ?>%; background:<?= $occColor ?>;"></div></div>
       </div>
-      <div>
-        <div class="flex-between text-sm mb-4">
-          <span class="font-semibold">The Sky Terrace</span>
-          <span class="font-bold">78%</span>
-        </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:78%;"></div></div>
-      </div>
-      <div>
-        <div class="flex-between text-sm mb-4">
-          <span class="font-semibold">Riverside Suite</span>
-          <span class="font-bold">64%</span>
-        </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:64%;"></div></div>
-      </div>
-      <div>
-        <div class="flex-between text-sm mb-4">
-          <span class="font-semibold">Oakwood Gallery</span>
-          <span class="font-bold">45%</span>
-        </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:45%;"></div></div>
-      </div>
+      <?php endforeach; endif; ?>
     </div>
   </div>
 </div>
+
 
 <!-- Recent Booking Requests Table -->
 <div class="card">

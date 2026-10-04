@@ -7,12 +7,12 @@ $db = getDBConnection();
 ?>
 <?php
 $stmtS = $db->prepare(
-    "SELECT u.*, sp.staff_code, sp.department, sp.active_status,
+    "SELECT u.*, sp.staff_code, sp.department, sp.active_status, sp.assigned_venues,
      COUNT(sa.id) AS assigned_events
      FROM users u
      LEFT JOIN staff_profiles sp ON u.id = sp.user_id
      LEFT JOIN staff_assignments sa ON u.id = sa.staff_id
-     WHERE u.role = 'staff'
+     WHERE u.role = 'staff' AND u.status != 'inactive'
      GROUP BY u.id ORDER BY u.name"
 );
 $stmtS->execute();
@@ -125,7 +125,7 @@ $staffMembers = $stmtS->fetchAll();
         </nav>
         <div class="sidebar-footer">
           <a
-            href="../login-role.php"
+            href="../venues.php"
             class="nav-item"
             style="color: var(--gray-400)"
           >
@@ -206,40 +206,58 @@ $staffMembers = $stmtS->fetchAll();
                 <thead>
                   <tr>
                     <th>MEMBER</th>
-                    <!-- <th>ROLE</th> -->
                     <th>ASSIGNED VENUES</th>
                     <th>EMAIL</th>
-                    <!-- <th>STATUS</th> -->
-                    <!-- <th>ACTION</th> -->
+                    <th>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
-<?php if (empty($staffMembers)): ?>
-<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--gray-400);">No staff members found.</td></tr>
-<?php else: foreach ($staffMembers as $s):
-  $statusClass = ($s['active_status'] ?? 'active') === 'active' ? 'confirmed' : 'cancelled';
+<?php
+// Build venue ID→name lookup
+$venueMap = [];
+foreach ($db->query("SELECT id, name FROM venues ORDER BY name") as $vr) {
+    $venueMap[(int)$vr['id']] = $vr['name'];
+}
 ?>
-<tr>
+<?php if (empty($staffMembers)): ?>
+<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--gray-400);">No staff members found.</td></tr>
+<?php else: foreach ($staffMembers as $s):
+  // Resolve assigned venue IDs to names
+  $venueNames = [];
+  foreach (explode(',', $s['assigned_venues'] ?? '') as $vid) {
+      $vid = (int)trim($vid);
+      if ($vid > 0 && isset($venueMap[$vid])) {
+          $venueNames[] = $venueMap[$vid];
+      }
+  }
+?>
+<tr id="staff-row-<?= (int)$s['id'] ?>">
   <td>
     <div style="display:flex;align-items:center;gap:12px;">
       <div style="width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:700;"><?= e(strtoupper(substr($s['name'],0,2))) ?></div>
       <div>
         <div class="font-semibold"><?= e($s['name']) ?></div>
-        <div style="font-size:0.78rem;color:var(--gray-500);"><?= e($s['staff_code'] ?? 'N/A') ?></div>
+        <div style="font-size:0.78rem;color:var(--gray-500);"><?= e($s['staff_code'] ?? 'N/A') ?> · <?= e($s['department'] ?? 'Operations') ?></div>
       </div>
     </div>
   </td>
-  <td><?= ucfirst(e($s['department'] ?? 'Event Operations')) ?></td>
+  <td>
+    <?php if (empty($venueNames)): ?>
+    <span style="color:var(--gray-400);font-size:0.8rem;">—</span>
+    <?php else: foreach ($venueNames as $vn): ?>
+    <span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;padding:2px 7px;font-size:0.74rem;font-weight:600;margin:2px;"><?= e($vn) ?></span>
+    <?php endforeach; endif; ?>
+  </td>
   <td><?= e($s['email']) ?></td>
-  <!-- <td><?= (int)$s['assigned_events'] ?></td> -->
-  <td >
+  <td>
     <a href="admin-edit-staff.php?id=<?= $s['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:0.78rem;">Edit</a>
-    <!-- <button class="btn btn-sm" style="padding:4px 10px;font-size:0.78rem;background:#fee2e2;color:#dc2626;border:none;cursor:pointer;border-radius:6px;"
-      onclick="deactivateStaff(<?= $s['id'] ?>, '<?= e($s['name']) ?>')">Deactivate</button> -->
+    <button onclick="deleteStaff(<?= (int)$s['id'] ?>, '<?= e(addslashes($s['name'])) ?>')" class="btn btn-sm" style="padding:4px 10px;font-size:0.78rem;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;cursor:pointer;border-radius:6px;margin-left:4px;">Remove</button>
   </td>
 </tr>
 <?php endforeach; endif; ?>
 </tbody>
+
+
               </table>
             </div>
           </div>
@@ -250,187 +268,35 @@ $staffMembers = $stmtS->fetchAll();
       </div>
     </div>
 
-    <!-- Edit Staff Modal -->
-    <div
-      id="edit-staff-modal"
-      style="
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(15, 23, 42, 0.6);
-        z-index: 9999;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-      "
-    >
-      <div
-        class="card"
-        style="
-          max-width: 520px;
-          width: 100%;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: var(--shadow-lg);
-          margin: 0;
-        "
-      >
-        <div class="flex-between mb-16">
-          <h3 style="margin: 0">Edit Staff Member</h3>
-          <button
-            type="button"
-            onclick="closeEditModal()"
-            style="
-              background: none;
-              border: none;
-              font-size: 20px;
-              cursor: pointer;
-              color: var(--gray-500);
-            "
-          >
-            &times;
-          </button>
-        </div>
-        <form id="edit-staff-form" onsubmit="saveStaffEdit(event)">
-          <div class="form-group mb-16">
-            <label class="form-label">Full Name</label>
-            <input type="text" id="edit-name" class="form-control" required />
-          </div>
-          <div class="form-group mb-16">
-            <label class="form-label">Role Designation</label>
-            <select id="edit-role" class="form-control">
-              <option value="Lead Coordinator">Lead Coordinator</option>
-              <option value="Chief AV Engineer">Chief AV Engineer</option>
-              <option value="Logistics Coordinator">
-                Logistics Coordinator
-              </option>
-              <option value="Audio / Visual Senior Engineer">
-                Audio / Visual Senior Engineer
-              </option>
-              <option value="On-Site Security Lead">
-                On-Site Security Lead
-              </option>
-              <option value="Operations Assistant">Operations Assistant</option>
-            </select>
-          </div>
-          <div class="form-group mb-16">
-            <label class="form-label">Corporate Email</label>
-            <input type="email" id="edit-email" class="form-control" required />
-          </div>
-          <div class="form-group mb-16">
-            <label class="form-label">Assigned Venues</label>
-            <input
-              type="text"
-              id="edit-venue"
-              class="form-control"
-              placeholder="e.g. Grand Ballroom"
-            />
-          </div>
-          <div class="form-group mb-20">
-            <label class="form-label">Status</label>
-            <select id="edit-status" class="form-control">
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="ON LEAVE">ON LEAVE</option>
-              <option value="INACTIVE">INACTIVE</option>
-            </select>
-          </div>
-          <div class="flex gap-12">
-            <button
-              type="button"
-              class="btn btn-ghost"
-              style="flex: 1"
-              onclick="closeEditModal()"
-            >
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" style="flex: 2">
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <script>
-      let activeRow = null;
-
-      function editStaff(button) {
-        activeRow = button.closest("tr");
-        const cells = activeRow.getElementsByTagName("td");
-
-        const name = cells[0].innerText.trim();
-        const role = cells[1].innerText.trim();
-        const email = cells[2].innerText.trim();
-        const venue = cells[3].innerText.trim();
-        const status = cells[4].innerText.trim();
-
-        document.getElementById("edit-name").value = name;
-        document.getElementById("edit-role").value = role;
-        document.getElementById("edit-email").value = email;
-        document.getElementById("edit-venue").value = venue;
-        document.getElementById("edit-status").value = status.includes("ACTIVE")
-          ? "ACTIVE"
-          : status.includes("LEAVE")
-            ? "ON LEAVE"
-            : "INACTIVE";
-
-        const modal = document.getElementById("edit-staff-modal");
-        modal.style.display = "flex";
-      }
-
-      function closeEditModal() {
-        document.getElementById("edit-staff-modal").style.display = "none";
-      }
-
-      function saveStaffEdit(e) {
-        e.preventDefault();
-        if (!activeRow) return;
-
-        const cells = activeRow.getElementsByTagName("td");
-        const newName = document.getElementById("edit-name").value;
-        const newRole = document.getElementById("edit-role").value;
-        const newEmail = document.getElementById("edit-email").value;
-        const newVenue = document.getElementById("edit-venue").value;
-        const newStatus = document.getElementById("edit-status").value;
-
-        cells[0].innerHTML = `<div class="font-bold">${newName}</div>`;
-        cells[1].innerText = newRole;
-        cells[2].innerText = newEmail;
-        cells[3].innerText = newVenue;
-
-        if (newStatus === "ACTIVE") {
-          cells[4].innerHTML = `<span class="pill pill-confirmed">ACTIVE</span>`;
-        } else if (newStatus === "ON LEAVE") {
-          cells[4].innerHTML = `<span class="pill pill-pending">ON LEAVE</span>`;
-        } else {
-          cells[4].innerHTML = `<span class="pill pill-cancelled">INACTIVE</span>`;
-        }
-
-        closeEditModal();
-        showToast("Staff member details updated successfully.");
-      }
-
-      function showToast(msg) {
-        let toast = document.getElementById("staff-toast");
-        if (!toast) {
-          toast = document.createElement("div");
-          toast.id = "staff-toast";
-          toast.style.cssText =
-            "position:fixed; bottom:24px; right:24px; background:#166534; color:#fff; padding:12px 20px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:10000; font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px;";
-          document.body.appendChild(toast);
-        }
-        toast.innerHTML = "✓ " + msg;
-        toast.style.display = "flex";
-        setTimeout(() => {
-          toast.style.display = "none";
-        }, 3000);
-      }
-    </script>
   <script src="../js/app.js"></script>
 <script>
-async function deactivateStaff(userId, name) {
-  if (!confirm('Deactivate staff member: ' + name + '?')) return;
-  alert('Staff deactivation feature coming soon. User ID: ' + userId);
+async function deleteStaff(id, name) {
+  if (!confirm('Remove staff member "' + name + '"? This cannot be undone.')) return;
+  var row = document.getElementById('staff-row-' + id);
+  try {
+    var res = await fetch('../api/staff.php?action=delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ id: id })
+    });
+    var d = await res.json();
+    if (d.success) {
+      if (row) {
+        row.style.opacity = '0';
+        row.style.transition = 'opacity .3s';
+        setTimeout(function() { row.remove(); }, 320);
+      }
+      var toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#166534;color:#fff;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,.2);';
+      toast.textContent = '✓ ' + name + ' removed successfully.';
+      document.body.appendChild(toast);
+      setTimeout(function() { toast.remove(); }, 3000);
+    } else {
+      alert(d.message || 'Failed to remove staff member.');
+    }
+  } catch(e) {
+    alert('Connection error. Please try again.');
+  }
 }
 </script>
 </body>

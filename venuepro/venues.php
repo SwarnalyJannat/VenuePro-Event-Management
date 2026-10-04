@@ -67,7 +67,7 @@ $db = getDBConnection();
     <nav class="flex-center gap-20">
       <a href="venues.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Venues</a>
       <a href="packages.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Catering Packages</a>
-      <a href="login-role.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
+      <a href="venues.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
       <a href="signup-role.php" class="btn btn-primary btn-sm" style="font-weight:600;">Sign Up</a>
     </nav>
   </header>
@@ -99,6 +99,14 @@ $db = getDBConnection();
         $stmtVenues = $db->query("SELECT * FROM venues WHERE status = 'active' ORDER BY $orderClause");
     }
     $venues = $stmtVenues ? $stmtVenues->fetchAll() : [];
+
+    // Photo counts per venue for dynamic "View Photos" badge
+    $photoCountMap = [];
+    if (!empty($venues)) {
+        $ids = implode(',', array_map('intval', array_column($venues, 'id')));
+        $pcRows = $db->query("SELECT venue_id, COUNT(*) AS cnt FROM venue_photos WHERE venue_id IN ($ids) GROUP BY venue_id");
+        if ($pcRows) foreach ($pcRows as $pc) $photoCountMap[(int)$pc['venue_id']] = (int)$pc['cnt'];
+    }
     ?>
 
     <div class="flex-between mb-24">
@@ -139,7 +147,11 @@ $db = getDBConnection();
       </div>
       <?php else:
       foreach ($venues as $idx => $v):
-        $img = !empty($v['image_url']) ? $v['image_url'] : $stockImages[$idx % count($stockImages)];
+        // Fix image path: strip leading ../ added by admin subdir forms; treat default placeholder as empty
+        $rawImg = $v['image_url'] ?? '';
+        if (str_starts_with($rawImg, '../')) $rawImg = substr($rawImg, 3);
+        $isDefault = (empty($rawImg) || str_contains($rawImg, 'venue-default'));
+        $img = $isDefault ? $stockImages[$idx % count($stockImages)] : $rawImg;
         $badge = !empty($v['badge']) ? $v['badge'] : strtoupper($v['venue_type'] ?? 'VENUE');
       ?>
       <div class="venue-card">
@@ -158,7 +170,11 @@ $db = getDBConnection();
               <span class="text-xs text-success">✓ Verified Property</span>
             </div>
             <div class="flex gap-8">
-              <a href="venue-details.php?id=<?= $v['id'] ?>#photo-gallery" class="btn btn-outline btn-sm">View Photos (14+)</a>
+              <?php
+              $dbCount = (int)($photoCountMap[(int)$v['id']] ?? 0);
+              $photoLabel = $dbCount > 0 ? ($dbCount + 1) . '+' : '6+';
+              ?>
+              <a href="venue-details.php?id=<?= $v['id'] ?>#photo-gallery" class="btn btn-outline btn-sm">View Photos (<?= $photoLabel ?>)</a>
               <a href="#signin-modal" class="btn btn-primary btn-sm">🔒 Book Now</a>
             </div>
           </div>
@@ -176,7 +192,7 @@ $db = getDBConnection();
       <h3 style="font-size:1.35rem; font-weight:800; margin-bottom:8px; color:var(--gray-900);">Sign In Required</h3>
       <p class="text-sm text-muted mb-20">You are browsing in <strong>Guest Mode</strong>. You can view all venues, inspect high-resolution photo galleries, and explore catering menus freely.<br><br>To place a reservation or order catering, please sign in to your account.</p>
       <div class="flex gap-12 mb-12">
-        <a href="login-role.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
+        <a href="venues.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
         <a href="signup-role.php" class="btn btn-outline btn-full font-semibold">Create Account</a>
       </div>
       <div class="text-xs text-muted">Authorized access for Customers, Staff, Caterers &amp; Admins.</div>

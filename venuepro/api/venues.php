@@ -135,6 +135,17 @@ switch ($action) {
         jsonResponse(true, 'Venue updated successfully');
         break;
 
+    case 'delete':
+        requireRole('admin');
+        $input = !empty($_POST) ? $_POST : getJsonInput();
+        $id = (int)($input['id'] ?? ($_GET['id'] ?? 0));
+        if ($id <= 0) {
+            jsonResponse(false, 'Valid venue ID is required', null, 400);
+        }
+        $db->prepare("UPDATE venues SET status = 'inactive' WHERE id = ?")->execute([$id]);
+        jsonResponse(true, 'Venue removed successfully.');
+        break;
+
     default:
         jsonResponse(false, 'Invalid venue action', null, 400);
         break;

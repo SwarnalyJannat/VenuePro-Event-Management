@@ -325,7 +325,7 @@ foreach ($allOrders as $ord) {
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Log out
         </a>
@@ -663,14 +663,40 @@ foreach ($allOrders as $ord) {
       updateSelectorBadge(activeOrderKey);
     }
 
-    function decidePackage(decision) {
-      orderStore[activeOrderKey].packageDecision = decision;
-      renderPackageDecision();
+    async function decidePackage(decision) {
+      const order = orderStore[activeOrderKey];
+      if (!order) return;
+      const orderId = order.orderDbId;
+      try {
+        const res = await fetch('../api/caterer-orders.php?action=decide_package', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ order_id: orderId, decision: decision, reason: '' })
+        });
+        const d = await res.json();
+        if (d.success) {
+          order.packageDecision = decision;
+          renderPackageDecision();
+        } else {
+          alert(d.message || 'Could not save decision.');
+        }
+      } catch(e) { alert('Connection error. Please try again.'); }
     }
 
-    function savePkgRejectReason() {
-      const reason = document.getElementById('pkg-reject-reason').value;
-      alert('Rejection note recorded: "' + (reason || 'No additional comment') + '"');
+    async function savePkgRejectReason() {
+      const order = orderStore[activeOrderKey];
+      if (!order) return;
+      const reason = document.getElementById('pkg-reject-reason') ? document.getElementById('pkg-reject-reason').value : '';
+      try {
+        const res = await fetch('../api/caterer-orders.php?action=decide_package', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ order_id: order.orderDbId, decision: 'Rejected', reason: reason })
+        });
+        const d = await res.json();
+        if (d.success) {
+          const fb = document.getElementById('pkg-feedback-box');
+          if (fb) { fb.innerHTML = '✕ <strong>Rejection reason saved.</strong>'; }
+        } else { alert(d.message || 'Could not save rejection reason.'); }
+      } catch(e) { alert('Connection error.'); }
     }
 
     // -------------------------------------------------------------
@@ -734,24 +760,47 @@ foreach ($allOrders as $ord) {
       updateSingularFinancials();
     }
 
-    function decideSingularItem(idx, decision) {
+    async function decideSingularItem(idx, decision) {
       const order = orderStore[activeOrderKey];
-      if (order && order.singularItems && order.singularItems[idx]) {
-        order.singularItems[idx].status = decision;
-        renderSingularItems();
-        updateSelectorBadge(activeOrderKey);
-      }
+      if (!order || !order.singularItems || !order.singularItems[idx]) return;
+      const item = order.singularItems[idx];
+      const itemId = item.id;
+      try {
+        const res = await fetch('../api/caterer-orders.php?action=decide_singular_item', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ item_id: itemId, decision: decision })
+        });
+        const d = await res.json();
+        if (d.success) {
+          item.status = decision;
+          renderSingularItems();
+          updateSelectorBadge(activeOrderKey);
+        } else {
+          alert(d.message || 'Could not save item decision.');
+        }
+      } catch(e) { alert('Connection error. Please try again.'); }
     }
 
-    function decideAllSingularItems(decision) {
+    async function decideAllSingularItems(decision) {
       const order = orderStore[activeOrderKey];
-      if (order && order.singularItems) {
-        order.singularItems.forEach(item => {
-          item.status = decision;
+      if (!order) return;
+      const bookingId = order.bookingId;
+      try {
+        const res = await fetch('../api/caterer-orders.php?action=decide_all_singular_items', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ booking_id: bookingId, decision: decision })
         });
-        renderSingularItems();
-        updateSelectorBadge(activeOrderKey);
-      }
+        const d = await res.json();
+        if (d.success) {
+          if (order.singularItems) {
+            order.singularItems.forEach(function(item) { item.status = decision; });
+          }
+          renderSingularItems();
+          updateSelectorBadge(activeOrderKey);
+        } else {
+          alert(d.message || 'Could not update all items.');
+        }
+      } catch(e) { alert('Connection error. Please try again.'); }
     }
 
     function updateSingularFinancials() {

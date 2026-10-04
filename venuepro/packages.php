@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/helpers.php';
@@ -91,7 +91,7 @@ $db = getDBConnection();
     <nav class="flex-center gap-20">
       <a href="venues.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Venues</a>
       <a href="packages.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Catering Packages</a>
-      <a href="login-role.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
+      <a href="venues.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
       <a href="signup-role.php" class="btn btn-primary btn-sm" style="font-weight:600;">Sign Up</a>
     </nav>
   </header>
@@ -220,7 +220,7 @@ $db = getDBConnection();
       <h3 style="font-size:1.35rem; font-weight:800; margin-bottom:8px; color:var(--gray-900);">Sign In Required</h3>
       <p class="text-sm text-muted mb-20">You are browsing in <strong>Guest Mode</strong>. You can view all venues, inspect high-resolution photo galleries, and explore catering menus freely.<br><br>To place a reservation or order catering, please sign in to your account.</p>
       <div class="flex gap-12 mb-12">
-        <a href="login-role.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
+        <a href="venues.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
         <a href="signup-role.php" class="btn btn-outline btn-full font-semibold">Create Account</a>
       </div>
       <div class="text-xs text-muted">Authorized access for Customers, Staff, Caterers &amp; Admins.</div>

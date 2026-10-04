@@ -4,6 +4,18 @@
  * dynamic forms, booking workflows, caterer approvals, and live data.
  */
 
+// Auto-load form-validation.js (F-1: required field red border/label on submit)
+(function () {
+  var s = document.createElement('script');
+  var base = (window.location.pathname.includes('/customer/') ||
+              window.location.pathname.includes('/caterer/') ||
+              window.location.pathname.includes('/staff/') ||
+              window.location.pathname.includes('/admin/'))
+             ? '../js/form-validation.js' : 'js/form-validation.js';
+  s.src = base;
+  document.head.appendChild(s);
+})();
+
 (function () {
   'use strict';
 
@@ -13,6 +25,7 @@
                       window.location.pathname.includes('/staff/') ||
                       window.location.pathname.includes('/admin/');
   const API_BASE = isSubfolder ? '../api/' : 'api/';
+
 
   // Helper: Display Alert Banner
   function showAlert(formElement, message, isSuccess = false) {

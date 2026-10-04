@@ -189,7 +189,7 @@ $checklistItems = $defaultChecklist;
         </nav>
         <div class="sidebar-footer">
           <a
-            href="../login-role.php"
+            href="../venues.php"
             class="nav-item"
             style="color: var(--gray-400)"
           >
@@ -483,20 +483,17 @@ $checklistItems = $defaultChecklist;
               
               
               <div class="flex gap-8 mt-8">
-                <label
-                  for="confirm-check"
-                  class="btn btn-ghost"
-                  style="flex: 1; cursor: pointer"
-                  >Cancel</label
-                >
-                <a
-                  href="staff-dashboard.php"
+                <button type="button" id="cancelReportBtn"
+                  class="btn btn-ghost" style="flex:1;">Cancel</button>
+                <button type="button" id="submitReportBtn"
                   class="btn btn-primary"
-                  style="flex: 2; background: #16a34a; border-color: #16a34a"
-                  >Confirm completion &amp; Submit Report →</a
-                >
+                  style="flex:2; background:#16a34a; border-color:#16a34a;">
+                  Confirm completion &amp; Submit Report →
+                </button>
               </div>
+              <div id="reportAlert" style="display:none; margin-top:10px; padding:10px; border-radius:6px; font-size:0.85rem;"></div>
             </div>
+
           </div>
         </main>
 
@@ -726,37 +723,78 @@ $checklistItems = $defaultChecklist;
         selectVenue(1);
       });
     </script>
-  <script src="../js/app.js"></script>
+<script src="../js/app.js"></script>
 <script>
-// Restore checked state from localStorage (key by assignment)
-var setupKey = 'vp_setup_<?= $setupAssignment ? $setupAssignment["id"] : "0" ?>';
-var saved = JSON.parse(localStorage.getItem(setupKey) || '{}');
-document.querySelectorAll('.task-item input[type="checkbox"]').forEach(function(cb) {
-  if (saved[cb.id]) { cb.checked = true; var lbl = document.querySelector('label[for="'+cb.id+'"]'); if(lbl) lbl.style.opacity='0.55'; }
-  cb.addEventListener('change', function() {
-    saved[this.id] = this.checked;
-    localStorage.setItem(setupKey, JSON.stringify(saved));
-  });
-});
+// ----- Submit Report -----
+var submitBtn = document.getElementById('submitReportBtn');
+var cancelBtn = document.getElementById('cancelReportBtn');
+var reportAlert = document.getElementById('reportAlert');
 
-// "Mark Setup Complete" button
-var completeBtn = document.querySelector('.btn-complete-setup, button.btn-primary');
-if (completeBtn && completeBtn.textContent.toLowerCase().includes('complete')) {
-  completeBtn.addEventListener('click', async function(e) {
-    e.preventDefault();
-    var done = {};
-    document.querySelectorAll('.task-item input[type="checkbox"]').forEach(function(cb){ done[cb.id]=cb.checked; });
-    var allChecked = Object.values(done).every(Boolean);
-    if (!allChecked && !confirm('Not all tasks completed. Mark setup complete anyway?')) return;
-    var res = await fetch('../api/staff.php?action=complete_setup', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({assignment_id: <?= $setupAssignment ? $setupAssignment['id'] : 0 ?>, checklist: done})
-    });
-    var d = await res.json();
-    if (d.success) { alert('Setup marked complete!'); window.location.href='staff-dashboard.php'; }
-    else alert(d.message || 'Could not update setup status.');
+if (submitBtn) {
+  submitBtn.addEventListener('click', async function() {
+    var tasks = venueData[currentVenueId] ? venueData[currentVenueId].tasks : [];
+    var total = tasks.length;
+    var completed = tasks.filter(function(t) { return t.checked; }).length;
+    var pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    if (pct < 100 && !confirm('Only ' + pct + '% of tasks completed. Submit report anyway?')) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+    reportAlert.style.display = 'none';
+
+    var payload = {
+      assignment_id: <?= $setupAssignment ? (int)$setupAssignment['id'] : 0 ?>,
+      completion_pct: pct,
+      venue_name: '<?= $setupAssignment ? addslashes(e($setupAssignment['venue_name'])) : '' ?>',
+      staff_name: '<?= addslashes(e($currentUser['name'] ?? '')) ?>',
+      checklist: tasks.reduce(function(acc, t, i) { acc['task-' + i] = t.checked; return acc; }, {})
+    };
+
+    try {
+      var res = await fetch('../api/staff.php?action=submit_report', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      var d = await res.json();
+      if (d.success) {
+        reportAlert.style.display = 'block';
+        reportAlert.style.background = '#dcfce7';
+        reportAlert.style.color = '#166534';
+        reportAlert.textContent = '✓ Report submitted successfully! Completion: ' + pct + '%. Redirecting...';
+        setTimeout(function() { window.location.href = 'staff-dashboard.php'; }, 1500);
+      } else {
+        reportAlert.style.display = 'block';
+        reportAlert.style.background = '#fee2e2';
+        reportAlert.style.color = '#991b1b';
+        reportAlert.textContent = '⚠️ ' + (d.message || 'Could not submit report.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Confirm completion & Submit Report →';
+      }
+    } catch(e) {
+      reportAlert.style.display = 'block';
+      reportAlert.style.background = '#fee2e2';
+      reportAlert.style.color = '#991b1b';
+      reportAlert.textContent = '⚠️ Connection error. Please try again.';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Confirm completion & Submit Report →';
+    }
+  });
+}
+
+// ----- Cancel: reset all checkboxes & progress bar -----
+if (cancelBtn) {
+  cancelBtn.addEventListener('click', function() {
+    if (!confirm('Reset all task checkboxes? Unsaved progress will be lost.')) return;
+    if (venueData[currentVenueId]) {
+      venueData[currentVenueId].tasks.forEach(function(t) { t.checked = false; });
+      renderTasks();
+    }
+    if (reportAlert) { reportAlert.style.display = 'none'; }
   });
 }
 </script>
 </body>
 </html>
+

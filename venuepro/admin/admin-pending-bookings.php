@@ -61,7 +61,7 @@ $allBookings = $stmtAll->fetchAll();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -76,7 +76,8 @@ $allBookings = $stmtAll->fetchAll();
           <span class="topbar-search-icon">🔍</span>
           <input type="text" placeholder="Search bookings, venues, staff, caterers...">
         </div>
-        <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
+        <div class="topbar-actions">
+          <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
           </a>
@@ -87,9 +88,10 @@ $allBookings = $stmtAll->fetchAll();
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
           </div>
-        </div>
+        </div><!-- /topbar-actions -->
       </header>
       <main class="page-body">
+
 <div class="flex-between mb-24">
   <div>
     <h1>Pending Booking Requests</h1>

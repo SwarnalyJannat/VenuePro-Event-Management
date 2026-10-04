@@ -56,6 +56,23 @@ $stmtTxn = $db->query(
      ORDER BY b.created_at DESC LIMIT 20"
 );
 $transactions = $stmtTxn->fetchAll();
+
+// Booking summary breakdown for "Generated Bookings Summary" card
+$bkSummary = $db->query("
+    SELECT
+      COUNT(*) AS total,
+      SUM(booking_status IN ('confirmed','completed')) AS confirmed,
+      SUM(booking_status = 'pending') AS pending,
+      SUM(booking_status IN ('cancelled','rejected')) AS cancelled
+    FROM bookings
+")->fetch();
+$bkTotal     = (int)($bkSummary['total']     ?? 0);
+$bkConfirmed = (int)($bkSummary['confirmed'] ?? 0);
+$bkPending   = (int)($bkSummary['pending']   ?? 0);
+$bkCancelled = (int)($bkSummary['cancelled'] ?? 0);
+
+// Max booking count for bar widths
+$maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -116,7 +133,7 @@ $transactions = $stmtTxn->fetchAll();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../login-role.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -303,30 +320,35 @@ $transactions = $stmtTxn->fetchAll();
   </div>
   <div class="grid-4 gap-16 mb-16">
     <div style="padding:16px; background:var(--gray-50); border-radius:var(--radius-sm); text-align:center;">
-      <div style="font-size:1.5rem; font-weight:800; color:var(--primary);">347</div>
+      <div style="font-size:1.5rem; font-weight:800; color:var(--primary);"><?= $bkTotal ?></div>
       <div class="text-xs text-muted">Total Generated</div>
     </div>
     <div style="padding:16px; background:#dcfce7; border-radius:var(--radius-sm); text-align:center;">
-      <div style="font-size:1.5rem; font-weight:800; color:#16a34a;">289</div>
+      <div style="font-size:1.5rem; font-weight:800; color:#16a34a;"><?= $bkConfirmed ?></div>
       <div class="text-xs text-muted">Confirmed</div>
     </div>
     <div style="padding:16px; background:#fef9c3; border-radius:var(--radius-sm); text-align:center;">
-      <div style="font-size:1.5rem; font-weight:800; color:#d97706;">38</div>
+      <div style="font-size:1.5rem; font-weight:800; color:#d97706;"><?= $bkPending ?></div>
       <div class="text-xs text-muted">Pending Approval</div>
     </div>
     <div style="padding:16px; background:#fee2e2; border-radius:var(--radius-sm); text-align:center;">
-      <div style="font-size:1.5rem; font-weight:800; color:#dc2626;">20</div>
+      <div style="font-size:1.5rem; font-weight:800; color:#dc2626;"><?= $bkCancelled ?></div>
       <div class="text-xs text-muted">Rejected / Cancelled</div>
     </div>
   </div>
   <!-- Top venues bar visual -->
   <div style="margin-top:8px;">
-    <div class="flex-between text-sm mb-4"><span class="font-semibold">Grand Emerald Ballroom</span><span>142 bookings — $134,800</span></div>
-    <div class="progress-bar mb-12"><div class="progress-fill" style="width:82%;"></div></div>
-    <div class="flex-between text-sm mb-4"><span class="font-semibold">Skyline Vista Lounge</span><span>98 bookings — $68,200</span></div>
-    <div class="progress-bar mb-12"><div class="progress-fill" style="width:56%;"></div></div>
-    <div class="flex-between text-sm mb-4"><span class="font-semibold">Crystal Tech Pavilion</span><span>64 bookings — $32,500</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:37%;"></div></div>
+    <?php if (empty($topVenues)): ?>
+    <div class="text-sm text-muted" style="text-align:center; padding:16px;">No venue booking data yet.</div>
+    <?php else: foreach ($topVenues as $tv):
+      $barPct = $maxBkCount > 0 ? round(($tv['bk_count'] / $maxBkCount) * 100) : 0;
+    ?>
+    <div class="flex-between text-sm mb-4">
+      <span class="font-semibold"><?= e($tv['name']) ?></span>
+      <span><?= (int)$tv['bk_count'] ?> bookings — $<?= number_format((float)$tv['revenue'], 0) ?></span>
+    </div>
+    <div class="progress-bar mb-12"><div class="progress-fill" style="width:<?= $barPct ?>%;"></div></div>
+    <?php endforeach; endif; ?>
   </div>
 </div>
 

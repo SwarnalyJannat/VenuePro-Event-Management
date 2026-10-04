@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/helpers.php';
@@ -67,7 +67,7 @@ $db = getDBConnection();
       </div>
       <div class="flex gap-10">
         <a href="index.php" class="btn btn-outline">Guest Home →</a>
-        <a href="login-role.php" class="btn btn-primary">Role Sign In →</a>
+        <a href="venues.php" class="btn btn-primary">Role Sign In →</a>
       </div>
     </header>
 
@@ -102,7 +102,7 @@ $db = getDBConnection();
           <div class="page-link-name">packages.html <span class="pill pill-confirmed" style="font-size:0.6rem;">GUEST PACKAGES</span></div>
           <div class="page-link-desc">Browse 4 catering package tiers (Gold, Platinum, Custom Signature, Bespoke); ordering prompts sign-in.</div>
         </a>
-        <a href="login-role.php" class="page-link-card">
+        <a href="venues.php" class="page-link-card">
           <div class="page-link-name">login-role.html</div>
           <div class="page-link-desc">Universal authentication gateway routing users to their designated role portal.</div>
         </a>
