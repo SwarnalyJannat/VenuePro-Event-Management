@@ -70,7 +70,7 @@ $db = getDBConnection();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../logout.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -90,13 +90,13 @@ $db = getDBConnection();
             <span class="badge">8</span>
             🔔
           </a>
-          <div class="topbar-user">
+          <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
       <main class="page-body">
@@ -144,13 +144,13 @@ $db = getDBConnection();
       <div class="form-group">
         <label class="form-label">Password *</label>
         <div class="password-wrap">
-          <input type="password" name="password" class="form-control" placeholder="Create caterer login password" required>
+          <input type="password" name="password" class="form-control" placeholder="e.g. •••••••• (min. 6 characters)" required>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Confirm Password *</label>
         <div class="password-wrap">
-          <input type="password" name="confirm_password" class="form-control" placeholder="Confirm password" required>
+          <input type="password" name="confirm_password" class="form-control" placeholder="e.g. •••••••• (re-enter password)" required>
         </div>
       </div>
     </div>
@@ -180,55 +180,58 @@ $db = getDBConnection();
       <input type="text" name="tax_id" class="form-control" placeholder="e.g. TAX-98420-VN" required>
     </div>
 
-    <div class="section-divider">Verification Documents</div>
+    <div class="section-divider">Verification Documents *</div>
+    <p class="text-sm text-muted mb-12">Compliance verification documents must be submitted prior to onboarding. Owner CV and National ID (NID) scan are required.</p>
     <div class="grid-2 gap-20 mb-16">
       <div>
         <label class="form-label">Owner / Head Chef CV *</label>
-        <div class="upload-zone" id="zone-cat-cv">
-          <label for="cat-cv">
+        <div class="upload-zone" id="zone-cat-cv" onclick="document.getElementById('cat-cv').click()">
+          <div id="preview-cat-cv">
             <span class="upload-icon">📄</span>
             <span class="upload-text font-semibold">Upload CV / Portfolio</span>
             <span class="upload-hint">PDF, DOC — max 10 MB</span>
-          </label>
-          <input id="cat-cv" type="file" accept=".pdf,.doc,.docx" onchange="handleDocUpload(this, 'zone-cat-cv')">
+          </div>
         </div>
+        <input id="cat-cv" type="file" accept=".pdf,.doc,.docx" style="display:none;" onchange="handleDocUpload(this, 'zone-cat-cv', 'preview-cat-cv')">
       </div>
       <div>
         <label class="form-label">National ID (NID) Scan — Owner *</label>
-        <div class="upload-zone" id="zone-cat-nid">
-          <label for="cat-nid">
+        <div class="upload-zone" id="zone-cat-nid" onclick="document.getElementById('cat-nid').click()">
+          <div id="preview-cat-nid">
             <span class="upload-icon">🪪</span>
             <span class="upload-text font-semibold">Upload NID Document</span>
             <span class="upload-hint">JPG, PNG, PDF — both sides</span>
-          </label>
-          <input id="cat-nid" type="file" accept=".jpg,.jpeg,.png,.pdf" onchange="handleDocUpload(this, 'zone-cat-nid')">
+          </div>
         </div>
+        <input id="cat-nid" type="file" accept=".jpg,.jpeg,.png,.pdf" style="display:none;" onchange="handleDocUpload(this, 'zone-cat-nid', 'preview-cat-nid')">
       </div>
     </div>
     <div class="grid-2 gap-20 mb-24">
       <div>
         <label class="form-label">Food Safety / Health Dept. Certificate</label>
-        <div class="upload-zone" id="zone-cat-cert">
-          <label for="cat-cert">
+        <div class="upload-zone" id="zone-cat-cert" onclick="document.getElementById('cat-cert').click()">
+          <div id="preview-cat-cert">
             <span class="upload-icon">📋</span>
             <span class="upload-text font-semibold">Upload Health Certificate</span>
             <span class="upload-hint">PDF, JPG — max 5 MB</span>
-          </label>
-          <input id="cat-cert" type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDocUpload(this, 'zone-cat-cert')">
+          </div>
         </div>
+        <input id="cat-cert" type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="handleDocUpload(this, 'zone-cat-cert', 'preview-cat-cert')">
       </div>
       <div>
         <label class="form-label">Commercial Kitchen License</label>
-        <div class="upload-zone" id="zone-cat-lic">
-          <label for="cat-lic">
+        <div class="upload-zone" id="zone-cat-lic" onclick="document.getElementById('cat-lic').click()">
+          <div id="preview-cat-lic">
             <span class="upload-icon">🏛️</span>
             <span class="upload-text font-semibold">Upload Kitchen License</span>
             <span class="upload-hint">PDF, JPG — max 5 MB</span>
-          </label>
-          <input id="cat-lic" type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDocUpload(this, 'zone-cat-lic')">
+          </div>
         </div>
+        <input id="cat-lic" type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="handleDocUpload(this, 'zone-cat-lic', 'preview-cat-lic')">
       </div>
     </div>
+
+    <div id="catererAlertBottom" style="display:none; padding:12px 16px; border-radius:6px; margin-bottom:16px; font-size:0.9rem;"></div>
 
     <div class="flex gap-12">
       <a href="admin-catering-management.php" class="btn btn-ghost" style="flex:1;">Cancel</a>
@@ -245,36 +248,36 @@ $db = getDBConnection();
   </div>
 <script src="../js/app.js"></script>
 <script>
-function handleDocUpload(input, zoneId) {
+var uploadedFiles = {};
+
+function handleDocUpload(input, zoneId, previewId) {
   var zone = document.getElementById(zoneId);
+  var preview = document.getElementById(previewId) || zone;
   if (!zone || !input.files || !input.files[0]) return;
   var file = input.files[0];
+  uploadedFiles[zoneId] = file;
 
-  // If image, show image thumbnail preview
+  zone.style.borderColor = 'var(--success)';
+  zone.style.background = '#f0fdf4';
+
   if (file.type.startsWith('image/')) {
     var reader = new FileReader();
     reader.onload = function(e) {
-      zone.innerHTML = '<div style="padding:12px; text-align:center;">' +
-        '<img src="' + e.target.result + '" style="max-height:100px; max-width:100%; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin-bottom:8px; display:inline-block;" alt="Selected Document">' +
+      preview.innerHTML = '<div style="padding:12px; text-align:center;">' +
+        '<img src="' + e.target.result + '" style="max-height:90px; max-width:100%; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin-bottom:8px; display:inline-block;" alt="Selected Document">' +
         '<div style="font-size:13px; font-weight:600; color:var(--success);">✓ ' + escapeHtml(file.name) + ' (' + Math.round(file.size / 1024) + ' KB)</div>' +
         '<div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Click to change</div>' +
       '</div>';
-      zone.style.borderColor = 'var(--success)';
-      zone.style.background = '#f0fdf4';
-      zone.onclick = function() { input.click(); };
     };
     reader.readAsDataURL(file);
   } else {
     // Non-image document (PDF, DOC)
-    zone.innerHTML = '<div style="padding:16px; text-align:center;">' +
+    preview.innerHTML = '<div style="padding:16px; text-align:center;">' +
       '<div style="font-size:32px; margin-bottom:6px;">📄</div>' +
       '<div style="font-size:13px; font-weight:600; color:var(--navy-900);">✓ ' + escapeHtml(file.name) + '</div>' +
       '<div style="font-size:12px; color:var(--success); font-weight:500; margin-top:2px;">Document verified & ready (' + Math.round(file.size / 1024) + ' KB)</div>' +
       '<div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Click to change</div>' +
     '</div>';
-    zone.style.borderColor = 'var(--success)';
-    zone.style.background = '#f0fdf4';
-    zone.onclick = function() { input.click(); };
   }
 }
 
@@ -287,19 +290,63 @@ function escapeHtml(text) {
 document.addEventListener('DOMContentLoaded', function() {
   var form = document.getElementById('addCatererForm');
   var regBtn = document.getElementById('btnRegisterCaterer');
-  var alertBox = document.getElementById('catererAlert');
+  var alertBoxTop = document.getElementById('catererAlert');
+  var alertBoxBottom = document.getElementById('catererAlertBottom');
+
+  function showAlert(msg, isSuccess) {
+    [alertBoxTop, alertBoxBottom].forEach(function(box) {
+      if (!box) return;
+      box.style.display = 'block';
+      box.style.background = isSuccess ? '#dcfce7' : '#fee2e2';
+      box.style.border = isSuccess ? '1.5px solid #86efac' : '1.5px solid #f87171';
+      box.style.color = isSuccess ? '#166534' : '#991b1b';
+      box.innerHTML = (isSuccess ? '✓ ' : '⚠️ ') + msg;
+    });
+    if (!isSuccess && alertBoxBottom) {
+      alertBoxBottom.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  function hideAlert() {
+    [alertBoxTop, alertBoxBottom].forEach(function(box) {
+      if (box) box.style.display = 'none';
+    });
+  }
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
-    alertBox.style.display = 'none';
+    hideAlert();
 
     var pw = form.querySelector('[name="password"]').value;
     var cpw = form.querySelector('[name="confirm_password"]').value;
     if (pw !== cpw) {
-      alertBox.style.display = 'block';
-      alertBox.style.background = '#fee2e2';
-      alertBox.style.color = '#991b1b';
-      alertBox.textContent = '⚠️ Passwords do not match.';
+      showAlert('Passwords do not match. Please re-enter both password fields.', false);
+      return;
+    }
+    if (pw.length < 6) {
+      showAlert('Password must be at least 6 characters.', false);
+      return;
+    }
+
+    // Enforce Verification Documents submission before registering
+    var cvInput = document.getElementById('cat-cv');
+    var nidInput = document.getElementById('cat-nid');
+    var hasCv = (cvInput && cvInput.files && cvInput.files.length > 0) || !!uploadedFiles['zone-cat-cv'];
+    var hasNid = (nidInput && nidInput.files && nidInput.files.length > 0) || !!uploadedFiles['zone-cat-nid'];
+
+    if (!hasCv || !hasNid) {
+      var missing = [];
+      if (!hasCv) {
+        missing.push('Owner / Head Chef CV');
+        var z1 = document.getElementById('zone-cat-cv');
+        if (z1) { z1.style.borderColor = '#dc2626'; z1.style.background = '#fff5f5'; }
+      }
+      if (!hasNid) {
+        missing.push('National ID (NID) Scan');
+        var z2 = document.getElementById('zone-cat-nid');
+        if (z2) { z2.style.borderColor = '#dc2626'; z2.style.background = '#fff5f5'; }
+      }
+      showAlert('<strong>Verification Documents Missing:</strong> Compliance documents must be submitted before registering a caterer. Please upload: ' + missing.join(' and ') + '.', false);
       return;
     }
 
@@ -325,26 +372,17 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       var d = await res.json();
       if (d.success) {
-        alertBox.style.display = 'block';
-        alertBox.style.background = '#dcfce7';
-        alertBox.style.color = '#166534';
-        alertBox.textContent = '✓ Caterer registered and approved successfully! Redirecting to Approved Caterers...';
+        showAlert('Caterer registered and approved successfully! Redirecting to Approved Caterers...', true);
         setTimeout(function() {
           window.location.href = 'admin-catering-management.php';
         }, 900);
       } else {
-        alertBox.style.display = 'block';
-        alertBox.style.background = '#fee2e2';
-        alertBox.style.color = '#991b1b';
-        alertBox.textContent = '⚠️ ' + (d.message || 'Error registering caterer');
+        showAlert(d.message || 'Error registering caterer. Please verify inputs.', false);
         regBtn.disabled = false;
         regBtn.textContent = 'Register Catering Partner →';
       }
     } catch(err) {
-      alertBox.style.display = 'block';
-      alertBox.style.background = '#fee2e2';
-      alertBox.style.color = '#991b1b';
-      alertBox.textContent = '⚠️ Network connection error. Please try again.';
+      showAlert('Network connection error. Please try again.', false);
       regBtn.disabled = false;
       regBtn.textContent = 'Register Catering Partner →';
     }

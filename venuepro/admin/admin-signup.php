@@ -83,6 +83,7 @@ document.addEventListener('DOMContentLoaded', function() {
       var res = await fetch('../api/auth.php?action=register', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
         body: JSON.stringify(payload)
       });
       var d = await res.json();

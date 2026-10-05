@@ -6,8 +6,9 @@ $currentUser = requireRole('admin', 'admin-login.php');
 $db = getDBConnection();
 ?>
 <?php
-$stmtV = $db->prepare("SELECT v.*, COUNT(b.id) AS booking_count,
-    COALESCE(SUM(CASE WHEN b.booking_status IN ('confirmed','pending') THEN 1 ELSE 0 END),0) AS active_bookings
+$stmtV = $db->prepare("SELECT v.*, COUNT(DISTINCT b.id) AS booking_count,
+    COALESCE(SUM(CASE WHEN b.booking_status IN ('confirmed','pending') THEN 1 ELSE 0 END),0) AS active_bookings,
+    (SELECT COUNT(*) FROM venue_photos vp WHERE vp.venue_id = v.id) AS photo_count
     FROM venues v
     LEFT JOIN bookings b ON v.id = b.venue_id
     GROUP BY v.id ORDER BY v.id");
@@ -77,13 +78,13 @@ $totalVenues = count($venues);
             <span class="badge">8</span>
             🔔
           </a>
-          <div class="topbar-user">
+          <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Admin')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
       <main class="page-body">
@@ -101,7 +102,7 @@ $totalActiveBookings = (int)$stmtActB->fetchColumn();
 $stmtGross = $db->query("SELECT COALESCE(SUM(total_amount), 0) FROM bookings WHERE booking_status != 'cancelled'");
 $totalGross = (float)$stmtGross->fetchColumn();
 ?>
-
+<!-- 
 <div class="stats-grid mb-24">
   <div class="stat-card">
     <div class="stat-label">Total Properties</div>
@@ -123,7 +124,7 @@ $totalGross = (float)$stmtGross->fetchColumn();
     <div class="stat-value">$<?= number_format($totalGross, 0) ?></div>
     <span class="stat-badge neutral">All-time</span>
   </div>
-</div>
+</div> -->
 
 <div class="grid-2 gap-20">
   <?php if (empty($venues)): ?>
@@ -132,11 +133,21 @@ $totalGross = (float)$stmtGross->fetchColumn();
     </div>
   <?php else: foreach ($venues as $v):
     $occ = min(98, max(20, (int)($v['booking_count'] * 18 + 35)));
+    $coverImg = !empty($v['image_url']) ? $v['image_url'] : 'assets/venues pic/images.jpg';
+    $displayCover = str_starts_with($coverImg, 'http') ? $coverImg : ('../' . preg_replace('/^(\.\.\/)+/', '', $coverImg));
   ?>
   <div class="card venue-card-item">
+    <div style="height:140px; border-radius:6px; overflow:hidden; margin-bottom:14px; background:#0f172a; position:relative;">
+      <img src="<?= e($displayCover) ?>" alt="<?= e($v['name']) ?>" style="width:100%; height:100%; object-fit:cover;">
+      <span class="pill pill-<?= $v['status'] === 'active' ? 'confirmed' : 'pending' ?>" style="position:absolute; top:8px; left:8px;">
+        <?= strtoupper($v['status']) ?> VENUE
+      </span>
+      <span style="position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.7); color:#fff; font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:4px;">
+        📷 <?= (int)($v['photo_count'] ?? 0) ?> Photos
+      </span>
+    </div>
     <div class="flex-between mb-12">
       <div>
-        <span class="pill pill-<?= $v['status'] === 'active' ? 'confirmed' : 'pending' ?> mb-4"><?= strtoupper($v['status']) ?> VENUE</span>
         <h3 class="venue-card-title"><?= e($v['name']) ?></h3>
         <div class="text-xs text-muted"><?= e($v['district'] ?? '') ?> • Max Capacity: <?= (int)$v['capacity'] ?> Guests</div>
       </div>
@@ -146,8 +157,11 @@ $totalGross = (float)$stmtGross->fetchColumn();
       </div>
     </div>
     <!-- <div class="progress-bar mb-16"><div class="progress-fill" style="width:<?= $occ ?>%;"></div></div> -->
-    <div>
-      <a href="admin-edit-venue.php?id=<?= $v['id'] ?>" class="btn btn-outline btn-sm btn-full" style="justify-content:center; text-align:center; margin-bottom:6px;">Edit Properties</a>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+        <a href="admin-edit-venue.php?id=<?= $v['id'] ?>" class="btn btn-outline btn-sm" style="justify-content:center; text-align:center;">Edit Specs &amp; Cover</a>
+        <a href="admin-edit-venue.php?id=<?= $v['id'] ?>#gallery-management" class="btn btn-primary btn-sm" style="justify-content:center; text-align:center;">📸 Manage Photos</a>
+      </div>
       <button onclick="deleteVenue(<?= (int)$v['id'] ?>, this)" class="btn btn-sm btn-full" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;cursor:pointer;border-radius:6px;padding:6px 12px;font-size:0.8rem;width:100%;">🗑 Remove Venue</button>
     </div>
   </div>
@@ -184,4 +198,4 @@ async function deleteVenue(id, btn) {
 }
 </script>
 </body>
-</html>
+</html>

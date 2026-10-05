@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -40,7 +40,7 @@ $db = getDBConnection();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../logout.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -54,7 +54,7 @@ $db = getDBConnection();
         </label>
         <div class="topbar-search">
           <span class="topbar-search-icon">🔍</span>
-          <input type="text" placeholder="Search event venues, bookings, menus...">
+          <input type="text" placeholder="e.g. Search event venues, bookings, menus...">
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
@@ -64,13 +64,13 @@ $db = getDBConnection();
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
             💬
           </a>
-          <div class="topbar-user">
-            <div class="user-avatar" style="background:#2563eb;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+          <a href="customer-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="View & Edit My Profile">
+            <div class="user-avatar" style="background:<?= e($currentUser['avatar_bg'] ?? '#2563eb') ?>;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
 

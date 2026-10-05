@@ -6,35 +6,50 @@ $currentUser = requireRole('admin', 'admin-login.php');
 $db = getDBConnection();
 ?>
 <?php
+// Financial metrics
 $stmtRev  = $db->query("SELECT COALESCE(SUM(total_amount),0) FROM bookings WHERE booking_status != 'cancelled'");
 $totalRev = (float)$stmtRev->fetchColumn();
+
 $stmtBk   = $db->query("SELECT COUNT(*) FROM bookings");
 $totalBk  = (int)$stmtBk->fetchColumn();
+
 $stmtAvg  = $db->query("SELECT COALESCE(AVG(total_amount),0) FROM bookings WHERE booking_status != 'cancelled'");
 $avgBkVal = (float)$stmtAvg->fetchColumn();
-$stmtVTop = $db->query("SELECT v.name, COUNT(b.id) AS bk_count, COALESCE(SUM(b.total_amount),0) AS revenue
-    FROM venues v LEFT JOIN bookings b ON v.id = b.venue_id GROUP BY v.id ORDER BY revenue DESC LIMIT 5");
+
+$stmtMax  = $db->query("SELECT COALESCE(MAX(total_amount),0) FROM bookings WHERE booking_status != 'cancelled'");
+$maxBooking = (float)$stmtMax->fetchColumn();
+
+// Confirmed and pending breakdown
+$stmtConfRev = $db->query("SELECT COALESCE(SUM(total_amount),0) FROM bookings WHERE booking_status IN ('confirmed','completed')");
+$confirmedRev = (float)$stmtConfRev->fetchColumn();
+
+$stmtPendRev = $db->query("SELECT COALESCE(SUM(total_amount),0) FROM bookings WHERE booking_status = 'pending'");
+$pendingRev = (float)$stmtPendRev->fetchColumn();
+
+// Top venues by revenue and bookings (excluding cancelled)
+$stmtVTop = $db->query(
+    "SELECT v.name, COUNT(b.id) AS bk_count, COALESCE(SUM(b.total_amount),0) AS revenue
+     FROM venues v
+     LEFT JOIN bookings b ON v.id = b.venue_id AND b.booking_status != 'cancelled'
+     GROUP BY v.id
+     ORDER BY revenue DESC, bk_count DESC
+     LIMIT 5"
+);
 $topVenues = $stmtVTop->fetchAll();
+$maxBkCount = !empty($topVenues) ? max(1, ...array_column($topVenues, 'bk_count')) : 1;
 
-$stmtStaffPerf = $db->query("SELECT u.name, sp.department, COUNT(sa.id) as event_count 
-FROM users u 
-JOIN staff_profiles sp ON u.id = sp.user_id 
-LEFT JOIN staff_assignments sa ON u.id = sa.staff_id 
-WHERE u.role = 'staff' 
-GROUP BY u.id 
-ORDER BY event_count DESC LIMIT 5");
-$staffPerf = $stmtStaffPerf->fetchAll();
+// Revenue streams breakdown
+$revBreakdown = $db->query("
+    SELECT
+      COALESCE(SUM(venue_cost), 0) AS total_venue_cost,
+      COALESCE(SUM(package_cost), 0) AS total_caterer_cost,
+      COALESCE(SUM(staffing_cost), 0) AS total_staff_cost,
+      COALESCE(SUM(service_fee + tax_vat), 0) AS total_fees
+    FROM bookings
+    WHERE booking_status != 'cancelled'
+")->fetch();
 
-$stmtCatContrib = $db->query("SELECT cp.business_name, u.name as owner_name, COUNT(co.id) as order_count, COALESCE(SUM(b.package_cost + b.addons_cost), 0) as total_cat_rev 
-FROM users u 
-JOIN caterer_profiles cp ON u.id = cp.user_id 
-LEFT JOIN caterer_orders co ON u.id = co.caterer_id 
-LEFT JOIN bookings b ON co.booking_id = b.id 
-WHERE u.role = 'caterer' 
-GROUP BY u.id 
-ORDER BY total_cat_rev DESC LIMIT 5");
-$catererContrib = $stmtCatContrib->fetchAll();
-
+// Monthly transaction volume
 $stmtMonthly = $db->query(
     "SELECT DATE_FORMAT(event_date, '%b %Y') AS month_label,
             DATE_FORMAT(event_date, '%b') AS short_month,
@@ -46,33 +61,31 @@ $stmtMonthly = $db->query(
      GROUP BY ym
      ORDER BY ym ASC"
 );
-$monthlyTxns = $stmtMonthly->fetchAll();
+$monthlyTxns = $stmtMonthly->fetchAll(PDO::FETCH_ASSOC);
 
+// Full detailed transactions
 $stmtTxn = $db->query(
-    "SELECT b.*, u.name AS client_name, v.name AS venue_name
+    "SELECT b.*, u.name AS client_name, u.email AS client_email, u.phone AS client_phone, v.name AS venue_name
      FROM bookings b
      JOIN users u ON b.customer_id = u.id
      JOIN venues v ON b.venue_id = v.id
-     ORDER BY b.created_at DESC LIMIT 20"
+     ORDER BY b.created_at DESC LIMIT 50"
 );
 $transactions = $stmtTxn->fetchAll();
 
-// Booking summary breakdown for "Generated Bookings Summary" card
+// Booking summary breakdown
 $bkSummary = $db->query("
     SELECT
       COUNT(*) AS total,
-      SUM(booking_status IN ('confirmed','completed')) AS confirmed,
-      SUM(booking_status = 'pending') AS pending,
-      SUM(booking_status IN ('cancelled','rejected')) AS cancelled
+      COALESCE(SUM(booking_status IN ('confirmed','completed')), 0) AS confirmed,
+      COALESCE(SUM(booking_status = 'pending'), 0) AS pending,
+      COALESCE(SUM(booking_status IN ('cancelled','rejected')), 0) AS cancelled
     FROM bookings
 ")->fetch();
 $bkTotal     = (int)($bkSummary['total']     ?? 0);
 $bkConfirmed = (int)($bkSummary['confirmed'] ?? 0);
 $bkPending   = (int)($bkSummary['pending']   ?? 0);
 $bkCancelled = (int)($bkSummary['cancelled'] ?? 0);
-
-// Max booking count for bar widths
-$maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -128,12 +141,15 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
         <a href="admin-staff-management.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Staff Directory
         </a>
+        <a href="admin-user-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> User Governance
+        </a>
         <a href="admin-reports.php" class="nav-item active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Reports &amp; Analytics
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../logout.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -146,20 +162,20 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
         </label>
         <div class="topbar-search">
           <span class="topbar-search-icon">🔍</span>
-          <input type="text" placeholder="Search bookings, venues, staff, caterers...">
+          <input type="text" placeholder="e.g. Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">8</span>
+            <span class="badge"><?= $bkPending ?></span>
             🔔
           </a>
-          <div class="topbar-user">
+          <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="View & Edit My Profile">
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
       <main class="page-body">
@@ -175,22 +191,52 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
 <!-- Summary Cards -->
 <div class="stats-grid mb-24">
   <div class="stat-card green">
-    <div class="stat-label">Total Gross Revenue (YTD)</div>
-    <div class="stat-value"><?= "$" . number_format($totalRev/1000,1) . "k" ?></div>
-    <span class="stat-badge positive">+18.2% vs last year</span>
+    <div class="stat-label">Total Gross Revenue</div>
+    <div class="stat-value">$<?= number_format($totalRev, 2) ?></div>
+    <span class="stat-badge positive"><?= $totalRev > 0 ? '$' . number_format($confirmedRev, 2) . ' confirmed (' . round(($confirmedRev / $totalRev) * 100) . '%)' : 'No revenue recorded' ?></span>
     <div class="stat-icon" style="color:#059669;background:#d1fae5;">💵</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Total Transactions</div>
     <div class="stat-value"><?= $totalBk ?></div>
-    <span class="stat-badge neutral">YTD</span>
+    <span class="stat-badge <?= $bkPending > 0 ? 'warning' : 'neutral' ?>"><?= $bkConfirmed ?> Confirmed · <?= $bkPending ?> Pending</span>
     <div class="stat-icon">📋</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Avg. Transaction Value</div>
-    <div class="stat-value"><?= "$" . number_format($avgBkVal,0) ?></div>
-    <span class="stat-badge positive">+5.4%</span>
+    <div class="stat-value"><?= $totalBk > 0 ? "$" . number_format($avgBkVal, 2) : "$0.00" ?></div>
+    <span class="stat-badge positive"><?= $maxBooking > 0 ? 'Peak Booking: $' . number_format($maxBooking, 2) : 'No bookings recorded' ?></span>
     <div class="stat-icon">📈</div>
+  </div>
+</div>
+
+<!-- Revenue Streams Breakdown -->
+<div class="card mb-24">
+  <div class="card-header">
+    <div class="card-title">Revenue by Service Stream</div>
+    <span class="text-xs text-muted">Direct allocation from confirmed and active event bookings</span>
+  </div>
+  <div class="grid-4 gap-16">
+    <div style="padding:16px; background:var(--gray-50); border-radius:var(--radius-sm); border:1px solid var(--gray-200);">
+      <div class="text-xs text-muted font-bold mb-4">VENUE HIRE</div>
+      <div style="font-size:1.35rem; font-weight:800; color:var(--navy-900);">$<?= number_format((float)$revBreakdown['total_venue_cost'], 2) ?></div>
+      <div class="text-xs text-muted mt-4"><?= $totalRev > 0 ? round(($revBreakdown['total_venue_cost'] / $totalRev) * 100) : 0 ?>% of total revenue</div>
+    </div>
+    <div style="padding:16px; background:var(--gray-50); border-radius:var(--radius-sm); border:1px solid var(--gray-200);">
+      <div class="text-xs text-muted font-bold mb-4">CATERING PACKAGES</div>
+      <div style="font-size:1.35rem; font-weight:800; color:#059669;">$<?= number_format((float)$revBreakdown['total_caterer_cost'], 2) ?></div>
+      <div class="text-xs text-muted mt-4"><?= $totalRev > 0 ? round(($revBreakdown['total_caterer_cost'] / $totalRev) * 100) : 0 ?>% of total revenue</div>
+    </div>
+    <div style="padding:16px; background:var(--gray-50); border-radius:var(--radius-sm); border:1px solid var(--gray-200);">
+      <div class="text-xs text-muted font-bold mb-4">STAFFING &amp; CREW</div>
+      <div style="font-size:1.35rem; font-weight:800; color:#2563eb;">$<?= number_format((float)$revBreakdown['total_staff_cost'], 2) ?></div>
+      <div class="text-xs text-muted mt-4"><?= $totalRev > 0 ? round(($revBreakdown['total_staff_cost'] / $totalRev) * 100) : 0 ?>% of total revenue</div>
+    </div>
+    <div style="padding:16px; background:var(--gray-50); border-radius:var(--radius-sm); border:1px solid var(--gray-200);">
+      <div class="text-xs text-muted font-bold mb-4">FEES &amp; TAXES</div>
+      <div style="font-size:1.35rem; font-weight:800; color:#d97706;">$<?= number_format((float)$revBreakdown['total_fees'], 2) ?></div>
+      <div class="text-xs text-muted mt-4"><?= $totalRev > 0 ? round(($revBreakdown['total_fees'] / $totalRev) * 100) : 0 ?>% of total revenue</div>
+    </div>
   </div>
 </div>
 
@@ -228,11 +274,11 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
     <table>
       <thead>
         <tr>
-          <th>TXN ID</th>
-          <th>DATE</th>
+          <th>BOOKING / TXN ID</th>
+          <th>EVENT DATE</th>
           <th>CLIENT</th>
           <th>VENUE</th>
-          <th>TYPE</th>
+          <th>EVENT NAME</th>
           <th>AMOUNT</th>
           <th>STATUS</th>
           <th>ACTION</th>
@@ -243,20 +289,38 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
         <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray-400);">No transactions found in records.</td></tr>
         <?php else: foreach ($transactions as $tx):
           $txnCode = 'TXN-' . str_pad($tx['id'], 4, '0', STR_PAD_LEFT);
-          $txDate  = date('M j, Y', strtotime($tx['created_at']));
-          $isPaid  = in_array($tx['booking_status'], ['confirmed', 'completed']);
-          $statusTxt = $isPaid ? 'PAID' : strtoupper($tx['booking_status']);
-          $statusCls = $isPaid ? 'confirmed' : ($tx['booking_status'] === 'cancelled' ? 'cancelled' : 'pending');
+          $bkCode  = $tx['booking_code'] ?: ('#BK-' . $tx['id']);
+          $txDate  = date('M j, Y', strtotime($tx['event_date'] ?: $tx['created_at']));
+          $isPaid  = in_array($tx['booking_status'], ['confirmed', 'completed']) || ($tx['payment_status'] ?? '') === 'paid';
+          $statusTxt = strtoupper($tx['booking_status']);
+          $statusCls = ($tx['booking_status'] === 'confirmed' || $tx['booking_status'] === 'completed') ? 'confirmed' : ($tx['booking_status'] === 'cancelled' || $tx['booking_status'] === 'rejected' ? 'cancelled' : 'pending');
+          $modalData = [
+            'id' => $txnCode,
+            'booking_code' => $bkCode,
+            'date' => $txDate,
+            'client' => $tx['client_name'],
+            'email' => $tx['client_email'] ?? '',
+            'phone' => $tx['client_phone'] ?? 'N/A',
+            'venue' => $tx['venue_name'],
+            'event' => $tx['event_name'],
+            'amount' => '$' . number_format((float)$tx['total_amount'], 2),
+            'method' => !empty($tx['payment_card_last4']) ? ('Credit Card (•••• ' . $tx['payment_card_last4'] . ')') : 'Electronic Payment',
+            'ref' => $bkCode,
+            'status' => $statusTxt,
+            'status_cls' => $statusCls,
+            'booking_id' => (int)$tx['id'],
+            'guests' => (int)$tx['guest_count']
+          ];
         ?>
         <tr>
-          <td class="font-bold text-primary">#<?= e($txnCode) ?></td>
+          <td class="font-bold text-primary"><?= e($bkCode) ?></td>
           <td><?= $txDate ?></td>
           <td><?= e($tx['client_name']) ?></td>
           <td><?= e($tx['venue_name']) ?></td>
-          <td><span class="pill pill-in-progress">Booking</span></td>
+          <td><span class="pill pill-in-progress" style="font-size:0.75rem;"><?= e($tx['event_name']) ?></span></td>
           <td class="font-bold">$<?= number_format((float)$tx['total_amount'], 2) ?></td>
           <td><span class="pill pill-<?= $statusCls ?>"><?= $statusTxt ?></span></td>
-          <td><button class="btn btn-ghost btn-sm" onclick="showTransactionModal('<?= e($txnCode) ?>', '<?= $txDate ?>', '<?= addslashes(e($tx['client_name'])) ?>', '<?= addslashes(e($tx['venue_name'])) ?>', 'Venue Hire &amp; Events', '$<?= number_format((float)$tx['total_amount'], 2) ?>', 'Credit Card / Visa', 'ref_bk_<?= $tx['id'] ?>', '<?= $statusTxt ?>')">View</button></td>
+          <td><button class="btn btn-ghost btn-sm" onclick='showTransactionModal(<?= htmlspecialchars(json_encode($modalData), ENT_QUOTES, 'UTF-8') ?>)'>View</button></td>
         </tr>
         <?php endforeach; endif; ?>
       </tbody>
@@ -365,7 +429,7 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
       <div class="flex-between mb-16" style="border-bottom:1px solid var(--gray-200); padding-bottom:12px;">
         <div class="flex gap-8" style="align-items:center;">
           <h3 style="margin:0;">Transaction Details</h3>
-          <span id="txn-modal-id" class="font-bold text-primary" style="font-size:1.05rem;">#TXN-0091</span>
+          <span id="txn-modal-id" class="font-bold text-primary" style="font-size:1.05rem;"></span>
         </div>
         <button type="button" onclick="closeTxnModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:var(--gray-500); line-height:1;">&times;</button>
       </div>
@@ -373,38 +437,39 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; background:var(--gray-50); padding:12px 16px; border-radius:var(--radius-sm);">
         <div>
           <div class="text-xs text-muted font-bold">PAYMENT STATUS</div>
-          <span class="pill pill-confirmed" id="txn-modal-status" style="margin-top:4px; display:inline-block;">PAID IN FULL ✓</span>
+          <span class="pill" id="txn-modal-status" style="margin-top:4px; display:inline-block;">PENDING</span>
         </div>
         <div style="text-align:right;">
           <div class="text-xs text-muted font-bold">TOTAL AMOUNT</div>
-          <div id="txn-modal-amount" style="font-size:1.4rem; font-weight:800; color:var(--navy-900);">$4,890.00</div>
+          <div id="txn-modal-amount" style="font-size:1.4rem; font-weight:800; color:var(--navy-900);">$0.00</div>
         </div>
       </div>
 
       <div class="grid-2 gap-16 mb-20">
         <div>
           <div class="text-xs text-muted font-bold mb-4">CLIENT / CUSTOMER</div>
-          <div id="txn-modal-client" class="font-bold">Jane Doe Events</div>
+          <div id="txn-modal-client" class="font-bold">-</div>
+          <div id="txn-modal-email" class="text-xs text-muted"></div>
         </div>
         <div>
           <div class="text-xs text-muted font-bold mb-4">TRANSACTION DATE</div>
-          <div id="txn-modal-date" class="font-medium">Sep 06, 2026</div>
+          <div id="txn-modal-date" class="font-medium">-</div>
         </div>
         <div>
           <div class="text-xs text-muted font-bold mb-4">VENUE / SERVICE</div>
-          <div id="txn-modal-venue" class="font-medium">Grand Ballroom</div>
+          <div id="txn-modal-venue" class="font-medium">-</div>
         </div>
         <div>
-          <div class="text-xs text-muted font-bold mb-4">TRANSACTION TYPE</div>
-          <div id="txn-modal-type" class="font-medium">Booking Reservation</div>
+          <div class="text-xs text-muted font-bold mb-4">EVENT NAME &amp; GUESTS</div>
+          <div id="txn-modal-event" class="font-medium">-</div>
         </div>
         <div>
           <div class="text-xs text-muted font-bold mb-4">PAYMENT METHOD</div>
-          <div id="txn-modal-method" class="font-medium">Visa •••• 4242</div>
+          <div id="txn-modal-method" class="font-medium">-</div>
         </div>
         <div>
-          <div class="text-xs text-muted font-bold mb-4">GATEWAY REFERENCE</div>
-          <div id="txn-modal-ref" class="font-mono text-xs text-muted">ch_3M4o9281a9</div>
+          <div class="text-xs text-muted font-bold mb-4">BOOKING REFERENCE</div>
+          <div id="txn-modal-ref" class="font-mono text-xs text-muted">-</div>
         </div>
       </div>
 
@@ -416,33 +481,71 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
         </div>
         <div class="flex-between text-sm mb-4">
           <span>Settlement Status</span>
-          <span class="text-success font-semibold">Cleared &amp; Disbursed</span>
+          <span id="txn-modal-settlement" class="text-success font-semibold">Cleared &amp; Disbursed</span>
         </div>
         <div class="flex-between text-sm">
-          <span>Merchant Account</span>
-          <span class="font-mono text-xs">VenuePro Operating LLC (**892)</span>
+          <span>Merchant Ref</span>
+          <span id="txn-modal-merchant-ref" class="font-mono text-xs">-</span>
         </div>
       </div>
 
       <div class="flex gap-12">
         <button type="button" class="btn btn-ghost" style="flex:1;" onclick="closeTxnModal()">Close</button>
-        <a href="../customer/client-invoice.php" class="btn btn-outline" style="flex:1; text-align:center; justify-content:center;">View Official Tax Invoice</a>
+        <a id="txn-modal-invoice-btn" href="admin-pending-bookings.php" class="btn btn-outline" style="flex:1; text-align:center; justify-content:center;">Review Booking</a>
         <button type="button" class="btn btn-primary" style="flex:1;" onclick="window.print()">Print Receipt</button>
       </div>
     </div>
   </div>
 
   <script>
-    function showTransactionModal(id, date, client, venue, type, amount, method, ref, status) {
-      document.getElementById('txn-modal-id').innerText = '#' + id;
-      document.getElementById('txn-modal-date').innerText = date;
-      document.getElementById('txn-modal-client').innerText = client;
-      document.getElementById('txn-modal-venue').innerText = venue;
-      document.getElementById('txn-modal-type').innerText = type;
-      document.getElementById('txn-modal-amount').innerText = amount;
-      document.getElementById('txn-modal-method').innerText = method;
-      document.getElementById('txn-modal-ref').innerText = ref;
-      document.getElementById('txn-modal-status').innerText = status + ' IN FULL ✓';
+    function showTransactionModal(data) {
+      if (!data) return;
+      document.getElementById('txn-modal-id').innerText = data.booking_code || ('#' + (data.id || ''));
+      document.getElementById('txn-modal-date').innerText = data.date || 'N/A';
+      document.getElementById('txn-modal-client').innerText = data.client || 'N/A';
+      const emailEl = document.getElementById('txn-modal-email');
+      if (emailEl) emailEl.innerText = data.email ? ('e.g. ' + data.email) : '';
+      document.getElementById('txn-modal-venue').innerText = data.venue || 'N/A';
+      
+      const eventEl = document.getElementById('txn-modal-event');
+      if (eventEl) {
+        let evt = data.event || 'Booking Reservation';
+        if (data.guests) evt += ' (' + data.guests + ' guests)';
+        eventEl.innerText = evt;
+      }
+      
+      document.getElementById('txn-modal-amount').innerText = data.amount || '$0.00';
+      document.getElementById('txn-modal-method').innerText = data.method || 'Electronic Payment';
+      document.getElementById('txn-modal-ref').innerText = data.ref || (data.booking_code || 'N/A');
+      
+      const merchantRefEl = document.getElementById('txn-modal-merchant-ref');
+      if (merchantRefEl) merchantRefEl.innerText = data.booking_code || ('TXN-' + data.id);
+
+      const statusEl = document.getElementById('txn-modal-status');
+      if (statusEl) {
+        statusEl.className = 'pill pill-' + (data.status_cls || 'pending');
+        statusEl.innerText = (data.status || 'PENDING') + (data.status_cls === 'confirmed' ? ' ✓' : '');
+      }
+
+      const settEl = document.getElementById('txn-modal-settlement');
+      if (settEl) {
+        if (data.status_cls === 'confirmed') {
+          settEl.className = 'text-success font-semibold';
+          settEl.innerText = 'Cleared & Disbursed';
+        } else if (data.status_cls === 'cancelled') {
+          settEl.className = 'text-danger font-semibold';
+          settEl.innerText = 'Cancelled / Voided';
+        } else {
+          settEl.className = 'text-warning font-semibold';
+          settEl.innerText = 'Pending Settlement';
+        }
+      }
+
+      const invoiceBtn = document.getElementById('txn-modal-invoice-btn');
+      if (invoiceBtn && data.booking_id) {
+        invoiceBtn.href = 'admin-booking-approval.php?id=' + encodeURIComponent(data.booking_id);
+      }
+
       document.getElementById('txn-modal').style.display = 'flex';
     }
 
@@ -458,23 +561,8 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
       const subtitle = document.getElementById('chartFilterSubtitle');
       if (!wrap) return;
 
-      const defaultMonths = [
-        { label: 'Jan', ym: '2026-01', volume: 21500, count: 8 },
-        { label: 'Feb', ym: '2026-02', volume: 29000, count: 11 },
-        { label: 'Mar', ym: '2026-03', volume: 25400, count: 9 },
-        { label: 'Apr', ym: '2026-04', volume: 38200, count: 14 },
-        { label: 'May', ym: '2026-05', volume: 45000, count: 16 },
-        { label: 'Jun', ym: '2026-06', volume: 56000, count: 20 },
-        { label: 'Jul', ym: '2026-07', volume: 40200, count: 15 },
-        { label: 'Aug', ym: '2026-08', volume: 49500, count: 18 },
-        { label: 'Sep', ym: '2026-09', volume: 35000, count: 13 },
-        { label: 'Oct', ym: '2026-10', volume: 42000, count: 15 },
-        { label: 'Nov', ym: '2026-11', volume: 51000, count: 19 },
-        { label: 'Dec', ym: '2026-12', volume: 64000, count: 24 }
-      ];
-
-      let dataMap = {};
-      defaultMonths.forEach(m => dataMap[m.ym] = { ...m });
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const dataMap = {};
       if (Array.isArray(rawMonthlyData)) {
         rawMonthlyData.forEach(row => {
           if (row.ym) {
@@ -488,31 +576,44 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
         });
       }
 
-      let allItems = Object.values(dataMap);
       let filtered = [];
       if (period === '6m') {
-        filtered = allItems.slice(3, 9);
-        if (subtitle) subtitle.textContent = 'Showing Last 6 Months (April 2026 – September 2026)';
+        filtered = [7, 8, 9, 10, 11, 12].map(m => {
+          const ym = '2026-' + String(m).padStart(2, '0');
+          return dataMap[ym] || { label: monthNames[m - 1], ym: ym, volume: 0, count: 0 };
+        });
+        if (subtitle) subtitle.textContent = 'Showing 6-Month Period (July 2026 – December 2026)';
       } else if (period === '12m') {
-        filtered = allItems.slice(0, 12);
+        filtered = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => {
+          const ym = '2026-' + String(m).padStart(2, '0');
+          return dataMap[ym] || { label: monthNames[m - 1], ym: ym, volume: 0, count: 0 };
+        });
         if (subtitle) subtitle.textContent = 'Showing Full 12 Months (January – December 2026)';
       } else if (period === '2026') {
-        filtered = allItems.filter(m => m.ym.startsWith('2026')).slice(0, 9);
-        if (subtitle) subtitle.textContent = 'Year-to-Date 2026 Volume (January – September)';
+        filtered = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => {
+          const ym = '2026-' + String(m).padStart(2, '0');
+          return dataMap[ym] || { label: monthNames[m - 1], ym: ym, volume: 0, count: 0 };
+        });
+        if (subtitle) subtitle.textContent = 'Year 2026 Database Volume (January – December 2026)';
       } else {
-        filtered = allItems;
-        if (subtitle) subtitle.textContent = 'All Historical & Projected Transactions';
+        const dbEntries = Object.values(dataMap);
+        if (dbEntries.length > 0) {
+          filtered = dbEntries.sort((a, b) => a.ym.localeCompare(b.ym));
+        } else {
+          filtered = [{ label: 'No Data', ym: '', volume: 0, count: 0 }];
+        }
+        if (subtitle) subtitle.textContent = 'All Historical & Confirmed Database Transactions';
       }
 
-      let maxVol = Math.max(...filtered.map(d => d.volume), 1000);
+      let maxVol = Math.max(...filtered.map(d => d.volume), 0);
       let totalVol = filtered.reduce((acc, d) => acc + d.volume, 0);
       let totalCount = filtered.reduce((acc, d) => acc + d.count, 0);
-      let peakItem = filtered.reduce((max, d) => d.volume > max.volume ? d : max, filtered[0] || {volume:0});
+      let peakItem = filtered.reduce((max, d) => (d.volume > (max ? max.volume : 0)) ? d : max, null);
 
       wrap.innerHTML = '';
       filtered.forEach(d => {
-        let pct = Math.round((d.volume / maxVol) * 100);
-        let isPeak = (d.volume === peakItem.volume && peakItem.volume > 0);
+        let pct = maxVol > 0 ? Math.round((d.volume / maxVol) * 100) : 0;
+        let isPeak = (peakItem && d.volume === peakItem.volume && peakItem.volume > 0);
         let col = document.createElement('div');
         col.className = 'chart-bar-col';
         col.style.flex = '1';
@@ -524,20 +625,25 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
 
         let val = document.createElement('div');
         val.className = 'chart-val';
-        val.style.fontSize = '0.75rem';
+        val.style.fontSize = '0.72rem';
         val.style.fontWeight = '600';
         val.style.marginBottom = '6px';
-        val.textContent = '$' + (d.volume >= 1000 ? Math.round(d.volume / 1000) + 'k' : d.volume);
+        if (d.volume > 0) {
+          val.textContent = '$' + (d.volume >= 1000 ? (d.volume / 1000).toFixed(1) + 'k' : Math.round(d.volume));
+        } else {
+          val.textContent = '$0';
+          val.style.color = 'var(--gray-300)';
+        }
 
         let bar = document.createElement('div');
         bar.className = 'chart-bar' + (isPeak ? ' peak' : '');
-        bar.style.height = pct + '%';
+        bar.style.height = d.volume > 0 ? Math.max(pct, 8) + '%' : '4px';
         bar.style.width = '100%';
         bar.style.maxWidth = '38px';
         bar.style.borderRadius = '4px 4px 0 0';
-        bar.style.background = isPeak ? 'var(--primary)' : '#93c5fd';
+        bar.style.background = isPeak ? 'var(--primary)' : (d.volume > 0 ? '#93c5fd' : '#e2e8f0');
         bar.style.transition = 'height 0.4s ease';
-        bar.title = d.label + ': $' + Math.round(d.volume).toLocaleString() + ' (' + d.count + ' transactions)';
+        bar.title = d.label + (d.ym ? ' (' + d.ym + ')' : '') + ': $' + d.volume.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' (' + d.count + ' transaction' + (d.count === 1 ? '' : 's') + ')';
 
         let lbl = document.createElement('div');
         lbl.className = 'chart-label';
@@ -554,8 +660,13 @@ $maxBkCount = max(1, ...array_column($topVenues, 'bk_count'));
       });
 
       if (summary) {
-        summary.innerHTML = '<div>Total Volume: <strong style="color:var(--primary); font-size:1rem;">$' + Math.round(totalVol).toLocaleString() + '</strong> across <strong>' + totalCount + '</strong> transactions</div>' +
-                             '<div>Period Peak: <strong>' + peakItem.label + ' ($' + Math.round(peakItem.volume).toLocaleString() + ')</strong></div>';
+        if (totalVol > 0 && peakItem) {
+          summary.innerHTML = '<div>Total Volume: <strong style="color:var(--primary); font-size:1rem;">$' + totalVol.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</strong> across <strong>' + totalCount + '</strong> transaction' + (totalCount === 1 ? '' : 's') + '</div>' +
+                               '<div>Period Peak: <strong>' + peakItem.label + ' ($' + peakItem.volume.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ')</strong></div>';
+        } else {
+          summary.innerHTML = '<div>Total Volume: <strong style="color:var(--primary); font-size:1rem;">$0.00</strong> across <strong>0</strong> transactions</div>' +
+                               '<div>Period Peak: <strong style="color:var(--gray-400);">None ($0.00)</strong></div>';
+        }
       }
     }
 

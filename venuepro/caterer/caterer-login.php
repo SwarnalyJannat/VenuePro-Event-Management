@@ -43,9 +43,9 @@ if (isLoggedIn()) {
     </form>
   </div>
 
-  <div class="auth-footer">
+  <!-- <div class="auth-footer">
     Want to offer catering on VenuePro? <a href="caterer-signup.php" style="font-weight:600;">Apply as a Caterer</a>
-  </div>
+  </div> -->
 <script src="../js/app.js"></script>
 </body>
 </html>

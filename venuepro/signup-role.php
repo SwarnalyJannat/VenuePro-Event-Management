@@ -40,7 +40,7 @@ if (isLoggedIn()) {
   </div>
 
   <div class="auth-footer">
-    Already have an account? <a href="venues.php" style="font-weight:600;">Sign in here</a>
+    Already have an account? <a href="login-role.php" style="font-weight:600;">Sign in here</a>
   </div>
 <script src="js/app.js"></script>
 </body>

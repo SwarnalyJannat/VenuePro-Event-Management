@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/helpers.php';
@@ -73,8 +73,8 @@ $db = getDBConnection();
 
     <div class="role-stats mb-32">
       <div class="role-chip" style="background:#f0fdf4; border-color:#86efac; color:#15803d;"><span>🌐</span> <strong>Guest Mode</strong> (Public Browse)</div>
-      <div class="role-chip"><span>🛍️</span> <strong>20</strong> Customer Pages (Logged-In)</div>
-      <div class="role-chip"><span>🛡️</span> <strong>17</strong> Admin Pages</div>
+      <div class="role-chip"><span>🛍️</span> <strong>21</strong> Customer Pages (Logged-In)</div>
+      <div class="role-chip"><span>🛡️</span> <strong>19</strong> Admin Pages</div>
       <div class="role-chip"><span>👨‍🍳</span> <strong>11</strong> Caterer Pages</div>
       <div class="role-chip"><span>👥</span> <strong>4</strong> Staff Pages</div>
     </div>
@@ -208,6 +208,10 @@ $db = getDBConnection();
           <div class="page-link-name">customer-register.html</div>
           <div class="page-link-desc">New customer account registration form with terms acceptance.</div>
         </a>
+        <a href="customer/customer-profile.php" class="page-link-card" style="border-color:var(--primary); background:#eff6ff;">
+          <div class="page-link-name">customer-profile.php <span class="pill pill-confirmed" style="font-size:0.6rem;">SELF SERVICE</span></div>
+          <div class="page-link-desc">Customer self-service profile editor: update name, phone, avatar initials/color, and change password securely.</div>
+        </a>
       </div>
     </div>
 
@@ -286,6 +290,14 @@ $db = getDBConnection();
           <div class="page-link-name">admin-signup.html</div>
           <div class="page-link-desc">System administrator provisioning console with internal access key validation.</div>
         </a>
+        <a href="admin/admin-profile.php" class="page-link-card" style="border-color:var(--primary); background:#eff6ff;">
+          <div class="page-link-name">admin-profile.php <span class="pill pill-confirmed" style="font-size:0.6rem;">SELF SERVICE</span></div>
+          <div class="page-link-desc">Administrator self-service profile editor: manage administrative credentials, avatar styling, and secure password updates.</div>
+        </a>
+        <a href="admin/admin-user-management.php" class="page-link-card" style="border-color:var(--primary); background:#eff6ff;">
+          <div class="page-link-name">admin-user-management.php <span class="pill pill-confirmed" style="font-size:0.6rem;">GOVERNANCE</span></div>
+          <div class="page-link-desc">User account governance console: list, filter, suspend, and safely remove customer and administrator accounts with safety rule enforcement.</div>
+        </a>
       </div>
     </div>
 
@@ -322,7 +334,7 @@ $db = getDBConnection();
         </a>
         <a href="caterer/package-details.php" class="page-link-card">
           <div class="page-link-name">package-details.html</div>
-          <div class="page-link-desc">Individual package specification card with course details, ratings, and active bookings.</div>
+          <div class="page-link-desc">Individual package specification card with course details, pricing, and active bookings.</div>
         </a>
         <a href="caterer/succeed-package.php" class="page-link-card">
           <div class="page-link-name">succeed-package.html</div>

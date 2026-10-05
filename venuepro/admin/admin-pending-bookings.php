@@ -81,13 +81,13 @@ $allBookings = $stmtAll->fetchAll();
             <span class="badge">8</span>
             🔔
           </a>
-          <div class="topbar-user">
+          <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
-          </div>
+          </a>
         </div><!-- /topbar-actions -->
       </header>
       <main class="page-body">

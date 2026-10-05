@@ -1,9 +1,29 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('customer', 'customer-login.php');
 $db = getDBConnection();
+
+$venueId = (int)($_GET['venue_id'] ?? 1);
+$conflictDate = sanitize($_GET['date'] ?? '2026-10-14');
+
+$stmtV = $db->prepare("SELECT * FROM venues WHERE id = ? LIMIT 1");
+$stmtV->execute([$venueId]);
+$venue = $stmtV->fetch();
+$venueName = $venue ? $venue['name'] : 'Grand Emerald Ballroom';
+
+$stmtB = $db->prepare("SELECT * FROM bookings WHERE venue_id = ? AND event_date = ? AND booking_status IN ('confirmed','pending') LIMIT 1");
+$stmtB->execute([$venueId, $conflictDate]);
+$conflictBooking = $stmtB->fetch();
+$eventName = $conflictBooking ? $conflictBooking['event_name'] : 'an existing corporate gala';
+$timeInfo = $conflictBooking ? " from " . substr($conflictBooking['start_time'], 0, 5) . " to " . substr($conflictBooking['end_time'], 0, 5) : "";
+
+$timestamp = strtotime($conflictDate) ?: strtotime('2026-10-14');
+$altDate1 = date('Y-m-d', strtotime('-2 days', $timestamp));
+$altDate2 = date('Y-m-d', strtotime('+3 days', $timestamp));
+$altLabel1 = date('l, M j, Y', strtotime($altDate1));
+$altLabel2 = date('l, M j, Y', strtotime($altDate2));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -64,13 +84,13 @@ $db = getDBConnection();
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
             💬
           </a>
-          <div class="topbar-user">
+          <a href="customer-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#2563eb;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
 
@@ -80,22 +100,22 @@ $db = getDBConnection();
   <div class="card" style="padding:36px; text-align:center;">
     <div style="width:64px; height:64px; border-radius:50%; background:#fee2e2; color:#dc2626; display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 16px;">⚠️</div>
     <h2 class="mb-8">Date Conflict Alert</h2>
-    <p class="mb-24 text-muted">Grand Emerald Ballroom is already booked for an annual gala on <strong>October 14, 2026</strong>. Please choose another date or inspect adjacent openings.</p>
+    <p class="mb-24 text-muted"><strong><?= e($venueName) ?></strong> is already reserved for <?= e($eventName) ?> on <strong><?= date('F j, Y', $timestamp) ?></strong><?= e($timeInfo) ?>. Please select an adjacent opening or choose another date.</p>
 
     <div class="card mb-24" style="background:var(--gray-50); text-align:left;">
       <div class="font-semibold text-sm mb-8">Recommended Adjacent Openings:</div>
       <div class="flex-between text-sm mb-8" style="padding:8px 12px; background:#fff; border-radius:var(--radius-sm);">
-        <span>Wednesday, Oct 12, 2026</span>
-        <a href="booking-summary-payment.php" class="btn btn-outline btn-sm">Select Date</a>
+        <span><?= e($altLabel1) ?></span>
+        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>&date=<?= $altDate1 ?>" onclick="sessionStorage.setItem('vp_event_date', '<?= $altDate1 ?>'); sessionStorage.setItem('vp_date', '<?= $altDate1 ?>');" class="btn btn-outline btn-sm">Select Date</a>
       </div>
       <div class="flex-between text-sm" style="padding:8px 12px; background:#fff; border-radius:var(--radius-sm);">
-        <span>Tuesday, Oct 18, 2026</span>
-        <a href="booking-summary-payment.php" class="btn btn-outline btn-sm">Select Date</a>
+        <span><?= e($altLabel2) ?></span>
+        <a href="booking-date-guests.php?venue_id=<?= $venueId ?>&date=<?= $altDate2 ?>" onclick="sessionStorage.setItem('vp_event_date', '<?= $altDate2 ?>'); sessionStorage.setItem('vp_date', '<?= $altDate2 ?>');" class="btn btn-outline btn-sm">Select Date</a>
       </div>
     </div>
 
     <div class="flex gap-12">
-      <a href="venue-details.php" class="btn btn-ghost" style="flex:1;">Cancel Selection</a>
+      <a href="booking-date-guests.php?venue_id=<?= $venueId ?>" class="btn btn-ghost" style="flex:1;">Change Date</a>
       <a href="venue-listings.php" class="btn btn-primary" style="flex:1;">Browse Other Venues</a>
     </div>
   </div>

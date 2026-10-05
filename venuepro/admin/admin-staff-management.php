@@ -178,13 +178,13 @@ $staffMembers = $stmtS->fetchAll();
               <span class="badge">8</span>
               🔔
             </a>
-            <div class="topbar-user">
+            <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
               <div class="user-avatar" style="background: #0f172a"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
               <div class="user-info">
                 <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
                 <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
               </div>
-            </div>
+            </a>
           </div>
         </header>
         <main class="page-body">
@@ -285,6 +285,7 @@ async function deleteStaff(id, name) {
         row.style.opacity = '0';
         row.style.transition = 'opacity .3s';
         setTimeout(function() { row.remove(); }, 320);
+        
       }
       var toast = document.createElement('div');
       toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#166534;color:#fff;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,.2);';

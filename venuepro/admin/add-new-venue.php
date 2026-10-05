@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -45,7 +45,7 @@ $db = getDBConnection();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../venues.php" class="nav-item logout-link" style="color:var(--gray-400);">
+        <a href="../logout.php" class="nav-item logout-link" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -58,20 +58,20 @@ $db = getDBConnection();
         </label>
         <div class="topbar-search">
           <span class="topbar-search-icon">🔍</span>
-          <input type="text" placeholder="Search bookings, venues, staff, caterers...">
+          <input type="text" placeholder="e.g. Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
           <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
             <span class="badge">8</span>
             🔔
           </a>
-          <div class="topbar-user">
+          <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
       <main class="page-body">
@@ -143,13 +143,13 @@ $db = getDBConnection();
         <div style="font-size: 32px; line-height: 1; margin-bottom: 8px;">🖼️</div>
         <div style="font-weight: 600; font-size: 14px; color: var(--navy-900);">Click to upload venue image or drag and drop</div>
         <div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">Supports PNG, JPG, or WEBP (Max 10MB)</div>
-        <input type="file" id="venue-image-input" accept="image/*" style="display:none;" onchange="previewVenueImage(this)">
+        <input type="file" id="venue-image-input" name="venue_image" accept="image/*" style="display:none;" onchange="previewVenueImage(this)">
         <div id="venue-image-preview-container" style="display:none; margin-top:12px; align-items:center; justify-content:center; gap:8px;">
           <span id="venue-image-name" style="font-size:13px; font-weight:600; color:var(--success);"></span>
         </div>
       </div>
       <div style="margin-top: 8px;">
-        <input type="url" name="image_url" class="form-control" placeholder="Or enter image URL (e.g. https://images.unsplash.com/...)">
+        <input type="text" name="image_url" class="form-control" placeholder="e.g. assets/venues pic/images.jpg (or upload file above)">
       </div>
     </div>
 
@@ -184,7 +184,7 @@ $db = getDBConnection();
       if (input.files && input.files[0]) {
         const container = document.getElementById('venue-image-preview-container');
         const nameSpan = document.getElementById('venue-image-name');
-        nameSpan.textContent = '✓ Selected: ' + input.files[0].name;
+        nameSpan.textContent = '✓ Selected: ' + input.files[0].name + ' (' + Math.round(input.files[0].size / 1024) + ' KB)';
         container.style.display = 'flex';
       }
     }
@@ -201,16 +201,10 @@ document.addEventListener('DOMContentLoaded', function() {
     alertBox.style.display = 'none';
     var btn = form.querySelector('[type="submit"]');
     var origText = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Publishing Venue & Uploading Image...'; }
 
-    // Collect amenities
-    var amenities = [];
-    form.querySelectorAll('input[name="amenities[]"]:checked').forEach(function(cb) {
-      amenities.push(cb.value);
-    });
-
-    var nameVal    = (form.querySelector('[name="name"]') || {}).value || '';
-    var addrVal    = (form.querySelector('[name="address"]') || {}).value || '';
+    var nameVal = (form.querySelector('[name="name"]') || {}).value || '';
+    var addrVal = (form.querySelector('[name="address"]') || {}).value || '';
 
     if (!nameVal.trim() || !addrVal.trim()) {
       alertBox.style.display = 'block';
@@ -221,32 +215,19 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    var data = {
-      name:                 nameVal.trim(),
-      venue_type:           (form.querySelector('[name="venue_type"]') || {}).value || 'Ballroom',
-      address:              addrVal.trim(),
-      district:             ((form.querySelector('[name="district"]') || {}).value || '').trim(),
-      capacity:             parseInt((form.querySelector('[name="capacity"]') || {}).value) || 100,
-      base_rate:            parseFloat((form.querySelector('[name="base_rate"]') || {}).value) || 1000,
-      additional_hour_rate: parseFloat((form.querySelector('[name="additional_hour_rate"]') || {}).value) || 350,
-      description:          ((form.querySelector('[name="description"]') || {}).value || '').trim(),
-      image_url:            ((form.querySelector('[name="image_url"]') || {}).value || '').trim(),
-      amenities:            amenities,
-      status:               'active'
-    };
+    var formData = new FormData(form);
 
     try {
       var res = await fetch('../api/venues.php?action=create', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
+        body: formData
       });
       var d = await res.json();
       if (d.success) {
         alertBox.style.display = 'block';
         alertBox.style.background = '#dcfce7';
         alertBox.style.color = '#166534';
-        alertBox.textContent = '✓ Venue published successfully! Redirecting...';
+        alertBox.textContent = '✓ Venue published with cover photo successfully! Redirecting...';
         setTimeout(function() { window.location.href = 'venue-management.php'; }, 900);
       } else {
         alertBox.style.display = 'block';

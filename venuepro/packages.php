@@ -91,7 +91,7 @@ $db = getDBConnection();
     <nav class="flex-center gap-20">
       <a href="venues.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Venues</a>
       <a href="packages.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Catering Packages</a>
-      <a href="venues.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
+      <a href="login-role.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
       <a href="signup-role.php" class="btn btn-primary btn-sm" style="font-weight:600;">Sign Up</a>
     </nav>
   </header>

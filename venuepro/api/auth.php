@@ -169,8 +169,15 @@ switch ($action) {
 
     case 'logout':
         logoutUser();
+        // If accessed directly via browser (not AJAX / fetch expecting JSON), redirect to venues.php
+        $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+        if (strpos($accept, 'application/json') === false && strpos($accept, 'text/html') !== false) {
+            header("Location: ../venues.php");
+            exit;
+        }
         jsonResponse(true, 'Successfully logged out.', ['redirect' => '../venues.php']);
         break;
+
 
     case 'me':
         if (!isLoggedIn()) {

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -75,36 +75,18 @@ if (!$venueData) {
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
             💬
           </a>
-          <div class="topbar-user">
+          <a href="customer-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#2563eb;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
 
       <main class="page-body">
-        
-<div class="steps">
-  <div class="step active">
-    <div class="step-circle">1</div>
-    <div class="step-label">Venue & Logistics</div>
-  </div>
-  <div class="step-line"></div>
-  <div class="step">
-    <div class="step-circle">2</div>
-    <div class="step-label">Catering</div>
-  </div>
-  <div class="step-line"></div>
-  <div class="step">
-    <div class="step-circle">3</div>
-    <div class="step-label">Payment</div>
-  </div>
-</div>
 
-<div class="grid-2" style="max-width:960px; margin:0 auto; gap:28px;">
 <?php
 $venueId = (int)($_GET['venue_id'] ?? 1);
 $stmtVD = $db->prepare("SELECT * FROM venues WHERE id = ? LIMIT 1");
@@ -121,12 +103,12 @@ if (!in_array($selectedPlan, ['essential', 'enterprise', 'elite'])) {
     $selectedPlan = 'enterprise';
 }
 
-$baseRate = (float)($venueData['base_rate'] ?? 2000);
-$maxCapacity = (int)($venueData['max_capacity'] ?? 200);
+$baseRate    = (float)($venueData['base_rate'] ?? 2000);
+$maxCapacity = (int)($venueData['capacity'] ?? 200); // DB column = capacity
 $planPricing = [
-    'essential'  => ['name' => 'Essential Half-Day', 'duration' => 6,  'rate' => round($baseRate * 0.5),  'hours' => '6 Hours',  'desc' => 'Standard floor access & basic AV rig'],
-    'enterprise' => ['name' => 'Enterprise Full-Day', 'duration' => 12, 'rate' => round($baseRate),        'hours' => '12 Hours', 'desc' => 'Full day access, AV tech & manager'],
-    'elite'      => ['name' => 'Elite Gala Extended', 'duration' => 24, 'rate' => round($baseRate * 1.75), 'hours' => '24 Hours', 'desc' => 'Full day/night access & VIP suite'],
+    'essential'  => ['name' => 'Essential Half-Day',  'duration' => 6,  'rate' => round($baseRate * 0.5),  'hours' => '6 Hours',  'desc' => 'Standard floor access & basic AV rig'],
+    'enterprise' => ['name' => 'Enterprise Full-Day',  'duration' => 12, 'rate' => round($baseRate),        'hours' => '12 Hours', 'desc' => 'Full day access, AV tech & manager'],
+    'elite'      => ['name' => 'Elite Gala Extended',  'duration' => 24, 'rate' => round($baseRate * 1.75), 'hours' => '24 Hours', 'desc' => 'Full day/night access & VIP suite'],
 ];
 
 $stockImages = [
@@ -136,10 +118,15 @@ $stockImages = [
   'https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=300&q=80',
   'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=300&q=80',
 ];
-$summaryImg = !empty($venueData['image_url']) ? '../' . $venueData['image_url'] : $stockImages[$venueId % count($stockImages)];
+// Fix image path — strip leading ../ before prepending
+$rawSummaryImg = $venueData['image_url'] ?? '';
+if (str_starts_with($rawSummaryImg, '../')) $rawSummaryImg = substr($rawSummaryImg, 3);
+$isDefaultSummary = (empty($rawSummaryImg) || str_contains($rawSummaryImg, 'venue-default'));
+$summaryImg = $isDefaultSummary ? $stockImages[$venueId % count($stockImages)] : ('../' . $rawSummaryImg);
 ?>
 
-<div class="steps">
+<!-- Step Indicator -->
+<div class="steps" style="max-width:960px; margin:0 auto 28px;">
   <div class="step active">
     <div class="step-circle">1</div>
     <div class="step-label">Venue &amp; Plan</div>
@@ -156,19 +143,21 @@ $summaryImg = !empty($venueData['image_url']) ? '../' . $venueData['image_url'] 
   </div>
 </div>
 
-<!-- Plan Selection Cards -->
-<div class="mb-24" style="max-width:960px; margin:0 auto 24px;">
+<!-- Step 1A: Pricing Plan Selection -->
+<div style="max-width:960px; margin:0 auto 24px;">
   <div class="flex-between mb-12">
     <div>
       <h3 style="font-size:1.25rem; font-weight:800; margin:0 0 4px;">1. Select Venue Rental Plan</h3>
-      <p style="margin:0; font-size:0.85rem; color:var(--gray-500);">Tier pricing dynamically loaded from property catalog for <?= e($venueData['name']) ?>.</p>
+      <p style="margin:0; font-size:0.85rem; color:var(--gray-500);">Choose a tier for <strong><?= e($venueData['name']) ?></strong> — you can change this before confirming.</p>
     </div>
   </div>
   <div class="grid-3 gap-16" id="plan-cards-container">
     <?php foreach ($planPricing as $key => $p):
       $isSel = ($key === $selectedPlan);
     ?>
-    <div class="card plan-card <?= $isSel ? 'plan-card-selected' : '' ?>" data-plan="<?= $key ?>" data-rate="<?= $p['rate'] ?>" data-duration="<?= $p['duration'] ?>" data-name="<?= e($p['name']) ?>" style="cursor:pointer; border:2px solid <?= $isSel ? 'var(--primary)' : 'var(--gray-200)' ?>; background:<?= $isSel ? '#eff6ff' : '#fff' ?>; transition:all 0.2s ease; padding:18px;">
+    <div class="card plan-card <?= $isSel ? 'plan-card-selected' : '' ?>"
+         data-plan="<?= $key ?>" data-rate="<?= $p['rate'] ?>" data-duration="<?= $p['duration'] ?>" data-name="<?= e($p['name']) ?>"
+         style="cursor:pointer; border:2px solid <?= $isSel ? 'var(--primary)' : 'var(--gray-200)' ?>; background:<?= $isSel ? '#eff6ff' : '#fff' ?>; transition:all 0.2s ease; padding:18px;">
       <div class="flex-between mb-8">
         <span class="font-bold text-sm" style="color:var(--gray-900);"><?= strtoupper($key) ?></span>
         <?php if ($key === 'enterprise'): ?>
@@ -186,6 +175,7 @@ $summaryImg = !empty($venueData['image_url']) ? '../' . $venueData['image_url'] 
   </div>
 </div>
 
+<!-- Step 1B: Date/Logistics + Summary -->
 <div class="grid-2" style="max-width:960px; margin:0 auto; gap:28px;">
   <div class="card">
     <h2 class="mb-4">2. Event Date &amp; Logistics</h2>
@@ -199,8 +189,9 @@ $summaryImg = !empty($venueData['image_url']) ? '../' . $venueData['image_url'] 
 
       <div class="form-group">
         <label class="form-label">Event Date *</label>
-        <input type="date" name="date" id="event-date-input" class="form-control" min="<?= date('Y-m-d') ?>" required>
+        <input type="date" name="date" id="event-date-input" class="form-control" min="<?= date('Y-m-d') ?>" value="<?= e($_GET['date'] ?? '') ?>" required>
       </div>
+
 
       <div class="form-row">
         <div class="form-group">
@@ -238,10 +229,11 @@ $summaryImg = !empty($venueData['image_url']) ? '../' . $venueData['image_url'] 
     </form>
   </div>
 
+  <!-- Booking Summary Card -->
   <div class="card" style="background:var(--gray-50); position:sticky; top:90px;">
     <h3 class="mb-16">Booking Summary</h3>
     <div class="flex gap-12 mb-16">
-      <div style="width:70px; height:70px; border-radius:var(--radius-sm); background:url('<?= e($summaryImg) ?>') center/cover;"></div>
+      <div style="width:70px; height:70px; border-radius:var(--radius-sm); background:url('<?= e($summaryImg) ?>') center/cover; flex-shrink:0;"></div>
       <div>
         <div class="font-bold text-sm"><?= e($venueData['name']) ?></div>
         <div class="text-xs text-muted">📍 <?= e($venueData['district']) ?></div>
@@ -254,8 +246,8 @@ $summaryImg = !empty($venueData['image_url']) ? '../' . $venueData['image_url'] 
         <strong id="summary-tier-name"><?= e($planPricing[$selectedPlan]['name']) ?></strong>
       </div>
       <div class="flex-between text-sm mb-8">
-        <span class="text-muted">Rental Duration</span>
-        <span class="font-semibold" id="summary-duration"><?= e($planPricing[$selectedPlan]['hours']) ?></span>
+        <!-- <span class="text-muted">Rental Duration</span> -->
+        <!-- <span class="font-semibold" id="summary-duration"><?= e($planPricing[$selectedPlan]['hours']) ?></span> -->
       </div>
       <div class="flex-between text-sm mb-8">
         <span class="text-muted">Venue Cost</span>
@@ -271,7 +263,9 @@ $summaryImg = !empty($venueData['image_url']) ? '../' . $venueData['image_url'] 
     </div>
   </div>
 </div>
+
 </main>
+
 
                         <footer class="page-footer">
         <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
@@ -322,59 +316,139 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Availability checking
+  // Availability checking & Date Conflict Interception
   var checkBtn = document.getElementById('btn-check-availability');
+
   var dateInput = document.getElementById('event-date-input');
   var startTimeInput = document.getElementById('start-time-input');
   var endTimeInput = document.getElementById('end-time-input');
   var statusBox = document.getElementById('availability-status');
+  var form = document.getElementById('booking-step1-form');
 
-  if (checkBtn) {
-    checkBtn.addEventListener('click', async function(e) {
-      e.preventDefault();
-      var dateVal = dateInput ? dateInput.value : '';
-      if (!dateVal) {
+  var lastCheck = { date: '', start: '', end: '', available: null };
+
+  async function checkAvailability(showPrompt = true) {
+    var dateVal = dateInput ? dateInput.value : '';
+    if (!dateVal) {
+      if (showPrompt) {
         statusBox.innerHTML = '<div style="background:#fee2e2; border:1px solid #f87171; border-radius:6px; padding:10px 14px; color:#991b1b; font-size:0.85rem; font-weight:600;">⚠️ Please select an event date first.</div>';
         dateInput.focus();
-        return;
       }
+      return false;
+    }
+
+    var start = startTimeInput && startTimeInput.value ? (startTimeInput.value.length === 5 ? startTimeInput.value + ':00' : startTimeInput.value) : '10:00:00';
+    var end = endTimeInput && endTimeInput.value ? (endTimeInput.value.length === 5 ? endTimeInput.value + ':00' : endTimeInput.value) : '22:00:00';
+
+    if (checkBtn) {
       checkBtn.disabled = true;
       checkBtn.textContent = 'Checking...';
-      try {
-        var start = startTimeInput ? startTimeInput.value + ':00' : '10:00:00';
-        var end = endTimeInput ? endTimeInput.value + ':00' : '22:00:00';
-        var res = await fetch('../api/bookings.php?action=check_availability&venue_id=' + vpVenueId + '&date=' + dateVal + '&start_time=' + start + '&end_time=' + end);
-        var d = await res.json();
-        if (d.data && d.data.available) {
-          statusBox.innerHTML = '<div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:10px 14px; color:#166534; font-size:0.85rem; font-weight:600;">✓ ' + (d.message || 'Date and time slot is available for booking!') + '</div>';
-          sessionStorage.setItem('vp_event_date', dateVal);
-          sessionStorage.setItem('vp_start_time', start);
-          sessionStorage.setItem('vp_end_time', end);
-        } else {
-          statusBox.innerHTML = '<div style="background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; padding:10px 14px; color:#92400e; font-size:0.85rem; font-weight:600;">⚠️ ' + (d.message || 'Time-slot conflict detected for this date.') + '</div>';
-        }
-      } catch(err) {
-        statusBox.innerHTML = '<div style="background:#fee2e2; border:1px solid #f87171; border-radius:6px; padding:10px 14px; color:#991b1b; font-size:0.85rem;">Server connection error.</div>';
-      } finally {
+    }
+
+    try {
+      var res = await fetch('../api/bookings.php?action=check_availability&venue_id=' + encodeURIComponent(vpVenueId) + '&date=' + encodeURIComponent(dateVal) + '&start_time=' + encodeURIComponent(start) + '&end_time=' + encodeURIComponent(end));
+      var d = await res.json();
+      
+      if (d.data && d.data.available) {
+        lastCheck = { date: dateVal, start: start, end: end, available: true };
+        dateInput.style.borderColor = '#10b981';
+        statusBox.innerHTML = '<div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:10px 14px; color:#166534; font-size:0.85rem; font-weight:600;">✓ ' + (d.message || 'Date and time slot is available for booking!') + '</div>';
+        sessionStorage.setItem('vp_event_date', dateVal);
+        sessionStorage.setItem('vp_date', dateVal);
+        sessionStorage.setItem('vp_start_time', start);
+        sessionStorage.setItem('vp_end_time', end);
+        return true;
+      } else {
+        lastCheck = { date: dateVal, start: start, end: end, available: false };
+        dateInput.style.borderColor = '#dc2626';
+        var conflictMsg = d.message || 'Time-slot conflict detected for this date.';
+        var conflictPageUrl = 'booking-date-conflict.php?venue_id=' + encodeURIComponent(vpVenueId) + '&date=' + encodeURIComponent(dateVal);
+        statusBox.innerHTML = '<div style="background:#fef2f2; border:1.5px solid #ef4444; border-radius:6px; padding:12px 16px; color:#991b1b; font-size:0.85rem;">' +
+          '<div style="font-weight:700; margin-bottom:4px;">⚠️ Date Conflict Detected</div>' +
+          '<div>' + conflictMsg + '</div>' +
+          '<div style="margin-top:8px;"><a href="' + conflictPageUrl + '" class="btn btn-sm btn-outline" style="color:#b91c1c; border-color:#fca5a5; font-size:0.78rem; text-decoration:none;">View Conflict Details &amp; Adjacent Dates →</a></div>' +
+          '</div>';
+        return false;
+      }
+    } catch(err) {
+      console.error(err);
+      statusBox.innerHTML = '<div style="background:#fee2e2; border:1px solid #f87171; border-radius:6px; padding:10px 14px; color:#991b1b; font-size:0.85rem;">Server connection error. Please try again.</div>';
+      return false;
+    } finally {
+      if (checkBtn) {
         checkBtn.disabled = false;
         checkBtn.textContent = 'Check Availability';
       }
+    }
+  }
+
+  if (checkBtn) {
+    checkBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      checkAvailability(true);
     });
   }
 
-  // Form submission: save to sessionStorage and forward
-  var form = document.getElementById('booking-step1-form');
-  if (form) {
-    form.addEventListener('submit', function(e) {
-      if (dateInput && dateInput.value) {
-        sessionStorage.setItem('vp_event_date', dateInput.value);
-        sessionStorage.setItem('vp_guest_count', document.getElementById('guest-count-input').value);
-        sessionStorage.setItem('vp_start_time', startTimeInput.value);
-        sessionStorage.setItem('vp_end_time', endTimeInput.value);
-      }
+  // Automatic check when date or times change
+  if (dateInput) {
+    dateInput.addEventListener('change', function() {
+      if (dateInput.value) checkAvailability(false);
     });
   }
+  if (startTimeInput) {
+    startTimeInput.addEventListener('change', function() {
+      if (dateInput && dateInput.value) checkAvailability(false);
+    });
+  }
+  if (endTimeInput) {
+    endTimeInput.addEventListener('change', function() {
+      if (dateInput && dateInput.value) checkAvailability(false);
+    });
+  }
+
+  // Form submission: verify availability before advancing to catering
+  if (form) {
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      var dateVal = dateInput ? dateInput.value : '';
+      if (!dateVal) {
+        dateInput.focus();
+        checkAvailability(true);
+        return;
+      }
+
+      var isAvail = await checkAvailability(true);
+      if (!isAvail) {
+        // Date conflict detected! Scroll to status alert
+        statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      var guestInput = document.getElementById('guest-count-input');
+      var guestCount = guestInput ? guestInput.value : '100';
+      var startVal = startTimeInput ? startTimeInput.value : '10:00';
+      var endVal = endTimeInput ? endTimeInput.value : '22:00';
+
+      sessionStorage.setItem('vp_venue_id', vpVenueId);
+      sessionStorage.setItem('vp_event_date', dateVal);
+      sessionStorage.setItem('vp_date', dateVal);
+      sessionStorage.setItem('vp_guest_count', guestCount);
+      sessionStorage.setItem('vp_guests', guestCount);
+      sessionStorage.setItem('vp_start_time', startVal + ':00');
+      sessionStorage.setItem('vp_end_time', endVal + ':00');
+
+      // Safe to proceed to catering step
+      form.submit();
+    });
+  }
+
+  // If date is already populated, check availability immediately
+  if (dateInput && dateInput.value) {
+    checkAvailability(false);
+  }
 });
+
+
 </script>
 </body>
 </html>

@@ -67,7 +67,7 @@ $db = getDBConnection();
     <nav class="flex-center gap-20">
       <a href="venues.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Venues</a>
       <a href="packages.php" style="color:var(--gray-700); font-weight:600; text-decoration:none; font-size:0.9rem;">Catering Packages</a>
-      <a href="venues.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
+      <a href="login-role.php" class="btn btn-outline btn-sm" style="font-weight:600;">Sign In</a>
       <a href="signup-role.php" class="btn btn-primary btn-sm" style="font-weight:600;">Sign Up</a>
     </nav>
   </header>
@@ -83,13 +83,13 @@ $db = getDBConnection();
     <?php
     $sortBy = htmlspecialchars($_GET['sort'] ?? 'popular', ENT_QUOTES);
     $orderMap = [
-        'popular'       => 'rating DESC, id ASC',
-        'capacity_desc' => 'max_capacity DESC',
+        'popular'       => 'id ASC',
+        'capacity_desc' => 'capacity DESC',
         'price_asc'     => 'base_rate ASC',
         'price_desc'    => 'base_rate DESC',
-        'rating'        => 'rating DESC',
     ];
-    $orderClause = $orderMap[$sortBy] ?? 'rating DESC, id ASC';
+    $orderClause = $orderMap[$sortBy] ?? 'id ASC';
+
 
     $search = trim(htmlspecialchars($_GET['search'] ?? '', ENT_QUOTES));
     if (!empty($search)) {
@@ -123,7 +123,6 @@ $db = getDBConnection();
             <option value="capacity_desc" <?= $sortBy==='capacity_desc' ? 'selected' : '' ?>>Capacity: High to Low</option>
             <option value="price_asc" <?= $sortBy==='price_asc' ? 'selected' : '' ?>>Price: Low to High</option>
             <option value="price_desc" <?= $sortBy==='price_desc' ? 'selected' : '' ?>>Price: High to Low</option>
-            <option value="rating" <?= $sortBy==='rating' ? 'selected' : '' ?>>Highest Rated</option>
           </select>
         </form>
       </div>
@@ -131,15 +130,6 @@ $db = getDBConnection();
 
     <div class="grid-3 gap-24">
       <?php
-      $stockImages = [
-        'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80',
-        'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80',
-        'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
-        'https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=800&q=80',
-        'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80',
-        'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80',
-        'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
-      ];
       if (empty($venues)): ?>
       <div style="grid-column:1/-1; text-align:center; padding:60px 24px; color:var(--gray-400);">
         <div style="font-size:3.5rem; margin-bottom:12px;">🏛️</div>
@@ -147,11 +137,11 @@ $db = getDBConnection();
       </div>
       <?php else:
       foreach ($venues as $idx => $v):
-        // Fix image path: strip leading ../ added by admin subdir forms; treat default placeholder as empty
+        // Resolve image path: uploaded image in assets/venues pic/ or fallback to local project picture
         $rawImg = $v['image_url'] ?? '';
         if (str_starts_with($rawImg, '../')) $rawImg = substr($rawImg, 3);
         $isDefault = (empty($rawImg) || str_contains($rawImg, 'venue-default'));
-        $img = $isDefault ? $stockImages[$idx % count($stockImages)] : $rawImg;
+        $img = !$isDefault ? $rawImg : 'assets/venues pic/images.jpg';
         $badge = !empty($v['badge']) ? $v['badge'] : strtoupper($v['venue_type'] ?? 'VENUE');
       ?>
       <div class="venue-card">
@@ -172,7 +162,7 @@ $db = getDBConnection();
             <div class="flex gap-8">
               <?php
               $dbCount = (int)($photoCountMap[(int)$v['id']] ?? 0);
-              $photoLabel = $dbCount > 0 ? ($dbCount + 1) . '+' : '6+';
+              $photoLabel = $dbCount > 0 ? ($dbCount . ' Photos') : 'Cover Photo';
               ?>
               <a href="venue-details.php?id=<?= $v['id'] ?>#photo-gallery" class="btn btn-outline btn-sm">View Photos (<?= $photoLabel ?>)</a>
               <a href="#signin-modal" class="btn btn-primary btn-sm">🔒 Book Now</a>
@@ -192,7 +182,7 @@ $db = getDBConnection();
       <h3 style="font-size:1.35rem; font-weight:800; margin-bottom:8px; color:var(--gray-900);">Sign In Required</h3>
       <p class="text-sm text-muted mb-20">You are browsing in <strong>Guest Mode</strong>. You can view all venues, inspect high-resolution photo galleries, and explore catering menus freely.<br><br>To place a reservation or order catering, please sign in to your account.</p>
       <div class="flex gap-12 mb-12">
-        <a href="venues.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
+        <a href="login-role.php" class="btn btn-primary btn-full font-bold">Sign In to Continue →</a>
         <a href="signup-role.php" class="btn btn-outline btn-full font-semibold">Create Account</a>
       </div>
       <div class="text-xs text-muted">Authorized access for Customers, Staff, Caterers &amp; Admins.</div>

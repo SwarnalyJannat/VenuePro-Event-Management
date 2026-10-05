@@ -14,7 +14,7 @@ $stmtC = $db->prepare(
      JOIN caterer_profiles cp ON u.id = cp.user_id
      LEFT JOIN caterer_orders co ON u.id = co.caterer_id AND co.preparation_status != 'Delivered'
      LEFT JOIN catering_packages pkg ON u.id = pkg.caterer_id
-     WHERE u.role = 'caterer'
+     WHERE u.role = 'caterer' AND u.status = 'active' AND cp.approval_status != 'rejected'
      GROUP BY u.id ORDER BY cp.business_name"
 );
 $stmtC->execute();
@@ -62,7 +62,7 @@ $caterers = $stmtC->fetchAll();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../logout.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -82,13 +82,13 @@ $caterers = $stmtC->fetchAll();
             <span class="badge">8</span>
             🔔
           </a>
-          <div class="topbar-user">
+          <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
       <main class="page-body">
@@ -112,7 +112,7 @@ foreach ($caterers as $c) {
 }
 ?>
 
-<div class="grid-2 gap-24">
+<div>
   <div class="card">
     <div class="flex-between mb-16">
       <h3>Active Certified Partners</h3>
@@ -120,7 +120,7 @@ foreach ($caterers as $c) {
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>KITCHEN</th><th>SPECIALTY</th><th>ORDERS</th><th>STATUS</th></tr></thead>
+        <thead><tr><th>KITCHEN</th><th>SPECIALTY</th><th>ORDERS</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
         <tbody>
           <?php if (empty($approvedCaterers)): ?>
           <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--gray-400);">No approved caterers found.</td></tr>
@@ -131,7 +131,10 @@ foreach ($caterers as $c) {
             <td><?= (int)$c['active_orders'] ?></td>
             <td><span class="pill pill-confirmed">VERIFIED</span></td>
             <td>
-              <button onclick="deleteCaterer(<?= (int)$c['id'] ?>, '<?= e(addslashes($c['business_name'] ?: $c['name'])) ?>')" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;cursor:pointer;border-radius:6px;padding:4px 10px;font-size:0.78rem;">Remove</button>
+              <div class="flex gap-8">
+                <a href="admin-edit-caterer.php?id=<?= (int)$c['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px; font-size:0.78rem;">Edit</a>
+                <button onclick="deleteCaterer(<?= (int)$c['id'] ?>, '<?= e(addslashes($c['business_name'] ?: $c['name'])) ?>')" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;cursor:pointer;border-radius:6px;padding:4px 10px;font-size:0.78rem;">Remove</button>
+              </div>
             </td>
           </tr>
           <?php endforeach; endif; ?>
@@ -140,7 +143,7 @@ foreach ($caterers as $c) {
     </div>
   </div>
 
-  <div class="card">
+  <!-- <div class="card">
     <div class="flex-between mb-16">
       <h3>Pending Applications</h3>
       <span class="pill pill-pending"><?= count($pendingCaterers) ?> PENDING</span>
@@ -156,7 +159,7 @@ foreach ($caterers as $c) {
       <div class="text-xs text-muted"><?= e($c['specialization'] ?? '') ?> • <?= e($c['kitchen_address'] ?? 'Kitchen Facility') ?></div>
     </div>
     <?php endforeach; endif; ?>
-  </div>
+  </div> -->
 </div>
 </main>
                         <footer class="page-footer">
@@ -167,7 +170,7 @@ foreach ($caterers as $c) {
 <script src="../js/app.js"></script>
 <script>
 async function deleteCaterer(id, name) {
-  if (!confirm('Remove caterer "' + name + '" from the platform? They will be set to inactive.')) return;
+  if (!confirm('Remove caterer "' + name + '" from the platform? This will update the database.')) return;
   try {
     var res = await fetch('../api/caterers.php?action=delete', {
       method: 'POST',
@@ -192,4 +195,4 @@ async function deleteCaterer(id, name) {
 }
 </script>
 </body>
-</html>
+</html>

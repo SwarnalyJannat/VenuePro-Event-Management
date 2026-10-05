@@ -48,6 +48,64 @@ switch ($action) {
         jsonResponse(true, 'Setup checklist updated successfully!');
         break;
 
+    case 'create':
+        requireRole('admin');
+        $input = !empty($_POST) ? $_POST : getJsonInput();
+        $name = sanitize($input['name'] ?? '');
+        $email = strtolower(sanitize($input['email'] ?? ''));
+        $phone = sanitize($input['phone'] ?? '');
+        $department = sanitize($input['department'] ?? 'Event Operations');
+        $password = $input['password'] ?? 'password123';
+        $staffCode = sanitize($input['staff_code'] ?? ($input['staff_id'] ?? 'STF-' . rand(1000, 9999)));
+        $venueInput = $input['assigned_venues'] ?? [];
+        if (is_array($venueInput)) {
+            $assignedVenuesStr = implode(',', array_map('intval', $venueInput));
+        } else {
+            $assignedVenuesStr = sanitize((string)$venueInput);
+        }
+
+        if (empty($name) || empty($email)) {
+            jsonResponse(false, 'Full legal name and corporate email are required.', null, 400);
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            jsonResponse(false, 'Please provide a valid email address.', null, 400);
+        }
+        if (strlen($password) < 6) {
+            jsonResponse(false, 'Password must be at least 6 characters.', null, 400);
+        }
+
+        // Check if user already exists
+        $stmtCheck = $db->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+        $stmtCheck->execute([$email]);
+        if ($stmtCheck->fetch()) {
+            jsonResponse(false, 'An account with this email address already exists.', null, 409);
+        }
+
+        $passwordHash = password_hash($password, PASSWORD_BCRYPT);
+        $avatarText = strtoupper(substr($name, 0, 2));
+        $avatarColors = ['#2563eb', '#059669', '#0284c7', '#4f46e5', '#7c3aed', '#0d9488'];
+        $avatarBg = $avatarColors[array_rand($avatarColors)];
+
+        $db->beginTransaction();
+        try {
+            $stmtUser = $db->prepare("INSERT INTO users (name, email, password_hash, role, phone, avatar_text, avatar_bg, status) VALUES (?, ?, ?, 'staff', ?, ?, ?, 'active')");
+            $stmtUser->execute([$name, $email, $passwordHash, $phone, $avatarText, $avatarBg]);
+            $newUserId = (int)$db->lastInsertId();
+
+            $stmtProf = $db->prepare("INSERT INTO staff_profiles (user_id, staff_code, department, assigned_venues, active_status) VALUES (?, ?, ?, ?, 'active')");
+            $stmtProf->execute([$newUserId, $staffCode, $department, $assignedVenuesStr]);
+
+            $db->commit();
+            jsonResponse(true, 'Staff member added successfully!', [
+                'user_id' => $newUserId,
+                'staff_code' => $staffCode
+            ], 201);
+        } catch (Exception $e) {
+            $db->rollBack();
+            jsonResponse(false, 'Failed to add staff member: ' . $e->getMessage(), null, 500);
+        }
+        break;
+
     case 'update':
         requireRole('admin');
         $input = !empty($_POST) ? $_POST : getJsonInput();
@@ -86,16 +144,52 @@ switch ($action) {
         break;
 
     case 'delete':
-        requireRole('admin');
-        $input = !empty($_POST) ? $_POST : getJsonInput();
-        $staffId = (int)($input['id'] ?? ($_GET['id'] ?? 0));
-        if ($staffId <= 0) {
-            jsonResponse(false, 'Valid staff ID is required', null, 400);
+    requireRole('admin');
+
+    $input = !empty($_POST) ? $_POST : getJsonInput();
+    $staffId = (int)($input['id'] ?? ($_GET['id'] ?? 0));
+
+    if ($staffId <= 0) {
+        jsonResponse(false, 'Valid staff ID is required', null, 400);
+    }
+
+    try {
+        $db->beginTransaction();
+
+        // Make sure the ID belongs to a staff member
+        $stmt = $db->prepare("SELECT id FROM users WHERE id = ? AND role = 'staff' LIMIT 1");
+        $stmt->execute([$staffId]);
+
+        if (!$stmt->fetch()) {
+            $db->rollBack();
+            jsonResponse(false, 'Staff member not found.', null, 404);
         }
-        $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ? AND role = 'staff'")->execute([$staffId]);
-        $db->prepare("UPDATE staff_profiles SET active_status = 'inactive' WHERE user_id = ?")->execute([$staffId]);
+
+        // Delete staff assignments first
+        $stmt = $db->prepare("DELETE FROM staff_assignments WHERE staff_id = ?");
+        $stmt->execute([$staffId]);
+
+        // Delete staff profile
+        $stmt = $db->prepare("DELETE FROM staff_profiles WHERE user_id = ?");
+        $stmt->execute([$staffId]);
+
+        // Finally delete the staff account
+        $stmt = $db->prepare("DELETE FROM users WHERE id = ? AND role = 'staff'");
+        $stmt->execute([$staffId]);
+
+        $db->commit();
+
         jsonResponse(true, 'Staff member removed successfully.');
-        break;
+
+    } catch (PDOException $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+
+        jsonResponse(false, 'Unable to remove staff member from the database.', null, 500);
+    }
+
+    break;
 
     case 'assign_venues':
         requireRole('admin');

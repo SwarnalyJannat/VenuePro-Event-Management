@@ -59,6 +59,30 @@ function requireLogin(?string $redirectUrl = null): array {
         header("Location: $target");
         exit;
     }
+
+    // Verify user exists and is active in database to ensure session validity and prevent stale profiles
+    try {
+        $db = getDBConnection();
+        $stmtUser = $db->prepare("SELECT id, name, email, role, phone, avatar_text, avatar_bg, status FROM users WHERE id = ? LIMIT 1");
+        $stmtUser->execute([(int)$_SESSION['user_id']]);
+        $activeUser = $stmtUser->fetch();
+        if (!$activeUser || $activeUser['status'] !== 'active') {
+            logoutUser();
+            $target = $redirectUrl ?: '../login-role.php';
+            header("Location: $target");
+            exit;
+        }
+
+        // Keep session data fresh in sync with database
+        $_SESSION['user_name']   = $activeUser['name'];
+        $_SESSION['user_email']  = $activeUser['email'];
+        $_SESSION['user_role']   = strtolower($activeUser['role']);
+        $_SESSION['avatar_text'] = $activeUser['avatar_text'] ?: strtoupper(substr($activeUser['name'], 0, 2));
+        $_SESSION['avatar_bg']   = $activeUser['avatar_bg'] ?: '#2563eb';
+    } catch (Exception $e) {
+        // Fall back to session if DB lookup fails
+    }
+
     return getCurrentUser();
 }
 

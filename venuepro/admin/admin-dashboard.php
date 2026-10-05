@@ -8,24 +8,42 @@ $db = getDBConnection();
 <?php
 // --- Live admin dashboard stats ---
 $todayDate    = date('Y-m-d');
+
+// Today's bookings
 $stmtToday    = $db->prepare("SELECT COUNT(*) FROM bookings WHERE DATE(created_at) = ?");
 $stmtToday->execute([$todayDate]);
 $todayBookings = (int)$stmtToday->fetchColumn();
 
-$stmtPending  = $db->prepare("SELECT COUNT(*) FROM bookings WHERE booking_status = 'pending'");
-$stmtPending->execute();
+// Last 7 days bookings
+$stmtThisWeek = $db->query("SELECT COUNT(*) FROM bookings WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)");
+$thisWeekBookings = (int)$stmtThisWeek->fetchColumn();
+
+// Pending bookings
+$stmtPending  = $db->query("SELECT COUNT(*) FROM bookings WHERE booking_status = 'pending'");
 $pendingCount = (int)$stmtPending->fetchColumn();
 
-$stmtRev      = $db->prepare("SELECT COALESCE(SUM(total_amount),0) FROM bookings WHERE booking_status != 'cancelled'");
-$stmtRev->execute();
-$revMTD = (float)$stmtRev->fetchColumn();
+// Gross revenue & confirmed revenue
+$stmtRev      = $db->query("SELECT COALESCE(SUM(total_amount),0) FROM bookings WHERE booking_status != 'cancelled'");
+$revMTD       = (float)$stmtRev->fetchColumn();
 
+$stmtConf     = $db->query("SELECT COALESCE(SUM(total_amount),0) FROM bookings WHERE booking_status IN ('confirmed','completed')");
+$confirmedRev = (float)$stmtConf->fetchColumn();
+$confPct      = $revMTD > 0 ? round(($confirmedRev / $revMTD) * 100) : 0;
+
+// Active events today
 $stmtActive   = $db->prepare("SELECT COUNT(*) FROM bookings WHERE event_date = ? AND booking_status IN ('confirmed','pending')");
 $stmtActive->execute([$todayDate]);
 $activeEvents = (int)$stmtActive->fetchColumn();
 
-$stmtRecent   = $db->prepare("SELECT b.*, u.name AS customer_name, v.name AS venue_name FROM bookings b JOIN users u ON b.customer_id=u.id JOIN venues v ON b.venue_id=v.id ORDER BY b.created_at DESC LIMIT 8");
-$stmtRecent->execute();
+// Upcoming events in next 30 days
+$stmtUpcoming = $db->query("SELECT COUNT(*) FROM bookings WHERE event_date >= CURDATE() AND event_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND booking_status IN ('confirmed','pending')");
+$upcoming30d  = (int)$stmtUpcoming->fetchColumn();
+
+// Total active properties
+$totalVenues  = (int)$db->query("SELECT COUNT(*) FROM venues WHERE status = 'active'")->fetchColumn();
+
+// Recent bookings
+$stmtRecent   = $db->query("SELECT b.*, u.name AS customer_name, v.name AS venue_name FROM bookings b JOIN users u ON b.customer_id=u.id JOIN venues v ON b.venue_id=v.id ORDER BY b.created_at DESC LIMIT 8");
 $recentBookings = $stmtRecent->fetchAll();
 
 // --- Dynamic Venue Occupancy (bookings per venue / 30-day window) ---
@@ -38,9 +56,45 @@ $stmtOcc = $db->query(
        AND b.booking_status IN ('confirmed','pending')
        AND b.event_date BETWEEN CURDATE() - INTERVAL 30 DAY AND CURDATE() + INTERVAL 30 DAY
      WHERE v.status = 'active'
-     GROUP BY v.id ORDER BY booking_count DESC LIMIT 6"
+     GROUP BY v.id ORDER BY booking_count DESC, v.name ASC LIMIT 6"
 );
 $venueOccupancy = $stmtOcc->fetchAll();
+
+// --- Dynamic 6-Month Revenue Trend (Jul - Dec 2026) ---
+$currentYear = (int)date('Y');
+$monthsToDisplay = [];
+for ($m = 7; $m <= 12; $m++) {
+    $ym = sprintf('%04d-%02d', $currentYear, $m);
+    $monthsToDisplay[$ym] = [
+        'ym' => $ym,
+        'label' => date('M', strtotime("$ym-01")),
+        'full_label' => date('F Y', strtotime("$ym-01")),
+        'revenue' => 0.0,
+        'count' => 0
+    ];
+}
+
+$stmtTrend = $db->query("
+    SELECT DATE_FORMAT(event_date, '%Y-%m') AS ym,
+           COALESCE(SUM(total_amount), 0) AS rev,
+           COUNT(*) AS cnt
+    FROM bookings
+    WHERE booking_status != 'cancelled'
+    GROUP BY ym
+");
+while ($row = $stmtTrend->fetch()) {
+    if (isset($monthsToDisplay[$row['ym']])) {
+        $monthsToDisplay[$row['ym']]['revenue'] = (float)$row['rev'];
+        $monthsToDisplay[$row['ym']]['count'] = (int)$row['cnt'];
+    }
+}
+$maxTrendRev = max(1, ...array_column($monthsToDisplay, 'revenue'));
+$peakTrendMonth = '';
+foreach ($monthsToDisplay as $m) {
+    if ($m['revenue'] >= $maxTrendRev && $m['revenue'] > 0) {
+        $peakTrendMonth = $m['label'];
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -80,12 +134,15 @@ $venueOccupancy = $stmtOcc->fetchAll();
         <a href="admin-staff-management.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Staff Directory
         </a>
+        <a href="admin-user-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> User Governance
+        </a>
         <a href="admin-reports.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Reports &amp; Analytics
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../logout.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -98,114 +155,120 @@ $venueOccupancy = $stmtOcc->fetchAll();
         </label>
         <div class="topbar-search">
           <span class="topbar-search-icon">🔍</span>
-          <input type="text" placeholder="Search bookings, venues, staff, caterers...">
+          <input type="text" placeholder="e.g. Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">8</span>
+            <span class="badge"><?= $pendingCount ?></span>
             🔔
           </a>
-          <div class="topbar-user">
+          <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="View & Edit My Profile">
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'admin')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
       <main class="page-body">
 <div class="page-header">
   <h1 class="page-title">Dashboard Overview</h1>
-  <p class="page-subtitle">Live metrics for September 6, 2026 across all 4 properties.</p>
+  <p class="page-subtitle">Live metrics for <?= date('F j, Y') ?> across all <?= $totalVenues ?> active <?= $totalVenues === 1 ? 'property' : 'properties' ?>.</p>
 </div>
 
 <div class="stats-grid">
   <div class="stat-card">
-    <span class="stat-badge positive">+4% vs LW</span>
+    <span class="stat-badge <?= $todayBookings > 0 ? 'positive' : ($thisWeekBookings > 0 ? 'neutral' : 'neutral') ?>">
+      <?= $todayBookings > 0 ? "+$todayBookings today" : ($thisWeekBookings > 0 ? "$thisWeekBookings this week" : "Up to date") ?>
+    </span>
     <div class="stat-label">Today's Bookings</div>
     <div class="stat-value"><?= $todayBookings ?></div>
     <div class="stat-icon">📅</div>
   </div>
 
   <div class="stat-card orange">
-    <span class="stat-badge negative">-2 requests</span>
+    <span class="stat-badge <?= $pendingCount > 0 ? 'warning' : 'positive' ?>">
+      <?= $pendingCount > 0 ? "$pendingCount action required" : "All cleared ✓" ?>
+    </span>
     <div class="stat-label">Pending Approvals</div>
     <div class="stat-value"><?= $pendingCount ?></div>
     <div class="stat-icon" style="color:#d97706; background:#fef3c7;">📋</div>
   </div>
 
   <div class="stat-card green">
-    <span class="stat-badge positive">+12.5%</span>
-    <div class="stat-label">Revenue (MTD)</div>
-    <div class="stat-value"><?= "$" . number_format($revMTD/1000, 1) . "k" ?></div>
+    <span class="stat-badge positive"><?= $confPct ?>% confirmed</span>
+    <div class="stat-label">Gross Revenue</div>
+    <div class="stat-value" title="$<?= number_format($revMTD, 2) ?>"><?= $revMTD >= 1000 ? ("$" . number_format($revMTD / 1000, 1) . "k") : ("$" . number_format($revMTD, 2)) ?></div>
     <div class="stat-icon" style="color:#059669; background:#d1fae5;">💵</div>
   </div>
 
   <div class="stat-card">
-    <span class="stat-badge neutral">In-Progress</span>
-    <div class="stat-label">Active Events</div>
+    <span class="stat-badge <?= $activeEvents > 0 ? 'positive' : 'neutral' ?>">
+      <?= $activeEvents > 0 ? 'In-Progress' : ($upcoming30d > 0 ? "$upcoming30d upcoming" : "None today") ?>
+    </span>
+    <div class="stat-label">Active Events Today</div>
     <div class="stat-value"><?= $activeEvents ?></div>
     <div class="stat-icon">🏛️</div>
   </div>
 </div>
 
 <div class="grid-2 mb-24" style="grid-template-columns: 2fr 1fr;">
-  <!-- Revenue Growth Trend Chart -->
+  <!-- Revenue Growth Trend Chart — 100% Dynamic from DB -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">Revenue Growth Trend</div>
-      <span class="stat-badge neutral">Last 6 Months</span>
+      <div>
+        <div class="card-title">Revenue Growth Trend</div>
+        <span class="text-xs text-muted">Monthly confirmed &amp; projected revenue volume</span>
+      </div>
+      <span class="stat-badge neutral">Jul – Dec <?= date('Y') ?></span>
     </div>
     <div class="bar-chart" style="margin-top:20px;">
+      <?php foreach ($monthsToDisplay as $m):
+        $pct = $m['revenue'] > 0 ? max(8, round(($m['revenue'] / $maxTrendRev) * 100)) : 4;
+        $isPeak = ($m['revenue'] > 0 && $m['revenue'] >= $maxTrendRev);
+        $valDisplay = $m['revenue'] > 0 ? ('$' . ($m['revenue'] >= 1000 ? number_format($m['revenue'] / 1000, 1) . 'k' : round($m['revenue']))) : '$0';
+      ?>
       <div class="bar-col">
-        <div class="bar" style="height:35%;"></div>
-        <span class="bar-label">JAN</span>
+        <span style="font-size:0.65rem; color:<?= $m['revenue'] > 0 ? 'var(--navy-900)' : 'var(--gray-400)' ?>; margin-bottom:4px; font-weight:600;"><?= $valDisplay ?></span>
+        <div class="bar <?= $isPeak ? 'active' : '' ?>" style="height:<?= $pct ?>%;" title="<?= e($m['full_label']) ?>: $<?= number_format($m['revenue'], 2) ?> (<?= $m['count'] ?> booking<?= $m['count'] === 1 ? '' : 's' ?>)"></div>
+        <span class="bar-label <?= $isPeak ? 'font-bold' : '' ?>" style="<?= $isPeak ? 'color:var(--primary);' : '' ?>"><?= strtoupper($m['label']) ?></span>
       </div>
-      <div class="bar-col">
-        <div class="bar" style="height:55%;"></div>
-        <span class="bar-label">FEB</span>
-      </div>
-      <div class="bar-col">
-        <div class="bar" style="height:48%;"></div>
-        <span class="bar-label">MAR</span>
-      </div>
-      <div class="bar-col">
-        <div class="bar" style="height:70%;"></div>
-        <span class="bar-label">APR</span>
-      </div>
-      <div class="bar-col">
-        <div class="bar" style="height:82%;"></div>
-        <span class="bar-label">MAY</span>
-      </div>
-      <div class="bar-col">
-        <div class="bar active" style="height:96%;"></div>
-        <span class="bar-label font-bold" style="color:var(--primary);">JUN</span>
-      </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="flex-between text-xs text-muted" style="margin-top:16px; padding-top:12px; border-top:1px solid var(--gray-200);">
+      <span>Total 6M Volume: <strong class="text-primary font-bold">$<?= number_format(array_sum(array_column($monthsToDisplay, 'revenue')), 2) ?></strong></span>
+      <span>Peak: <strong><?= $peakTrendMonth ?: 'None' ?></strong></span>
     </div>
   </div>
 
   <!-- Venue Occupancy — Dynamic from DB -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">Venue Occupancy</div>
-      <span class="stat-badge neutral">30-Day Window</span>
+      <div>
+        <div class="card-title">Venue Occupancy</div>
+        <span class="text-xs text-muted">Active bookings across properties</span>
+      </div>
+      <span class="stat-badge neutral">±30-Day Window</span>
     </div>
-    <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; flex-direction:column; gap:16px; margin-top:8px;">
       <?php if (empty($venueOccupancy)): ?>
       <div style="text-align:center;padding:20px;color:var(--gray-400);">No venue data yet.</div>
       <?php else: foreach ($venueOccupancy as $vo):
         $occ = $vo['booking_count'] > 0
-          ? min(98, max(5, (int)(($vo['booking_count'] / max(1, 30)) * 100)))
-          : 5;
-        $occColor = $occ >= 80 ? '#059669' : ($occ >= 50 ? '#2563eb' : '#94a3b8');
+          ? min(100, max(1, (int)round(($vo['booking_count'] / 30) * 100)))
+          : 0;
+        $barWidth = $vo['booking_count'] > 0 ? max(8, $occ) : 0;
+        $occColor = $occ >= 50 ? '#059669' : ($occ >= 20 ? '#2563eb' : ($occ > 0 ? '#3b82f6' : '#e2e8f0'));
       ?>
       <div>
         <div class="flex-between text-sm mb-4">
           <span class="font-semibold"><?= e($vo['name']) ?></span>
-          <span class="font-bold"><?= $occ ?>%</span>
+          <span class="font-bold text-xs" style="color:<?= $vo['booking_count'] > 0 ? 'var(--navy-900)' : 'var(--gray-400)' ?>;">
+            <?= (int)$vo['booking_count'] ?> booking<?= (int)$vo['booking_count'] === 1 ? '' : 's' ?> (<?= $occ ?>%)
+          </span>
         </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:<?= $occ ?>%; background:<?= $occColor ?>;"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:<?= $barWidth ?>%; background:<?= $occColor ?>;"></div></div>
       </div>
       <?php endforeach; endif; ?>
     </div>
@@ -236,12 +299,13 @@ $venueOccupancy = $stmtOcc->fetchAll();
         <?php if (empty($recentBookings)): ?>
         <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray-400);">No booking requests found.</td></tr>
         <?php else: foreach ($recentBookings as $bk):
-          $statusClass = strtolower($bk['booking_status']);
+          $statusClass = $bk['booking_status'] === 'canceled' ? 'cancelled' : strtolower($bk['booking_status']);
           $eventDate   = date('M j, Y', strtotime($bk['event_date']));
           $initials    = strtoupper(substr($bk['customer_name'] ?? 'U', 0, 2));
+          $bkCode      = $bk['booking_code'] ?: ('#BK-' . $bk['id']);
         ?>
         <tr>
-          <td class="font-bold text-primary"><?= e($bk['booking_code']) ?></td>
+          <td class="font-bold text-primary"><?= e($bkCode) ?></td>
           <td>
             <div class="flex-center gap-8">
               <div class="user-avatar" style="background:#3b82f6; width:28px; height:28px; font-size:0.7rem; color:#fff; display:inline-flex; align-items:center; justify-content:center; border-radius:50%;"><?= e($initials) ?></div>

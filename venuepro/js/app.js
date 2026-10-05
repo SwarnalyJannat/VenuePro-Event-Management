@@ -186,38 +186,25 @@
       });
     });
 
-    // Detect Logout links
-    document.querySelectorAll('a[href*="login-role"], .btn-logout, a.nav-item[href*="login"]').forEach(link => {
-      const text = link.textContent.toLowerCase();
-      if (text.includes('log out') || text.includes('logout') || text.includes('sign out') || text.includes('exit') || link.classList.contains('btn-logout')) {
+    // Detect Logout links across all roles and pages
+    document.querySelectorAll('a').forEach(link => {
+      const text = (link.textContent || '').trim().toLowerCase();
+      const href = (link.getAttribute('href') || '').toLowerCase();
+      if (text === 'log out' || text === 'logout' || text.includes('log out') || text.includes('logout') || text.includes('switch role / logout') || link.classList.contains('btn-logout') || link.classList.contains('logout-link') || href.includes('logout.php') || href.includes('action=logout')) {
         link.addEventListener('click', function (e) {
           e.preventDefault();
           link.style.opacity = '0.6';
           link.style.pointerEvents = 'none';
           
           // Clear client storage
-          try { sessionStorage.clear(); } catch(err) {}
+          try { sessionStorage.clear(); localStorage.clear(); } catch(err) {}
 
-          const targetUrl = isSubfolder ? '../venues.php' : 'venues.php';
-          const logoutUrl = API_BASE + 'auth.php?action=logout';
-
-          let redirected = false;
-          function doRedirect() {
-            if (!redirected) {
-              redirected = true;
-              window.location.href = targetUrl;
-            }
-          }
-
-          // Guaranteed fast transition within 350ms
-          setTimeout(doRedirect, 350);
-
-          fetch(logoutUrl, { method: 'POST', keepalive: true })
-            .then(() => doRedirect())
-            .catch(() => doRedirect());
+          const logoutUrl = isSubfolder ? '../logout.php' : 'logout.php';
+          window.location.href = logoutUrl;
         });
       }
     });
+
   }
 
   // ============================================================
@@ -359,11 +346,14 @@
         }
       });
 
-      // Saved booking data or defaults
-      const venueId = sessionStorage.getItem('vp_venue_id') || 1;
-      const packageId = sessionStorage.getItem('vp_package_id') || 2; // Default Platinum
-      const eventDate = sessionStorage.getItem('vp_date') || '2026-12-14';
-      const guests = sessionStorage.getItem('vp_guests') || 150;
+      // Saved booking data or defaults from form/sessionStorage
+      const venueId = (paymentForm.querySelector('[name="venue_id"]') || {}).value || sessionStorage.getItem('vp_venue_id') || 1;
+      const packageId = (paymentForm.querySelector('[name="package_id"]') || {}).value || sessionStorage.getItem('vp_package_id') || 2;
+      const eventDate = (paymentForm.querySelector('[name="event_date"]') || {}).value || sessionStorage.getItem('vp_event_date') || sessionStorage.getItem('vp_date') || '2026-10-14';
+      const guests = (paymentForm.querySelector('[name="guest_count"]') || {}).value || sessionStorage.getItem('vp_guest_count') || sessionStorage.getItem('vp_guests') || 100;
+      const startTime = (paymentForm.querySelector('[name="start_time"]') || {}).value || sessionStorage.getItem('vp_start_time') || '18:00:00';
+      const endTime = (paymentForm.querySelector('[name="end_time"]') || {}).value || sessionStorage.getItem('vp_end_time') || '22:00:00';
+      const eventName = (paymentForm.querySelector('[name="event_name"]') || {}).value || 'Executive Corporate Gala';
 
       try {
         const res = await fetch(API_BASE + 'bookings.php?action=create', {
@@ -372,8 +362,10 @@
           body: JSON.stringify({
             venue_id: venueId,
             package_id: packageId,
-            event_name: 'Corporate Evening Gala',
+            event_name: eventName,
             event_date: eventDate,
+            start_time: startTime,
+            end_time: endTime,
             guest_count: guests,
             card_last4: '4242',
             singular_items: singularItems
@@ -385,13 +377,21 @@
           showAlert(paymentForm, 'Booking and Payment Confirmed! Redirecting...', true);
           sessionStorage.removeItem('vp_venue_id');
           sessionStorage.removeItem('vp_package_id');
+          sessionStorage.removeItem('vp_event_date');
+          sessionStorage.removeItem('vp_date');
           setTimeout(() => {
             window.location.href = data.data.redirect || 'booking-success.php';
           }, 800);
         } else {
-          showAlert(paymentForm, data.message || 'Payment processing error.');
+          if (data.data && data.data.conflict) {
+            const conflictUrl = `booking-date-conflict.php?venue_id=${encodeURIComponent(venueId)}&date=${encodeURIComponent(eventDate)}`;
+            showAlert(paymentForm, `⚠️ ${data.message || 'Date conflict detected!'} <div style="margin-top:8px;"><a href="${conflictUrl}" class="btn btn-sm btn-outline" style="text-decoration:none;">View Conflict Alert &amp; Alternative Dates →</a></div>`);
+          } else {
+            showAlert(paymentForm, data.message || 'Payment processing error.');
+          }
           if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origText; }
         }
+
       } catch (err) {
         console.error(err);
         showAlert(paymentForm, 'Connection error. Please check server connection.');

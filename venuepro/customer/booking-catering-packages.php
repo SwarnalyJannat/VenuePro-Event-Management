@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -173,13 +173,13 @@ $packages = $stmtPkgs->fetchAll();
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
             💬
           </a>
-          <div class="topbar-user">
+          <a href="customer-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#2563eb;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
 

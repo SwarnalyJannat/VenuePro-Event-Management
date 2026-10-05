@@ -108,19 +108,81 @@ switch ($action) {
         jsonResponse(true, 'Caterer registered and approved successfully', ['caterer_id' => $newUserId], 201);
         break;
 
+    case 'update':
+        if (!isLoggedIn() || (getCurrentUser()['role'] ?? '') !== 'admin') {
+            jsonResponse(false, 'Admin authentication required.', null, 401);
+        }
+        $input = !empty($_POST) ? $_POST : getJsonInput();
+        $catererId = (int)($input['id'] ?? ($input['caterer_id'] ?? 0));
+        $businessName = sanitize($input['business_name'] ?? '');
+        $ownerName = sanitize($input['owner_name'] ?? ($input['name'] ?? ''));
+        $email = strtolower(sanitize($input['email'] ?? ''));
+        $phone = sanitize($input['phone'] ?? '');
+        $kitchenAddress = sanitize($input['kitchen_address'] ?? '');
+        $specialization = sanitize($input['specialization'] ?? 'Fine Dining');
+        $approvalStatus = sanitize($input['approval_status'] ?? 'approved');
+        $status = sanitize($input['status'] ?? 'active');
+
+        if ($catererId <= 0 || empty($businessName) || empty($email)) {
+            jsonResponse(false, 'Caterer ID, business name, and email are required.', null, 400);
+        }
+
+        // Verify email uniqueness
+        $stmtChk = $db->prepare("SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1");
+        $stmtChk->execute([$email, $catererId]);
+        if ($stmtChk->fetch()) {
+            jsonResponse(false, 'This email address is already in use by another account.', null, 409);
+        }
+
+        $avatarText = strtoupper(substr($ownerName ?: $businessName, 0, 2));
+
+        $stmtUser = $db->prepare("UPDATE users SET name = ?, email = ?, phone = ?, avatar_text = ?, status = ? WHERE id = ? AND role = 'caterer'");
+        $stmtUser->execute([$ownerName ?: $businessName, $email, $phone, $avatarText, $status, $catererId]);
+
+        $stmtProfChk = $db->prepare("SELECT id FROM caterer_profiles WHERE user_id = ? LIMIT 1");
+        $stmtProfChk->execute([$catererId]);
+        if ($stmtProfChk->fetch()) {
+            $stmtProf = $db->prepare("UPDATE caterer_profiles SET business_name = ?, owner_name = ?, kitchen_address = ?, specialization = ?, approval_status = ? WHERE user_id = ?");
+            $stmtProf->execute([$businessName, $ownerName, $kitchenAddress, $specialization, $approvalStatus, $catererId]);
+        } else {
+            $stmtProf = $db->prepare("INSERT INTO caterer_profiles (user_id, business_name, owner_name, kitchen_address, specialization, approval_status) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmtProf->execute([$catererId, $businessName, $ownerName, $kitchenAddress, $specialization, $approvalStatus]);
+        }
+
+        jsonResponse(true, 'Caterer details updated successfully in the database.', ['caterer_id' => $catererId]);
+        break;
+
     case 'delete':
         if (!isLoggedIn() || (getCurrentUser()['role'] ?? '') !== 'admin') {
             jsonResponse(false, 'Admin authentication required.', null, 401);
         }
         $input = !empty($_POST) ? $_POST : getJsonInput();
-        $catererId = (int)($input['caterer_id'] ?? ($_GET['caterer_id'] ?? ($_GET['id'] ?? 0)));
+        $catererId = (int)($input['caterer_id'] ?? ($input['id'] ?? ($_GET['caterer_id'] ?? ($_GET['id'] ?? 0))));
         if ($catererId <= 0) {
             jsonResponse(false, 'Valid caterer ID is required', null, 400);
         }
-        $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
-        $db->prepare("UPDATE caterer_profiles SET approval_status = 'rejected' WHERE user_id = ?")->execute([$catererId]);
-        jsonResponse(true, 'Caterer removed successfully.');
+        
+        try {
+            $stmtOrders = $db->prepare("SELECT COUNT(*) FROM caterer_orders WHERE caterer_id = ?");
+            $stmtOrders->execute([$catererId]);
+            $hasOrders = (int)$stmtOrders->fetchColumn() > 0;
+
+            if ($hasOrders) {
+                $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
+                $db->prepare("UPDATE caterer_profiles SET approval_status = 'rejected' WHERE user_id = ?")->execute([$catererId]);
+            } else {
+                $db->prepare("DELETE FROM catering_packages WHERE caterer_id = ?")->execute([$catererId]);
+                $db->prepare("DELETE FROM caterer_profiles WHERE user_id = ?")->execute([$catererId]);
+                $db->prepare("DELETE FROM users WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
+            }
+            jsonResponse(true, 'Caterer removed successfully from the database.');
+        } catch (Exception $e) {
+            $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
+            $db->prepare("UPDATE caterer_profiles SET approval_status = 'rejected' WHERE user_id = ?")->execute([$catererId]);
+            jsonResponse(true, 'Caterer deactivated and removed.');
+        }
         break;
+
 
     default:
         jsonResponse(false, 'Invalid caterer action', null, 400);

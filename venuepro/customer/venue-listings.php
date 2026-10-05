@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -69,7 +69,7 @@ $db = getDBConnection();
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../venues.php" class="nav-item" style="color:var(--gray-400);">
+        <a href="../logout.php" class="nav-item" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -83,7 +83,7 @@ $db = getDBConnection();
         </label>
         <div class="topbar-search">
           <span class="topbar-search-icon">🔍</span>
-          <input type="text" placeholder="Search event venues, bookings, menus...">
+          <input type="text" placeholder="e.g. Search event venues, bookings, menus...">
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
@@ -93,13 +93,13 @@ $db = getDBConnection();
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
             💬
           </a>
-          <div class="topbar-user">
-            <div class="user-avatar" style="background:#2563eb;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
+          <a href="customer-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
+            <div class="user-avatar" style="background:<?= e($currentUser['avatar_bg'] ?? '#2563eb') ?>;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Customer')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
 
@@ -111,34 +111,33 @@ $minCap     = (int)($_GET['min_capacity'] ?? 0);
 $maxPrice   = (int)($_GET['max_price'] ?? 0);
 $sortBy     = htmlspecialchars(trim($_GET['sort'] ?? 'popular'), ENT_QUOTES);
 
-$sql    = "SELECT * FROM venues WHERE status = 'active'";
+$sql    = "SELECT v.*, (SELECT COUNT(*) FROM venue_photos vp WHERE vp.venue_id = v.id) AS photo_count FROM venues v WHERE v.status = 'active'";
 $params = [];
 
 if (!empty($search)) {
-    $sql .= " AND (name LIKE ? OR district LIKE ? OR description LIKE ?)";
+    $sql .= " AND (v.name LIKE ? OR v.district LIKE ? OR v.description LIKE ?)";
     $params[] = "%$search%"; $params[] = "%$search%"; $params[] = "%$search%";
 }
 if (!empty($typeFilter)) {
-    $sql .= " AND LOWER(venue_type) = LOWER(?)";
+    $sql .= " AND LOWER(v.venue_type) = LOWER(?)";
     $params[] = $typeFilter;
 }
 if ($minCap > 0) {
-    $sql .= " AND max_capacity >= ?";
+    $sql .= " AND v.capacity >= ?";
     $params[] = $minCap;
 }
 if ($maxPrice > 0) {
-    $sql .= " AND base_rate <= ?";
+    $sql .= " AND v.base_rate <= ?";
     $params[] = $maxPrice;
 }
 
 $orderMap = [
-    'popular'       => 'rating DESC, id ASC',
-    'price_asc'     => 'base_rate ASC',
-    'price_desc'    => 'base_rate DESC',
-    'capacity_desc' => 'max_capacity DESC',
-    'rating'        => 'rating DESC',
+    'popular'       => 'v.id ASC',
+    'price_asc'     => 'v.base_rate ASC',
+    'price_desc'    => 'v.base_rate DESC',
+    'capacity_desc' => 'v.capacity DESC',
 ];
-$sql .= " ORDER BY " . ($orderMap[$sortBy] ?? 'rating DESC, id ASC');
+$sql .= " ORDER BY " . ($orderMap[$sortBy] ?? 'v.id ASC');
 
 $stmtVenues = $db->prepare($sql);
 $stmtVenues->execute($params);
@@ -168,7 +167,6 @@ $venueCount = count($venueRows);
         <option value="price_asc" <?= $sortBy==='price_asc' ? 'selected' : '' ?>>Price: Low to High</option>
         <option value="price_desc" <?= $sortBy==='price_desc' ? 'selected' : '' ?>>Price: High to Low</option>
         <option value="capacity_desc" <?= $sortBy==='capacity_desc' ? 'selected' : '' ?>>Capacity: High to Low</option>
-        <option value="rating" <?= $sortBy==='rating' ? 'selected' : '' ?>>Highest Rated</option>
       </select>
     </form>
   </div>
@@ -186,7 +184,7 @@ $venueCount = count($venueRows);
 
       <div class="filter-group">
         <div class="filter-label">Search Keyword</div>
-        <input type="text" name="search" class="form-control" placeholder="Venue name or district..." value="<?= e($search) ?>" style="font-size:0.85rem;">
+        <input type="text" name="search" class="form-control" placeholder="e.g. Venue name or district..." value="<?= e($search) ?>" style="font-size:0.85rem;">
       </div>
 
       <div class="filter-group">
@@ -218,31 +216,25 @@ $venueCount = count($venueRows);
 
   <!-- Venue Cards Grid -->
   <div style="flex:1;">
-      <?php
-      $stockImages = [
-        'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=600&q=80',
-        'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=600&q=80',
-        'https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&q=80',
-        'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=600&q=80',
-        'https://images.unsplash.com/photo-1519741497674-611481863552?w=600&q=80',
-        'https://images.unsplash.com/photo-1555244162-803834f70033?w=600&q=80',
-        'https://images.unsplash.com/photo-1478146896981-b80fe463b330?w=600&q=80',
-      ];
-      ?>
       <?php if (empty($venueRows)): ?>
         <div style="grid-column:1/-1;text-align:center;padding:60px 24px;color:var(--gray-400);">
           <div style="font-size:3.5rem;margin-bottom:12px;">🏛️</div>
-          <div style="font-size:1.1rem;font-weight:600;margin-bottom:6px;">No venues match your criteria</div>
+          <div style="font-weight:600;margin-bottom:6px;">No venues match your criteria</div>
           <a href="venue-listings.php" style="color:var(--primary);text-decoration:underline;">Clear all filters</a>
         </div>
       <?php else: foreach ($venueRows as $idx => $v):
-        $img = !empty($v['image_url']) ? '../' . $v['image_url'] : $stockImages[$idx % count($stockImages)];
-        $rating = number_format($v['rating'] ?? 4.8, 1);
+        // Fix image path: resolve uploaded image or local project picture
+        $rawImg = $v['image_url'] ?? '';
+        if (str_starts_with($rawImg, '../')) $rawImg = substr($rawImg, 3);
+        $isDefault = (empty($rawImg) || str_contains($rawImg, 'venue-default'));
+        $img = !$isDefault ? ('../' . $rawImg) : '../assets/venues pic/images.jpg';
+        $dbCount = (int)($v['photo_count'] ?? 0);
+        $photoLabel = $dbCount > 0 ? ($dbCount . ' Photos') : 'Cover Photo';
       ?>
       <!-- Venue: <?= e($v['name']) ?> -->
       <div class="venue-card">
         <div class="venue-card-img-wrap">
-          <div class="venue-card-img" style="background:url('<?= $img ?>') center/cover;"></div>
+          <div class="venue-card-img" style="background:url('<?= e($img) ?>') center/cover;"></div>
           <?php if (!empty($v['badge'])): ?>
           <span class="venue-badge"><?= e($v['badge']) ?></span>
           <?php endif; ?>
@@ -250,17 +242,17 @@ $venueCount = count($venueRows);
         <div class="venue-card-body">
           <div class="flex-between mb-4">
             <div class="venue-card-name"><?= e($v['name']) ?></div>
-            <span style="color:#f59e0b;font-size:0.85rem;font-weight:600;">★<?= $rating ?></span>
           </div>
           <div class="venue-card-location"><?= e($v['district']) ?></div>
           <div class="venue-card-meta">
-            <span class="venue-capacity">👥 <?= number_format($v['max_capacity']) ?> Guests</span>
+            <span class="venue-capacity">👥 <?= number_format($v['capacity']) ?> Guests</span>
             <span class="venue-price">$<?= number_format($v['base_rate'], 0) ?><small class="text-muted">/day</small></span>
           </div>
         </div>
         <div class="venue-card-actions">
-          <a href="venue-details.php?id=<?= $v['id'] ?>" class="btn btn-outline">View Details</a>
-          <a href="booking-date-guests.php?venue_id=<?= $v['id'] ?>" class="btn btn-primary">Book Now</a>
+          <a href="venue-details.php?id=<?= $v['id'] ?>#venue-gallery" class="btn btn-outline" title="Inspect verified photo gallery">📸 <?= $photoLabel ?></a>
+          <a href="venue-details.php?id=<?= $v['id'] ?>" class="btn btn-outline">Details</a>
+          <a href="venue-details.php?id=<?= $v['id'] ?>#pricing" class="btn btn-primary">Book Now</a>
         </div>
       </div>
       <?php endforeach; endif; ?>

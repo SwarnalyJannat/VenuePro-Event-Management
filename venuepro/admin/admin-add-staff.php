@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -7,6 +7,7 @@ $db = getDBConnection();
 
 // Fetch all venues for multi-assign
 $venues = $db->query("SELECT id, name FROM venues ORDER BY name ASC")->fetchAll();
+$pendingCount = (int)$db->query("SELECT COUNT(*) FROM bookings WHERE booking_status = 'pending'")->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -73,7 +74,7 @@ $venues = $db->query("SELECT id, name FROM venues ORDER BY name ASC")->fetchAll(
         </a>
       </nav>
       <div class="sidebar-footer">
-        <a href="../venues.php" class="nav-item logout-link" style="color:var(--gray-400);">
+        <a href="../logout.php" class="nav-item logout-link" style="color:var(--gray-400);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Log out
         </a>
       </div>
@@ -85,20 +86,20 @@ $venues = $db->query("SELECT id, name FROM venues ORDER BY name ASC")->fetchAll(
         </label>
         <div class="topbar-search">
           <span class="topbar-search-icon">🔍</span>
-          <input type="text" placeholder="Search bookings, venues, staff, caterers...">
+          <input type="text" placeholder="e.g. Search bookings, venues, staff, caterers...">
         </div>
         <div class="topbar-actions">
           <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">8</span>
+            <span class="badge"><?= $pendingCount ?></span>
             🔔
           </a>
-          <div class="topbar-user">
+          <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
             <div class="user-avatar" style="background:#0f172a;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
             <div class="user-info">
               <div class="user-name"><?= e($currentUser['name'] ?? 'User') ?></div>
               <div class="user-role"><?= ucfirst(e($currentUser['role'] ?? 'Admin')) ?></div>
             </div>
-          </div>
+          </a>
         </div>
       </header>
       <main class="page-body">
@@ -148,13 +149,13 @@ $venues = $db->query("SELECT id, name FROM venues ORDER BY name ASC")->fetchAll(
       <div class="form-group">
         <label class="form-label">Password *</label>
         <div class="password-wrap">
-          <input type="password" name="password" class="form-control" placeholder="Create staff login password" required>
+          <input type="password" name="password" class="form-control" placeholder="e.g. •••••••• (min. 6 characters)" required>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Confirm Password *</label>
         <div class="password-wrap">
-          <input type="password" name="confirm_password" class="form-control" placeholder="Confirm password" required>
+          <input type="password" name="confirm_password" class="form-control" placeholder="e.g. •••••••• (re-enter password)" required>
         </div>
       </div>
     </div>
@@ -176,35 +177,37 @@ $venues = $db->query("SELECT id, name FROM venues ORDER BY name ASC")->fetchAll(
     </div>
 
     <!-- Document Upload -->
-    <div class="section-divider">Verification Documents</div>
+    <div class="section-divider">Verification Documents *</div>
+    <p class="text-sm text-muted mb-12">Verification documents must be submitted prior to onboarding. CV / Resume and National Identity Document (NID) scan are required.</p>
     <div class="grid-2 gap-20 mb-24">
       <div>
-        <label class="form-label">Curriculum Vitae (CV / Resume)</label>
-        <div class="upload-zone" id="zone-cv">
-          <label for="cv-upload">
+        <label class="form-label">Curriculum Vitae (CV / Resume) *</label>
+        <div class="upload-zone" id="zone-cv" onclick="document.getElementById('cv-upload').click()">
+          <div id="preview-cv">
             <span class="upload-icon">📄</span>
             <span class="upload-text font-semibold">Click to upload CV / Resume</span>
             <span class="upload-hint">PDF, DOC, DOCX — max 10 MB</span>
-          </label>
-          <input id="cv-upload" type="file" accept=".pdf,.doc,.docx" onchange="handleDocUpload(this,'zone-cv')">
+          </div>
         </div>
+        <input id="cv-upload" type="file" accept=".pdf,.doc,.docx" style="display:none;" onchange="handleDocUpload(this, 'zone-cv', 'preview-cv')">
       </div>
       <div>
-        <label class="form-label">National Identity Document (NID) Scan</label>
-        <div class="upload-zone" id="zone-nid">
-          <label for="nid-upload">
+        <label class="form-label">National Identity Document (NID) Scan *</label>
+        <div class="upload-zone" id="zone-nid" onclick="document.getElementById('nid-upload').click()">
+          <div id="preview-nid">
             <span class="upload-icon">🪪</span>
             <span class="upload-text font-semibold">Click to upload NID Scan</span>
             <span class="upload-hint">JPG, PNG, PDF — max 5 MB</span>
-          </label>
-          <input id="nid-upload" type="file" accept=".jpg,.jpeg,.png,.pdf" onchange="handleDocUpload(this,'zone-nid')">
+          </div>
         </div>
+        <input id="nid-upload" type="file" accept=".jpg,.jpeg,.png,.pdf" style="display:none;" onchange="handleDocUpload(this, 'zone-nid', 'preview-nid')">
       </div>
     </div>
+    <div id="staffAlertBottom" style="display:none; padding:12px 16px; border-radius:6px; margin-bottom:16px; font-size:0.9rem;"></div>
 
     <div class="flex gap-12 mt-24">
       <a href="admin-staff-management.php" class="btn btn-ghost" style="flex:1;">Cancel</a>
-      <button type="submit" class="btn btn-primary" style="flex:2;">
+      <button type="submit" id="btnAddStaff" class="btn btn-primary" style="flex:2;">
         Add Staff Member →
       </button>
     </div>
@@ -219,55 +222,115 @@ $venues = $db->query("SELECT id, name FROM venues ORDER BY name ASC")->fetchAll(
   </div>
 <script src="../js/app.js"></script>
 <script>
-function handleDocUpload(input, zoneId) {
+var uploadedFiles = {};
+
+function handleDocUpload(input, zoneId, previewId) {
   var zone = document.getElementById(zoneId);
+  var preview = document.getElementById(previewId) || zone;
   if (!zone || !input.files || !input.files[0]) return;
   var file = input.files[0];
+  uploadedFiles[zoneId] = file;
+
+  zone.style.borderColor = 'var(--success)';
+  zone.style.background = '#f0fdf4';
+
   if (file.type.startsWith('image/')) {
     var reader = new FileReader();
-    reader.onload = function(ev) {
-      zone.innerHTML = '<div style="padding:12px; text-align:center;">' +
-        '<img src="' + ev.target.result + '" style="max-height:80px; max-width:100%; border-radius:6px; margin-bottom:8px;">' +
-        '<div style="font-size:13px; font-weight:600; color:var(--success);">✓ ' + file.name + ' (' + Math.round(file.size/1024) + ' KB)</div>' +
-        '<div style="font-size:11px; color:var(--gray-500); margin-top:4px; cursor:pointer;">Click to change</div>' +
+    reader.onload = function(e) {
+      preview.innerHTML = '<div style="padding:12px; text-align:center;">' +
+        '<img src="' + e.target.result + '" style="max-height:80px; max-width:100%; border-radius:6px; margin-bottom:8px; display:inline-block;" alt="Selected Document">' +
+        '<div style="font-size:13px; font-weight:600; color:var(--success);">✓ ' + escapeHtml(file.name) + ' (' + Math.round(file.size / 1024) + ' KB)</div>' +
+        '<div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Click to change</div>' +
       '</div>';
-      zone.style.borderColor = 'var(--success)';
-      zone.style.background = '#f0fdf4';
-      zone.onclick = function() { input.click(); };
     };
     reader.readAsDataURL(file);
   } else {
-    zone.innerHTML = '<div style="padding:16px; text-align:center;">' +
+    preview.innerHTML = '<div style="padding:16px; text-align:center;">' +
       '<div style="font-size:32px; margin-bottom:6px;">📄</div>' +
-      '<div style="font-size:13px; font-weight:600; color:var(--navy-900);">✓ ' + file.name + '</div>' +
-      '<div style="font-size:12px; color:var(--success); font-weight:500; margin-top:2px;">Ready (' + Math.round(file.size/1024) + ' KB)</div>' +
-      '<div style="font-size:11px; color:var(--gray-500); margin-top:4px; cursor:pointer;">Click to change</div>' +
+      '<div style="font-size:13px; font-weight:600; color:var(--navy-900);">✓ ' + escapeHtml(file.name) + '</div>' +
+      '<div style="font-size:12px; color:var(--success); font-weight:500; margin-top:2px;">Ready (' + Math.round(file.size / 1024) + ' KB)</div>' +
+      '<div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Click to change</div>' +
     '</div>';
-    zone.style.borderColor = 'var(--success)';
-    zone.style.background = '#f0fdf4';
-    zone.onclick = function() { input.click(); };
   }
+}
+
+function escapeHtml(text) {
+  var div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
   var form = document.getElementById('addStaffForm');
-  var alertBox = document.getElementById('staffAlert');
+  var alertBoxTop = document.getElementById('staffAlert');
+  var alertBoxBottom = document.getElementById('staffAlertBottom');
+  var btn = document.getElementById('btnAddStaff');
   if (!form) return;
+
+  function showMessage(msg, isSuccess) {
+    [alertBoxTop, alertBoxBottom].forEach(function(box) {
+      if (!box) return;
+      box.style.display = 'block';
+      box.style.background = isSuccess ? '#dcfce7' : '#fee2e2';
+      box.style.border = isSuccess ? '1px solid #86efac' : '1px solid #f87171';
+      box.style.color = isSuccess ? '#166534' : '#991b1b';
+      box.innerHTML = (isSuccess ? '✓ ' : '⚠️ ') + msg;
+    });
+    if (!isSuccess && alertBoxBottom) {
+      alertBoxBottom.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  function hideMessage() {
+    [alertBoxTop, alertBoxBottom].forEach(function(box) {
+      if (box) box.style.display = 'none';
+    });
+  }
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
-    alertBox.style.display = 'none';
-    var btn = form.querySelector('[type="submit"]');
-    var origText = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+    hideMessage();
 
-    var pw  = (form.querySelector('[name="password"]') || {}).value || '';
-    var cpw = (form.querySelector('[name="confirm_password"]') || {}).value || '';
+    var nameVal  = ((form.querySelector('[name="name"]') || {}).value || '').trim();
+    var emailVal = ((form.querySelector('[name="email"]') || {}).value || '').trim();
+    var phoneVal = ((form.querySelector('[name="phone"]') || {}).value || '').trim();
+    var deptVal  = ((form.querySelector('[name="department"]') || {}).value || 'Event Operations');
+    var pw       = (form.querySelector('[name="password"]') || {}).value || '';
+    var cpw      = (form.querySelector('[name="confirm_password"]') || {}).value || '';
+
+    if (!nameVal || !emailVal) {
+      showMessage('Full legal name and corporate email are required.', false);
+      return;
+    }
+
+    if (pw.length < 6) {
+      showMessage('Password must be at least 6 characters.', false);
+      return;
+    }
+
     if (pw !== cpw) {
-      alertBox.style.display = 'block';
-      alertBox.style.background = '#fee2e2'; alertBox.style.color = '#991b1b';
-      alertBox.textContent = '⚠️ Passwords do not match.';
-      if (btn) { btn.disabled = false; btn.textContent = origText; }
+      showMessage('Passwords do not match. Please re-enter both password fields.', false);
+      return;
+    }
+// Enforce Verification Documents submission before adding the staff member
+    var cvInput  = document.getElementById('cv-upload');
+    var nidInput = document.getElementById('nid-upload');
+    var hasCv  = !!uploadedFiles['zone-cv']  || (cvInput  && cvInput.files  && cvInput.files.length  > 0);
+    var hasNid = !!uploadedFiles['zone-nid'] || (nidInput && nidInput.files && nidInput.files.length > 0);
+
+    if (!hasCv || !hasNid) {
+      var missing = [];
+      if (!hasCv) {
+        missing.push('Curriculum Vitae (CV / Resume)');
+        var z1 = document.getElementById('zone-cv');
+        if (z1) { z1.style.borderColor = '#dc2626'; z1.style.background = '#fff5f5'; }
+      }
+      if (!hasNid) {
+        missing.push('National Identity Document (NID) Scan');
+        var z2 = document.getElementById('zone-nid');
+        if (z2) { z2.style.borderColor = '#dc2626'; z2.style.background = '#fff5f5'; }
+      }
+      showMessage('<strong>Verification Documents Missing:</strong> Verification documents must be submitted before adding a staff member. Please upload: ' + missing.join(' and ') + '.', false);
       return;
     }
 
@@ -279,54 +342,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var staffCode = 'STF-' + Math.floor(1000 + Math.random() * 9000);
     var payload = {
-      name:            (form.querySelector('[name="name"]') || {}).value || '',
-      email:           (form.querySelector('[name="email"]') || {}).value || '',
-      phone:           (form.querySelector('[name="phone"]') || {}).value || '',
+      name:            nameVal,
+      email:           emailVal,
+      phone:           phoneVal,
       password:        pw,
-      role:            'staff',
-      staff_id:        staffCode,
-      department:      (form.querySelector('[name="department"]') || {}).value || 'Event Operations',
+      staff_code:      staffCode,
+      department:      deptVal,
       assigned_venues: assignedVenues
     };
 
-    if (!payload.name || !payload.email) {
-      alertBox.style.display = 'block';
-      alertBox.style.background = '#fee2e2'; alertBox.style.color = '#991b1b';
-      alertBox.textContent = '⚠️ Name and email are required.';
-      if (btn) { btn.disabled = false; btn.textContent = origText; }
-      return;
-    }
+    var origText = btn ? btn.textContent : 'Add Staff Member →';
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding Staff Member in Database...'; }
 
     try {
-      var res = await fetch('../api/auth.php?action=register', {
+      var res = await fetch('../api/staff.php?action=create', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
         body: JSON.stringify(payload)
       });
       var d = await res.json();
       if (d.success) {
-        // Also save venue assignments via staff API
-        if (assignedVenues.length > 0 && d.data && d.data.user_id) {
-          await fetch('../api/staff.php?action=assign_venues', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ user_id: d.data.user_id, venue_ids: assignedVenues })
-          });
-        }
-        alertBox.style.display = 'block';
-        alertBox.style.background = '#dcfce7'; alertBox.style.color = '#166534';
-        alertBox.textContent = '✓ Staff member added successfully! Staff Code: ' + staffCode + '. Redirecting...';
-        setTimeout(function() { window.location.href = 'admin-staff-management.php'; }, 1200);
+        showMessage('Staff member added successfully! Staff Code: ' + (d.data?.staff_code || staffCode) + '. Redirecting...', true);
+        setTimeout(function() { window.location.href = 'admin-staff-management.php'; }, 900);
       } else {
-        alertBox.style.display = 'block';
-        alertBox.style.background = '#fee2e2'; alertBox.style.color = '#991b1b';
-        alertBox.textContent = '⚠️ ' + (d.message || 'Failed to add staff');
+        showMessage(d.message || 'Failed to add staff member. Please check fields.', false);
         if (btn) { btn.disabled = false; btn.textContent = origText; }
       }
     } catch(err) {
-      alertBox.style.display = 'block';
-      alertBox.style.background = '#fee2e2'; alertBox.style.color = '#991b1b';
-      alertBox.textContent = '⚠️ Connection error. Please try again.';
+      console.error(err);
+      showMessage('Network connection error. Please try again.', false);
       if (btn) { btn.disabled = false; btn.textContent = origText; }
     }
   });
