@@ -58,59 +58,5 @@ if (isLoggedIn()) {
   </div>
 
 <script src="../js/app.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  var form = document.getElementById('register-form');
-  var alertBox = document.getElementById('signupAlert');
-  if (!form) return;
-
-  form.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    alertBox.style.display = 'none';
-    var btn = form.querySelector('[type="submit"]');
-    var origText = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = 'Provisioning...'; }
-
-    var payload = {
-      name:        (form.querySelector('[name="name"]') || {}).value || '',
-      email:       (form.querySelector('[name="email"]') || {}).value || '',
-      password:    (form.querySelector('[name="password"]') || {}).value || '',
-      access_code: (form.querySelector('[name="access_code"]') || {}).value || '',
-      role:        'admin'
-    };
-
-    try {
-      var res = await fetch('../api/auth.php?action=register', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        credentials: 'include',
-        body: JSON.stringify(payload)
-      });
-      var d = await res.json();
-      if (d.success) {
-        alertBox.style.display = 'block';
-        alertBox.style.background = '#dcfce7';
-        alertBox.style.color = '#166534';
-        alertBox.textContent = '✓ Admin account provisioned! Redirecting to dashboard...';
-        setTimeout(function() {
-          window.location.href = d.data && d.data.redirect ? d.data.redirect : 'admin-dashboard.php';
-        }, 800);
-      } else {
-        alertBox.style.display = 'block';
-        alertBox.style.background = '#fee2e2';
-        alertBox.style.color = '#991b1b';
-        alertBox.textContent = '⚠️ ' + (d.message || 'Registration failed');
-        if (btn) { btn.disabled = false; btn.textContent = origText; }
-      }
-    } catch(err) {
-      alertBox.style.display = 'block';
-      alertBox.style.background = '#fee2e2';
-      alertBox.style.color = '#991b1b';
-      alertBox.textContent = '⚠️ Connection error. Please try again.';
-      if (btn) { btn.disabled = false; btn.textContent = origText; }
-    }
-  });
-});
-</script>
 </body>
 </html>

@@ -166,7 +166,7 @@ $bkCancelled = (int)($bkSummary['cancelled'] ?? 0);
         </div>
         <div class="topbar-actions">
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge"><?= $bkPending ?></span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="View & Edit My Profile">

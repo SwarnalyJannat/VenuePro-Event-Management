@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -64,7 +64,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <div class="topbar-user">

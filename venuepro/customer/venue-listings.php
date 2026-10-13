@@ -87,7 +87,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">3</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
@@ -111,25 +111,40 @@ $minCap     = (int)($_GET['min_capacity'] ?? 0);
 $maxPrice   = (int)($_GET['max_price'] ?? 0);
 $sortBy     = htmlspecialchars(trim($_GET['sort'] ?? 'popular'), ENT_QUOTES);
 
-$sql    = "SELECT v.*, (SELECT COUNT(*) FROM venue_photos vp WHERE vp.venue_id = v.id) AS photo_count FROM venues v WHERE v.status = 'active'";
+$perPage    = 5;
+$page       = max(1, (int)($_GET['page'] ?? 1));
+
+// Base filter conditions and params
+$whereSql = "WHERE v.status = 'active'";
 $params = [];
 
 if (!empty($search)) {
-    $sql .= " AND (v.name LIKE ? OR v.district LIKE ? OR v.description LIKE ?)";
+    $whereSql .= " AND (v.name LIKE ? OR v.district LIKE ? OR v.description LIKE ?)";
     $params[] = "%$search%"; $params[] = "%$search%"; $params[] = "%$search%";
 }
 if (!empty($typeFilter)) {
-    $sql .= " AND LOWER(v.venue_type) = LOWER(?)";
+    $whereSql .= " AND LOWER(v.venue_type) = LOWER(?)";
     $params[] = $typeFilter;
 }
 if ($minCap > 0) {
-    $sql .= " AND v.capacity >= ?";
+    $whereSql .= " AND v.capacity >= ?";
     $params[] = $minCap;
 }
 if ($maxPrice > 0) {
-    $sql .= " AND v.base_rate <= ?";
+    $whereSql .= " AND v.base_rate <= ?";
     $params[] = $maxPrice;
 }
+
+// Total count matching filters
+$countStmt = $db->prepare("SELECT COUNT(*) FROM venues v $whereSql");
+$countStmt->execute($params);
+$totalVenues = (int)$countStmt->fetchColumn();
+
+$totalPages = max(1, (int)ceil($totalVenues / $perPage));
+if ($page > $totalPages) {
+    $page = $totalPages;
+}
+$offset = ($page - 1) * $perPage;
 
 $orderMap = [
     'popular'       => 'v.id ASC',
@@ -137,21 +152,53 @@ $orderMap = [
     'price_desc'    => 'v.base_rate DESC',
     'capacity_desc' => 'v.capacity DESC',
 ];
-$sql .= " ORDER BY " . ($orderMap[$sortBy] ?? 'v.id ASC');
+$orderBy = $orderMap[$sortBy] ?? 'v.id ASC';
+
+$sql = "SELECT v.*, (SELECT COUNT(*) FROM venue_photos vp WHERE vp.venue_id = v.id) AS photo_count 
+        FROM venues v 
+        $whereSql 
+        ORDER BY $orderBy 
+        LIMIT $perPage OFFSET $offset";
 
 $stmtVenues = $db->prepare($sql);
 $stmtVenues->execute($params);
 $venueRows  = $stmtVenues->fetchAll();
-$venueCount = count($venueRows);
+
+$startItem = $totalVenues > 0 ? ($offset + 1) : 0;
+$endItem   = min($offset + count($venueRows), $totalVenues);
+
+function getVenuePageUrl($targetPage, $search, $typeFilter, $minCap, $maxPrice, $sortBy) {
+    $p = [];
+    if ($targetPage > 1) {
+        $p['page'] = $targetPage;
+    }
+    if (!empty($search)) {
+        $p['search'] = $search;
+    }
+    if (!empty($typeFilter)) {
+        $p['type'] = $typeFilter;
+    }
+    if ($minCap > 0) {
+        $p['min_capacity'] = $minCap;
+    }
+    if ($maxPrice > 0) {
+        $p['max_price'] = $maxPrice;
+    }
+    if (!empty($sortBy) && $sortBy !== 'popular') {
+        $p['sort'] = $sortBy;
+    }
+    return 'venue-listings.php' . (!empty($p) ? ('?' . http_build_query($p)) : '');
+}
 ?>
         
 <div class="flex-between mb-16">
   <div>
     <h1 style="font-size:1.8rem; font-weight:800;">Premium Venues</h1>
-    <p>Showing <?= $venueCount ?> venue<?= $venueCount !== 1 ? 's' : '' ?> matching your criteria</p>
+    <p>Showing <?= $startItem ?>–<?= $endItem ?> of <?= $totalVenues ?> venue<?= $totalVenues !== 1 ? 's' : '' ?> matching your criteria<?= $totalPages > 1 ? " (Page $page of $totalPages)" : "" ?></p>
   </div>
   <div class="flex-center gap-12">
     <form method="GET" action="venue-listings.php" id="customer-sort-form" style="display:flex; align-items:center; gap:8px;">
+      <input type="hidden" name="page" value="1">
       <?php if (!empty($search)): ?>
       <input type="hidden" name="search" value="<?= e($search) ?>">
       <?php endif; ?>
@@ -176,6 +223,7 @@ $venueCount = count($venueRows);
   <!-- Filters Sidebar Form -->
   <aside class="filters-panel">
     <form method="GET" action="venue-listings.php" id="venue-filter-form">
+      <input type="hidden" name="page" value="1">
       <input type="hidden" name="sort" value="<?= e($sortBy) ?>">
       <div class="flex-between mb-16">
         <span class="font-bold" style="font-size:0.95rem;">Filters</span>
@@ -257,16 +305,51 @@ $venueCount = count($venueRows);
       </div>
       <?php endforeach; endif; ?>
 
-    <!-- Pagination -->
-    <div class="flex-center justify-center gap-8">
-      <a href="#" class="btn btn-ghost btn-sm">‹</a>
-      <a href="#" class="btn btn-primary btn-sm">1</a>
-      <a href="#" class="btn btn-ghost btn-sm">2</a>
-      <a href="#" class="btn btn-ghost btn-sm">3</a>
-      <span class="text-muted">...</span>
-      <a href="#" class="btn btn-ghost btn-sm">12</a>
-      <a href="#" class="btn btn-ghost btn-sm">›</a>
+    <!-- Dynamic Pagination -->
+    <?php if ($totalPages > 1): ?>
+    <div class="flex-center justify-center gap-8 mt-24">
+      <?php if ($page > 1): ?>
+        <a href="<?= getVenuePageUrl($page - 1, $search, $typeFilter, $minCap, $maxPrice, $sortBy) ?>" class="btn btn-ghost btn-sm" title="Previous Page">‹</a>
+      <?php else: ?>
+        <span class="btn btn-ghost btn-sm" style="opacity:0.35; cursor:not-allowed;" title="First Page">‹</span>
+      <?php endif; ?>
+
+      <?php
+      // Smart pagination window
+      $window = 2;
+      $startPage = max(1, $page - $window);
+      $endPage = min($totalPages, $page + $window);
+
+      if ($startPage > 1) {
+          echo '<a href="' . getVenuePageUrl(1, $search, $typeFilter, $minCap, $maxPrice, $sortBy) . '" class="btn btn-ghost btn-sm">1</a>';
+          if ($startPage > 2) {
+              echo '<span class="text-muted" style="padding:0 4px;">...</span>';
+          }
+      }
+
+      for ($p = $startPage; $p <= $endPage; $p++) {
+          if ($p === $page) {
+              echo '<span class="btn btn-primary btn-sm" style="pointer-events:none; font-weight:700;">' . $p . '</span>';
+          } else {
+              echo '<a href="' . getVenuePageUrl($p, $search, $typeFilter, $minCap, $maxPrice, $sortBy) . '" class="btn btn-ghost btn-sm">' . $p . '</a>';
+          }
+      }
+
+      if ($endPage < $totalPages) {
+          if ($endPage < $totalPages - 1) {
+              echo '<span class="text-muted" style="padding:0 4px;">...</span>';
+          }
+          echo '<a href="' . getVenuePageUrl($totalPages, $search, $typeFilter, $minCap, $maxPrice, $sortBy) . '" class="btn btn-ghost btn-sm">' . $totalPages . '</a>';
+      }
+      ?>
+
+      <?php if ($page < $totalPages): ?>
+        <a href="<?= getVenuePageUrl($page + 1, $search, $typeFilter, $minCap, $maxPrice, $sortBy) ?>" class="btn btn-ghost btn-sm" title="Next Page">›</a>
+      <?php else: ?>
+        <span class="btn btn-ghost btn-sm" style="opacity:0.35; cursor:not-allowed;" title="Last Page">›</span>
+      <?php endif; ?>
     </div>
+    <?php endif; ?>
   </div>
 </div>
 

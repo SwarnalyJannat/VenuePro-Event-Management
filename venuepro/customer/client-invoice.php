@@ -38,10 +38,10 @@ if (!$booking) {
 $invoiceCode  = $invoice ? $invoice['invoice_code'] : 'INV-' . date('Y') . '-0000';
 $issueDate    = $invoice ? date('F j, Y', strtotime($invoice['issue_date'])) : date('F j, Y');
 $dueDate      = $invoice ? date('F j, Y', strtotime($invoice['due_date'])) : date('F j, Y');
-$subtotal     = $booking ? (float)$booking['subtotal'] : 0;
-$serviceFee   = $booking ? (float)$booking['service_fee'] : 0;
-$vatTax       = $booking ? (float)$booking['vat_tax'] : 0;
-$totalAmount  = $booking ? (float)$booking['total_amount'] : 0;
+$subtotal     = $booking ? (float)($booking['subtotal'] ?? ($invoice['subtotal'] ?? 0)) : ($invoice ? (float)($invoice['subtotal'] ?? 0) : 0);
+$serviceFee   = $booking ? (float)($booking['service_fee'] ?? ($invoice['service_fee'] ?? 0)) : ($invoice ? (float)($invoice['service_fee'] ?? 0) : 0);
+$vatTax       = $booking ? (float)($booking['tax_vat'] ?? ($booking['vat_tax'] ?? ($invoice['vat_tax'] ?? 0))) : ($invoice ? (float)($invoice['vat_tax'] ?? 0) : 0);
+$totalAmount  = $booking ? (float)($booking['total_amount'] ?? ($invoice['total_amount'] ?? 0)) : ($invoice ? (float)($invoice['total_amount'] ?? 0) : 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -107,29 +107,29 @@ $totalAmount  = $booking ? (float)$booking['total_amount'] : 0;
               <div class="text-xs text-muted"><?= e($booking['venue_address'] ?? 'Full facility access and amenities') ?></div>
             </td>
             <td>1</td>
-            <td>$<?= number_format($booking['venue_cost'], 2) ?></td>
-            <td class="font-bold">$<?= number_format($booking['venue_cost'], 2) ?></td>
+            <td>$<?= number_format((float)($booking['venue_cost'] ?? 0), 2) ?></td>
+            <td class="font-bold">$<?= number_format((float)($booking['venue_cost'] ?? 0), 2) ?></td>
           </tr>
-          <?php if (!empty($booking['package_title']) && $booking['package_cost'] > 0): ?>
+          <?php if (!empty($booking['package_title']) && (float)($booking['package_cost'] ?? 0) > 0): ?>
           <tr>
             <td>
               <div class="font-bold">Catering: <?= e($booking['package_title']) ?></div>
-              <div class="text-xs text-muted"><?= (int)$booking['guest_count'] ?> Guests · Curated Culinary Tier</div>
+              <div class="text-xs text-muted"><?= (int)($booking['guest_count'] ?? 100) ?> Guests · Curated Culinary Tier</div>
             </td>
-            <td><?= (int)$booking['guest_count'] ?></td>
-            <td>$<?= number_format($booking['package_cost'] / max(1, $booking['guest_count']), 2) ?></td>
-            <td class="font-bold">$<?= number_format($booking['package_cost'], 2) ?></td>
+            <td><?= (int)($booking['guest_count'] ?? 100) ?></td>
+            <td>$<?= number_format((float)($booking['package_cost'] ?? 0) / max(1, (int)($booking['guest_count'] ?? 1)), 2) ?></td>
+            <td class="font-bold">$<?= number_format((float)($booking['package_cost'] ?? 0), 2) ?></td>
           </tr>
           <?php endif; ?>
-          <?php if (!empty($booking['staffing_cost']) && $booking['staffing_cost'] > 0): ?>
+          <?php if (!empty($booking['staffing_cost']) && (float)($booking['staffing_cost'] ?? 0) > 0): ?>
           <tr>
             <td>
               <div class="font-bold">Professional Event Logistics Staff</div>
               <div class="text-xs text-muted">Lead Event Coordinator, Waitstaff & Setup Crew</div>
             </td>
             <td>1</td>
-            <td>$<?= number_format($booking['staffing_cost'], 2) ?></td>
-            <td class="font-bold">$<?= number_format($booking['staffing_cost'], 2) ?></td>
+            <td>$<?= number_format((float)($booking['staffing_cost'] ?? 0), 2) ?></td>
+            <td class="font-bold">$<?= number_format((float)($booking['staffing_cost'] ?? 0), 2) ?></td>
           </tr>
           <?php endif; ?>
           <?php foreach ($singularItems as $si): ?>
@@ -138,9 +138,9 @@ $totalAmount  = $booking ? (float)$booking['total_amount'] : 0;
               <div class="font-bold"><?= e($si['emoji'] ?? '🍽️') ?> <?= e($si['item_name']) ?></div>
               <div class="text-xs text-muted"><?= !empty($si['notes']) ? e($si['notes']) : 'À-la-carte culinary add-on' ?></div>
             </td>
-            <td><?= (int)$si['quantity'] ?></td>
-            <td>$<?= number_format($si['unit_price'], 2) ?></td>
-            <td class="font-bold">$<?= number_format($si['subtotal'], 2) ?></td>
+            <td><?= (int)($si['quantity'] ?? 1) ?></td>
+            <td>$<?= number_format((float)($si['unit_price'] ?? 0), 2) ?></td>
+            <td class="font-bold">$<?= number_format((float)($si['subtotal'] ?? 0), 2) ?></td>
           </tr>
           <?php endforeach; ?>
           <tr style="border-top:1px solid var(--gray-200);">

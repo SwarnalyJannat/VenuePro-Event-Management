@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -75,7 +75,7 @@ $typeColors = ['booking'=>'#16a34a','payment'=>'#2563eb','message'=>'#7c3aed','s
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge" id="notif-badge"><?= $unreadCount > 0 ? $unreadCount : '' ?></span>
+            <?= renderNotifBadge($unreadCount) ?>
             🔔
           </a>
           <div class="topbar-user">
@@ -100,43 +100,42 @@ $typeColors = ['booking'=>'#16a34a','payment'=>'#2563eb','message'=>'#7c3aed','s
             <h1>Culinary Operations &amp; Order Alerts</h1>
             <p>Incoming booking catering orders, dispatch deadlines, and menu requests.</p>
           </div>
-          <span class="text-xs text-muted">5 Unread Notifications</span>
+          <span class="text-xs text-muted"><?= (int)$unreadCount ?> Unread Notification<?= $unreadCount === 1 ? '' : 's' ?></span>
         </div>
 
         <div class="card" style="padding:0; overflow:hidden;">
-          <div class="notif-item unread">
-            <div class="notif-icon-box" style="background:#eff6ff; color:#2563eb;">🍽️</div>
+          <?php if (empty($notifRows)): ?>
+          <div style="text-align:center; padding:48px 24px; color:var(--gray-400);">
+            <div style="font-size:3rem; margin-bottom:12px;">🔔</div>
+            <p>You're all caught up! No kitchen alerts or notifications.</p>
+          </div>
+          <?php else: foreach ($notifRows as $notif):
+            $type = $notif['type'] ?? 'order';
+            $icon  = $typeIcons[$type] ?? '🍽️';
+            $color = $typeColors[$type] ?? '#059669';
+            $isUnread = !$notif['is_read'];
+            $timeAgo = '';
+            $diff = time() - strtotime($notif['created_at']);
+            if ($diff < 60) $timeAgo = 'Just now';
+            elseif ($diff < 3600) $timeAgo = floor($diff/60).' mins ago';
+            elseif ($diff < 86400) $timeAgo = floor($diff/3600).' hours ago';
+            else $timeAgo = date('M j, Y', strtotime($notif['created_at']));
+            $link = !empty($notif['link_url']) ? $notif['link_url'] : '';
+          ?>
+          <div class="notif-item <?= $isUnread ? 'unread' : '' ?>" data-notif-id="<?= (int)$notif['id'] ?>">
+            <div class="notif-icon-box" style="background:<?= e($color) ?>22; color:<?= e($color) ?>;"><?= $icon ?></div>
             <div style="flex:1;">
               <div class="flex-between mb-4">
-                <strong>New Order #ORD-2045: Platinum 3-Course Banquet</strong>
-                <span class="text-xs text-muted">10:15 AM</span>
+                <strong><?= e($notif['title']) ?></strong>
+                <span class="text-xs text-muted"><?= e($timeAgo) ?></span>
               </div>
-              <p class="text-xs text-muted mb-8">150 Guests · Grand Emerald Ballroom (#BK-9021) · 12 Vegetarian, 4 Gluten-Free confirmed.</p>
-              <a href="caterer-order-details.php" class="btn btn-primary btn-sm" style="font-size:0.75rem; padding:4px 10px;">Select &amp; Manage Order →</a>
+              <p class="text-xs text-muted mb-8"><?= e($notif['message']) ?></p>
+              <?php if (!empty($link)): ?>
+              <a href="<?= e($link) ?>" class="btn btn-primary btn-sm" style="font-size:0.75rem; padding:4px 10px;">Select &amp; Manage Order →</a>
+              <?php endif; ?>
             </div>
           </div>
-
-          <div class="notif-item unread">
-            <div class="notif-icon-box" style="background:#f0fdf4; color:#16a34a;">⏱</div>
-            <div style="flex:1;">
-              <div class="flex-between mb-4">
-                <strong>Order #ORD-2042 Due for Dispatch in 22 Minutes</strong>
-                <span class="text-xs text-muted">11:00 AM</span>
-              </div>
-              <p class="text-xs text-muted">Ballroom A · Gold Package · Plating 90% completed.</p>
-            </div>
-          </div>
-
-          <div class="notif-item unread">
-            <div class="notif-icon-box" style="background:#fef3c7; color:#d97706;">✨</div>
-            <div style="flex:1;">
-              <div class="flex-between mb-4">
-                <strong>Custom Package Inquiry Submitted</strong>
-                <span class="text-xs text-muted">Yesterday</span>
-              </div>
-              <p class="text-xs text-muted">Client requested French-Italian fusion customized menu for 80 covers.</p>
-            </div>
-          </div>
+          <?php endforeach; endif; ?>
         </div>
       </main>
 

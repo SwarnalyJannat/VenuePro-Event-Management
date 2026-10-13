@@ -8,10 +8,12 @@ $db = getDBConnection();
 // Fetch all bookings for this customer
 $stmtAll = $db->prepare(
     "SELECT b.*, v.name AS venue_name, v.district AS venue_district,
-            cp.title AS package_title, cp.tier AS package_tier
+            cp.title AS package_title, cp.tier AS package_tier,
+            sa.setup_status, sa.completion_pct, sa.completed_at, sa.reported_staff
      FROM bookings b
      JOIN venues v ON b.venue_id = v.id
      LEFT JOIN catering_packages cp ON b.package_id = cp.id
+     LEFT JOIN staff_assignments sa ON sa.booking_id = b.id
      WHERE b.customer_id = ?
      ORDER BY b.event_date ASC"
 );
@@ -27,29 +29,17 @@ if ($selectedId > 0) {
         if ((int)$bk['id'] === $selectedId) { $selected = $bk; break; }
     }
     if (!$selected) {
-        $stmtSel = $db->prepare("SELECT b.*, v.name AS venue_name, v.district AS venue_district, cp.title AS package_title FROM bookings b JOIN venues v ON b.venue_id=v.id LEFT JOIN catering_packages cp ON b.package_id=cp.id WHERE b.id=? AND b.customer_id=? LIMIT 1");
+        $stmtSel = $db->prepare("SELECT b.*, v.name AS venue_name, v.district AS venue_district, cp.title AS package_title, sa.setup_status, sa.completion_pct, sa.completed_at, sa.reported_staff FROM bookings b JOIN venues v ON b.venue_id=v.id LEFT JOIN catering_packages cp ON b.package_id=cp.id LEFT JOIN staff_assignments sa ON sa.booking_id = b.id WHERE b.id=? AND b.customer_id=? LIMIT 1");
         $stmtSel->execute([$selectedId, $currentUser['id']]);
         $selected = $stmtSel->fetch();
     }
-    if ($selected) {
-        // Build timeline steps based on status
-        $status = strtolower($selected['booking_status']);
-        $steps = [
-            ['label' => 'Booking Submitted',          'done' => true],
-            ['label' => 'Under Review',                'done' => in_array($status, ['pending','confirmed','completed'])],
-            ['label' => 'Awaiting Caterer Confirmation','done' => in_array($status, ['confirmed','completed'])],
-            ['label' => 'Approved & Confirmed',        'done' => in_array($status, ['confirmed','completed'])],
-            ['label' => 'Event Day Preparation',       'done' => $status === 'completed'],
-            ['label' => 'Event Complete',              'done' => $status === 'completed'],
-        ];
-        if ($status === 'cancelled') {
-            $steps = [
-                ['label' => 'Booking Submitted', 'done' => true],
-                ['label' => 'Cancelled',          'done' => true, 'cancelled' => true],
-            ];
-        }
-        $timeline = $steps;
-    }
+}
+if (!$selected && !empty($allBookings)) {
+    $selected = $allBookings[0];
+}
+
+if ($selected) {
+    $timeline = getBookingProgressTimeline($selected);
 }
 ?>
 <!DOCTYPE html>
@@ -59,6 +49,16 @@ if ($selectedId > 0) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VenuePro – Live Progress</title>
   <link rel="stylesheet" href="../css/style.css">
+  <style>
+    @keyframes pulseDot {
+      0% { transform: scale(0.92); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.92); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    .live-dot {
+      animation: pulseDot 2s infinite ease-in-out;
+    }
+  </style>
 </head>
 <body>
 <input type="checkbox" id="sidebar-toggle">
@@ -100,7 +100,7 @@ if ($selectedId > 0) {
       </div>
       <div class="topbar-actions">
         <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-          <span class="badge" id="notif-badge" style="display:none;">0</span>🔔
+          <?= renderNotifBadge() ?>🔔
         </a>
         <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">💬</a>
         <a href="customer-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
@@ -145,7 +145,7 @@ if ($selectedId > 0) {
             <a href="customer-live-progress.php?booking_id=<?= $bk['id'] ?>" style="display:block;padding:16px 20px;border-bottom:1px solid var(--gray-100);text-decoration:none;background:<?= $isActive ? 'var(--primary-light, #eff6ff)' : '#fff' ?>;transition:background 0.15s;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='<?= $isActive ? '#eff6ff' : '#fff' ?>'">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                 <div class="font-semibold" style="font-size:0.95rem;color:var(--gray-900);"><?= e($bk['event_name']) ?></div>
-                <span class="pill pill-<?= $stClass ?>" style="font-size:0.7rem;"><?= strtoupper($stClass) ?></span>
+                <span class="pill pill-<?= $stClass ?> lp-pill-status-<?= $bk['id'] ?>" style="font-size:0.7rem;"><?= strtoupper($stClass) ?></span>
               </div>
               <div style="font-size:0.8rem;color:var(--gray-500);">🏛️ <?= e($bk['venue_name']) ?></div>
               <div style="font-size:0.8rem;color:var(--gray-500);">📅 <?= $eventDate ?></div>
@@ -162,35 +162,90 @@ if ($selectedId > 0) {
         <div>
           <!-- Progress Timeline Card -->
           <div class="card mb-24">
-            <div class="card-header" style="padding:20px 24px 0;">
-              <div class="card-title">📍 Booking Progress — <?= e($selected['booking_code']) ?></div>
+            <div class="card-header" style="padding:20px 24px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+              <div class="card-title">📍 Booking Progress — <span id="lp-booking-code"><?= e($selected['booking_code']) ?></span></div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span id="lp-live-badge" class="pill" style="background:#ecfdf5; color:#059669; border:1.5px solid #a7f3d0; font-size:0.75rem; display:inline-flex; align-items:center; gap:6px; padding:4px 10px; font-weight:700;">
+                  <span class="live-dot" style="width:8px; height:8px; border-radius:50%; background:#10b981; display:inline-block;"></span>
+                  <span>Real-Time Sync Active</span>
+                </span>
+                <span id="lp-sync-time" class="text-xs text-muted" style="font-size:0.7rem;">Synced just now</span>
+              </div>
             </div>
             <div style="padding:24px;">
-              <div style="position:relative;padding-left:32px;">
+              <div id="lp-timeline-container" style="position:relative;padding-left:32px;">
                 <?php foreach ($timeline as $i => $step):
-                  $dotColor = isset($step['cancelled']) ? '#dc2626' : ($step['done'] ? '#16a34a' : '#d1d5db');
-                  $lineColor = ($step['done'] && !isset($step['cancelled'])) ? '#16a34a' : '#e5e7eb';
+                  $isLast = ($i === count($timeline) - 1);
+                  $isDone = !empty($step['done']);
+                  $isRejected = ($step['status'] === 'rejected' || !empty($step['cancelled']));
+                  $isInProgress = ($step['status'] === 'in_progress');
+
+                  $dotColor = '#d1d5db';
+                  if ($isRejected) $dotColor = '#dc2626';
+                  elseif ($isDone) $dotColor = '#16a34a';
+                  elseif ($isInProgress) $dotColor = '#2563eb';
+
+                  $lineColor = ($isDone && !$isRejected) ? '#16a34a' : '#e5e7eb';
                 ?>
-                <div style="position:relative;margin-bottom:<?= $i < count($timeline)-1 ? '0' : '0' ?>;">
-                  <!-- Connector line -->
-                  <?php if ($i < count($timeline)-1): ?>
-                  <div style="position:absolute;left:-20px;top:16px;width:2px;height:40px;background:<?= $lineColor ?>;"></div>
+                <div style="position:relative;">
+                  <?php if (!$isLast): ?>
+                  <div style="position:absolute;left:-20px;top:16px;width:2px;height:44px;background:<?= $lineColor ?>;transition:background 0.3s;"></div>
                   <?php endif; ?>
-                  <!-- Dot -->
-                  <div style="position:absolute;left:-28px;top:4px;width:16px;height:16px;border-radius:50%;background:<?= $dotColor ?>;border:2px solid #fff;box-shadow:0 0 0 2px <?= $dotColor ?>;"></div>
-                  <!-- Content -->
-                  <div style="padding-bottom:32px;">
-                    <div style="font-weight:<?= $step['done'] ? '600' : '400' ?>;color:<?= $step['done'] ? 'var(--gray-900)' : 'var(--gray-400)' ?>;">
-                      <?= e($step['label']) ?>
-                      <?php if ($step['done'] && !isset($step['cancelled'])): ?>
-                      <span style="color:#16a34a;margin-left:6px;">✓</span>
+                  <div style="position:absolute;left:-28px;top:4px;width:16px;height:16px;border-radius:50%;background:<?= $dotColor ?>;border:2px solid #fff;box-shadow:0 0 0 2px <?= $dotColor ?>;transition:all 0.3s;"></div>
+                  <div style="padding-bottom:28px;">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                      <span style="font-weight:<?= $isDone ? '700' : '500' ?>;color:<?= $isDone ? 'var(--gray-900)' : 'var(--gray-500)' ?>;font-size:0.95rem;">
+                        <?= e($step['label']) ?>
+                      </span>
+                      <?php if ($isDone && !$isRejected): ?>
+                      <span style="color:#16a34a;font-weight:800;font-size:1rem;">✓</span>
+                      <?php endif; ?>
+                      <?php if ($isRejected): ?>
+                      <span style="color:#dc2626;font-weight:800;font-size:0.9rem;">✗</span>
                       <?php endif; ?>
                     </div>
+                    <?php if (!empty($step['subtext'])): ?>
+                    <div style="font-size:0.8rem;color:<?= $isDone ? 'var(--gray-600)' : 'var(--gray-400)' ?>;margin-top:3px;line-height:1.4;"><?= e($step['subtext']) ?></div>
+                    <?php endif; ?>
                   </div>
                 </div>
                 <?php endforeach; ?>
               </div>
             </div>
+          </div>
+
+          <div id="lp-setup-banner">
+            <?php 
+            $setupStatusVal = strtolower($selected['setup_status'] ?? '');
+            $isReady = ($setupStatusVal === 'completed' || (int)($selected['completion_pct'] ?? 0) >= 100 || strtolower($selected['booking_status']) === 'completed');
+            $inPrep = ($setupStatusVal === 'in_progress' || (int)($selected['completion_pct'] ?? 0) > 0);
+            ?>
+            <?php if ($isReady): ?>
+            <div class="card mb-24" style="background:#f0fdf4; border:1.5px solid #86efac; padding:18px 22px;">
+              <div style="display:flex; align-items:center; gap:14px;">
+                <div style="font-size:2rem; color:#16a34a; flex-shrink:0;">✓</div>
+                <div>
+                  <div style="font-weight:700; color:#166534; font-size:1.05rem;">Venue Setup 100% Certified &amp; Ready</div>
+                  <div style="color:#15803d; font-size:0.875rem; margin-top:3px; line-height:1.4;">
+                    All 10 operational and safety checklists have been verified by <strong><?= e($selected['reported_staff'] ?? 'Venue Operations Staff') ?></strong>.
+                    <?= !empty($selected['completed_at']) ? 'Certified on ' . date('M j, Y g:i A', strtotime($selected['completed_at'])) . '.' : '' ?>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <?php elseif ($inPrep): ?>
+            <div class="card mb-24" style="background:#eff6ff; border:1.5px solid #bfdbfe; padding:18px 22px;">
+              <div style="display:flex; align-items:center; gap:14px;">
+                <div style="font-size:2rem; color:#2563eb; flex-shrink:0;">🛠</div>
+                <div>
+                  <div style="font-weight:700; color:#1e40af; font-size:1.05rem;">Event Setup in Progress (<?= (int)$selected['completion_pct'] ?>%)</div>
+                  <div style="color:#1d4ed8; font-size:0.875rem; margin-top:3px; line-height:1.4;">
+                    Our operations team is currently staging tables, audio-visual equipment, and coordinating with catering.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <?php endif; ?>
           </div>
 
           <!-- Booking Detail Card -->
@@ -204,7 +259,7 @@ if ($selectedId > 0) {
                 <tr><td style="padding:8px 0;color:var(--gray-500);">Venue</td><td style="padding:8px 0;"><?= e($selected['venue_name']) ?></td></tr>
                 <tr><td style="padding:8px 0;color:var(--gray-500);">Date</td><td style="padding:8px 0;"><?= date('F j, Y', strtotime($selected['event_date'])) ?></td></tr>
                 <tr><td style="padding:8px 0;color:var(--gray-500);">Time</td><td style="padding:8px 0;"><?= substr($selected['start_time'],0,5) ?> – <?= substr($selected['end_time'],0,5) ?></td></tr>
-                <tr><td style="padding:8px 0;color:var(--gray-500);">Guests</td><td style="padding:8px 0;"><?= $selected['guest_count'] ?></td></tr>
+                <tr><td style="padding:8px 0;color:var(--gray-500);">Guests</td><td style="padding:8px 0;font-weight:600;"><?= number_format((int)$selected['guest_count']) ?> Attendees</td></tr>
                 <?php if (!empty($selected['package_title'])): ?>
                 <tr><td style="padding:8px 0;color:var(--gray-500);">Package</td><td style="padding:8px 0;"><?= e($selected['package_title']) ?></td></tr>
                 <?php endif; ?>
@@ -214,13 +269,15 @@ if ($selectedId > 0) {
                 </tr>
               </table>
 
-              <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+              <div id="lp-actions-container" style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
                 <a href="client-invoice.php?booking_id=<?= $selected['id'] ?>" class="btn btn-outline" style="font-size:0.85rem;">📄 View Invoice</a>
                 <?php if (in_array(strtolower($selected['booking_status']), ['pending', 'inquiry'])): ?>
                 <button class="btn" style="font-size:0.85rem;background:#fee2e2;color:#dc2626;border:none;cursor:pointer;border-radius:6px;padding:8px 16px;"
                   onclick="cancelBooking(<?= $selected['id'] ?>, '<?= e($selected['event_name']) ?>')">✕ Cancel Booking</button>
                 <?php elseif (strtolower($selected['booking_status']) === 'confirmed'): ?>
                 <span class="pill pill-confirmed" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:0.85rem;">✓ Confirmed — Non-Cancellable</span>
+                <?php elseif (strtolower($selected['booking_status']) === 'completed'): ?>
+                <span class="pill pill-completed" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:0.85rem;background:#ecfdf5;color:#059669;border:1px solid #10b981;">✓ Event Concluded &amp; Completed</span>
                 <?php endif; ?>
               </div>
             </div>
@@ -249,6 +306,8 @@ if ($selectedId > 0) {
 </div>
 
 <script>
+const currentBookingId = <?= (int)($selected['id'] ?? 0) ?>;
+
 async function cancelBooking(bookingId, eventName) {
   if (!confirm('Cancel booking for "' + eventName + '"?\nThis cannot be undone.')) return;
   const reason = prompt('Reason for cancellation (optional):', 'Customer requested cancellation') || 'Customer requested cancellation';
@@ -263,17 +322,155 @@ async function cancelBooking(bookingId, eventName) {
     else { alert('Error: ' + data.message); }
   } catch(e) { alert('Server connection error.'); }
 }
-// Dynamic notification badge
-(async function(){
+
+// -------------------------------------------------------------
+// REAL-TIME DYNAMIC PROGRESS POLLER (Runs every 3 seconds)
+// -------------------------------------------------------------
+async function fetchLiveProgress() {
+  if (!currentBookingId) return;
   try {
-    const r = await fetch('../api/notifications.php?action=unread_count');
-    const d = await r.json();
-    if (d.success && d.data && d.data.count > 0) {
-      const b = document.getElementById('notif-badge');
-      if (b) { b.textContent = d.data.count; b.style.display = 'inline'; }
+    const res = await fetch('../api/bookings.php?action=live_progress&booking_id=' + currentBookingId);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.success && data.data) {
+      updateLiveProgressUI(data.data);
     }
-  } catch(e){}
-})();
+  } catch (err) {
+    console.warn('Real-time sync poll failed, retrying in 3s...', err);
+  }
+}
+
+function updateLiveProgressUI(data) {
+  const steps = data.steps || [];
+  const booking = data.booking || {};
+  const isReady = data.is_ready;
+  const inPrep = data.in_prep;
+  const setupInfo = data.setup_info || {};
+
+  // 1. Update sync timestamp
+  const syncTimeEl = document.getElementById('lp-sync-time');
+  if (syncTimeEl) {
+    const d = new Date();
+    syncTimeEl.textContent = 'Synced ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+  }
+
+  // 2. Render Timeline Steps Dynamically
+  const container = document.getElementById('lp-timeline-container');
+  if (container && steps.length > 0) {
+    let html = '';
+    steps.forEach((step, idx) => {
+      const isLast = (idx === steps.length - 1);
+      const isDone = !!step.done;
+      const isRejected = (step.status === 'rejected' || step.cancelled);
+      const isInProgress = (step.status === 'in_progress');
+      
+      let dotColor = '#d1d5db';
+      if (isRejected) dotColor = '#dc2626';
+      else if (isDone) dotColor = '#16a34a';
+      else if (isInProgress) dotColor = '#2563eb';
+
+      let lineColor = (isDone && !isRejected) ? '#16a34a' : '#e5e7eb';
+
+      html += `
+        <div style="position:relative;">
+          ${!isLast ? `<div style="position:absolute;left:-20px;top:16px;width:2px;height:44px;background:${lineColor};transition:background 0.3s;"></div>` : ''}
+          <div style="position:absolute;left:-28px;top:4px;width:16px;height:16px;border-radius:50%;background:${dotColor};border:2px solid #fff;box-shadow:0 0 0 2px ${dotColor};transition:all 0.3s;"></div>
+          <div style="padding-bottom:28px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="font-weight:${isDone ? '700' : '500'};color:${isDone ? 'var(--gray-900)' : 'var(--gray-500)'};font-size:0.95rem;">
+                ${escapeHtml(step.label)}
+              </span>
+              ${isDone && !isRejected ? '<span style="color:#16a34a;font-weight:800;font-size:1rem;">✓</span>' : ''}
+              ${isRejected ? '<span style="color:#dc2626;font-weight:800;font-size:0.9rem;">✗</span>' : ''}
+            </div>
+            ${step.subtext ? `<div style="font-size:0.8rem;color:${isDone ? 'var(--gray-600)' : 'var(--gray-400)'};margin-top:3px;line-height:1.4;">${escapeHtml(step.subtext)}</div>` : ''}
+          </div>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  }
+
+  // 3. Render Setup Banner
+  const bannerContainer = document.getElementById('lp-setup-banner');
+  if (bannerContainer) {
+    if (isReady) {
+      const staffName = setupInfo.reported_staff || 'Venue Operations Staff';
+      const completedTime = setupInfo.completed_at ? 'Certified ' + setupInfo.completed_at : '';
+      bannerContainer.innerHTML = `
+        <div class="card mb-24" style="background:#f0fdf4; border:1.5px solid #86efac; padding:18px 22px;">
+          <div style="display:flex; align-items:center; gap:14px;">
+            <div style="font-size:2rem; color:#16a34a; flex-shrink:0;">✓</div>
+            <div>
+              <div style="font-weight:700; color:#166534; font-size:1.05rem;">Venue Setup 100% Certified &amp; Ready</div>
+              <div style="color:#15803d; font-size:0.875rem; margin-top:3px; line-height:1.4;">
+                All 10 operational and safety checklists have been verified by <strong>${escapeHtml(staffName)}</strong>. ${escapeHtml(completedTime)}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      bannerContainer.style.display = 'block';
+    } else if (inPrep) {
+      bannerContainer.innerHTML = `
+        <div class="card mb-24" style="background:#eff6ff; border:1.5px solid #bfdbfe; padding:18px 22px;">
+          <div style="display:flex; align-items:center; gap:14px;">
+            <div style="font-size:2rem; color:#2563eb; flex-shrink:0;">🛠</div>
+            <div>
+              <div style="font-weight:700; color:#1e40af; font-size:1.05rem;">Event Setup in Progress (${parseInt(setupInfo.pct || 0)}%)</div>
+              <div style="color:#1d4ed8; font-size:0.875rem; margin-top:3px; line-height:1.4;">
+                Our operations team is currently staging tables, audio-visual equipment, and coordinating with catering.
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      bannerContainer.style.display = 'block';
+    } else {
+      bannerContainer.innerHTML = '';
+      bannerContainer.style.display = 'none';
+    }
+  }
+
+  // 4. Update status pills in sidebar and list
+  const statusPills = document.querySelectorAll('.lp-pill-status-' + currentBookingId);
+  const statusStr = (booking.booking_status || 'pending').toLowerCase();
+  statusPills.forEach(pill => {
+    pill.className = 'pill pill-' + statusStr + ' lp-pill-status-' + currentBookingId;
+    pill.textContent = statusStr.toUpperCase();
+  });
+
+  // 5. Update actions
+  const actionsEl = document.getElementById('lp-actions-container');
+  if (actionsEl) {
+    if (['pending', 'inquiry'].includes(statusStr)) {
+      actionsEl.innerHTML = `
+        <a href="client-invoice.php?booking_id=${booking.id}" class="btn btn-outline" style="font-size:0.85rem;">📄 View Invoice</a>
+        <button class="btn" style="font-size:0.85rem;background:#fee2e2;color:#dc2626;border:none;cursor:pointer;border-radius:6px;padding:8px 16px;" onclick="cancelBooking(${booking.id}, '${escapeHtml(booking.event_name)}')">✕ Cancel Booking</button>
+      `;
+    } else if (statusStr === 'confirmed') {
+      actionsEl.innerHTML = `
+        <a href="client-invoice.php?booking_id=${booking.id}" class="btn btn-outline" style="font-size:0.85rem;">📄 View Invoice</a>
+        <span class="pill pill-confirmed" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:0.85rem;">✓ Confirmed — Non-Cancellable</span>
+      `;
+    } else if (statusStr === 'completed') {
+      actionsEl.innerHTML = `
+        <a href="client-invoice.php?booking_id=${booking.id}" class="btn btn-outline" style="font-size:0.85rem;">📄 View Invoice</a>
+        <span class="pill pill-completed" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:0.85rem;background:#ecfdf5;color:#059669;border:1px solid #10b981;">✓ Event Concluded &amp; Completed</span>
+      `;
+    }
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Start live sync poller every 3 seconds
+setInterval(fetchLiveProgress, 3000);
+document.addEventListener('DOMContentLoaded', fetchLiveProgress);
+
 </script>
 <script src="../js/app.js"></script>
 </body>

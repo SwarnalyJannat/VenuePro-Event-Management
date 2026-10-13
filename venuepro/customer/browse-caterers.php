@@ -12,7 +12,7 @@ $stmtCat = $db->prepare(
      COALESCE(AVG(pkg.price_per_event), 0) AS avg_price
      FROM users u
      JOIN caterer_profiles cp ON u.id = cp.user_id
-     LEFT JOIN catering_packages pkg ON u.id = pkg.caterer_id AND pkg.status = 'active'
+     LEFT JOIN catering_packages pkg ON u.id = pkg.caterer_id AND pkg.status IN ('published', 'active')
      WHERE u.role = 'caterer' AND cp.approval_status = 'approved'
      GROUP BY u.id ORDER BY cp.business_name"
 );
@@ -70,7 +70,7 @@ $catAvatarColors = ['#059669','#2563eb','#7c3aed','#f59e0b','#dc2626','#0284c7']
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">3</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">

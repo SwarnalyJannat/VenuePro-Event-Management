@@ -79,7 +79,7 @@ $stmtTrend = $db->query("
            COALESCE(SUM(total_amount), 0) AS rev,
            COUNT(*) AS cnt
     FROM bookings
-    WHERE booking_status != 'cancelled'
+    WHERE booking_status NOT IN ('cancelled', 'rejected')
     GROUP BY ym
 ");
 while ($row = $stmtTrend->fetch()) {
@@ -95,6 +95,20 @@ foreach ($monthsToDisplay as $m) {
         $peakTrendMonth = $m['label'];
     }
 }
+
+// All monthly booking trends for interactive period selector
+$stmtAllTrend = $db->query("
+    SELECT DATE_FORMAT(event_date, '%Y-%m') AS ym,
+           DATE_FORMAT(event_date, '%b') AS short_month,
+           DATE_FORMAT(event_date, '%M %Y') AS full_label,
+           COALESCE(SUM(total_amount), 0) AS rev,
+           COUNT(*) AS cnt
+    FROM bookings
+    WHERE booking_status NOT IN ('cancelled', 'rejected')
+    GROUP BY ym
+    ORDER BY ym ASC
+");
+$allTrendRaw = $stmtAllTrend->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -159,7 +173,7 @@ foreach ($monthsToDisplay as $m) {
         </div>
         <div class="topbar-actions">
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge"><?= $pendingCount ?></span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="View & Edit My Profile">
@@ -216,29 +230,38 @@ foreach ($monthsToDisplay as $m) {
 <div class="grid-2 mb-24" style="grid-template-columns: 2fr 1fr;">
   <!-- Revenue Growth Trend Chart — 100% Dynamic from DB -->
   <div class="card">
-    <div class="card-header">
+    <div class="card-header" style="flex-wrap:wrap; gap:10px;">
       <div>
         <div class="card-title">Revenue Growth Trend</div>
-        <span class="text-xs text-muted">Monthly confirmed &amp; projected revenue volume</span>
+        <span class="text-xs text-muted" id="trendSubtitle">Monthly confirmed &amp; projected revenue volume</span>
       </div>
-      <span class="stat-badge neutral">Jul – Dec <?= date('Y') ?></span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <select id="trendPeriodSelect" class="form-control" style="width:auto; padding:4px 10px; font-size:0.75rem;" onchange="switchTrendPeriod(this.value)">
+          <option value="jul_dec" selected>Jul – Dec <?= date('Y') ?></option>
+          <option value="rolling">Rolling 6 Months</option>
+          <option value="year">Full Year <?= date('Y') ?></option>
+          <option value="all">All Records</option>
+        </select>
+      </div>
     </div>
-    <div class="bar-chart" style="margin-top:20px;">
+    <div id="trendChartWrap" class="bar-chart" style="margin-top:16px;">
       <?php foreach ($monthsToDisplay as $m):
         $pct = $m['revenue'] > 0 ? max(8, round(($m['revenue'] / $maxTrendRev) * 100)) : 4;
         $isPeak = ($m['revenue'] > 0 && $m['revenue'] >= $maxTrendRev);
         $valDisplay = $m['revenue'] > 0 ? ('$' . ($m['revenue'] >= 1000 ? number_format($m['revenue'] / 1000, 1) . 'k' : round($m['revenue']))) : '$0';
       ?>
       <div class="bar-col">
-        <span style="font-size:0.65rem; color:<?= $m['revenue'] > 0 ? 'var(--navy-900)' : 'var(--gray-400)' ?>; margin-bottom:4px; font-weight:600;"><?= $valDisplay ?></span>
-        <div class="bar <?= $isPeak ? 'active' : '' ?>" style="height:<?= $pct ?>%;" title="<?= e($m['full_label']) ?>: $<?= number_format($m['revenue'], 2) ?> (<?= $m['count'] ?> booking<?= $m['count'] === 1 ? '' : 's' ?>)"></div>
-        <span class="bar-label <?= $isPeak ? 'font-bold' : '' ?>" style="<?= $isPeak ? 'color:var(--primary);' : '' ?>"><?= strtoupper($m['label']) ?></span>
+        <span class="bar-val" style="color:<?= $m['revenue'] > 0 ? 'var(--navy-900)' : 'var(--gray-400)' ?>;"><?= $valDisplay ?></span>
+        <div class="bar-track">
+          <div class="bar <?= $isPeak ? 'active' : '' ?>" style="height:<?= $pct ?>%;" title="<?= e($m['full_label']) ?>: $<?= number_format($m['revenue'], 2) ?> (<?= $m['count'] ?> booking<?= $m['count'] === 1 ? '' : 's' ?>)"></div>
+        </div>
+        <span class="bar-label <?= $isPeak ? 'font-bold' : '' ?>" style="<?= $isPeak ? 'color:var(--primary); font-weight:700;' : '' ?>"><?= strtoupper($m['label']) ?></span>
       </div>
       <?php endforeach; ?>
     </div>
-    <div class="flex-between text-xs text-muted" style="margin-top:16px; padding-top:12px; border-top:1px solid var(--gray-200);">
-      <span>Total 6M Volume: <strong class="text-primary font-bold">$<?= number_format(array_sum(array_column($monthsToDisplay, 'revenue')), 2) ?></strong></span>
-      <span>Peak: <strong><?= $peakTrendMonth ?: 'None' ?></strong></span>
+    <div id="trendSummaryWrap" class="flex-between text-xs text-muted" style="margin-top:16px; padding-top:12px; border-top:1px solid var(--gray-200);">
+      <span>Total Volume: <strong class="text-primary font-bold" id="trendTotalVol">$<?= number_format(array_sum(array_column($monthsToDisplay, 'revenue')), 2) ?></strong></span>
+      <span>Peak: <strong id="trendPeakMonth"><?= $peakTrendMonth ?: 'None' ?></strong></span>
     </div>
   </div>
 
@@ -290,6 +313,7 @@ foreach ($monthsToDisplay as $m) {
           <th>CUSTOMER</th>
           <th>VENUE</th>
           <th>DATE</th>
+          <th>GUESTS</th>
           <th>EST. VALUE</th>
           <th>STATUS</th>
           <th>ACTION</th>
@@ -297,7 +321,7 @@ foreach ($monthsToDisplay as $m) {
       </thead>
       <tbody>
         <?php if (empty($recentBookings)): ?>
-        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray-400);">No booking requests found.</td></tr>
+        <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray-400);">No booking requests found.</td></tr>
         <?php else: foreach ($recentBookings as $bk):
           $statusClass = $bk['booking_status'] === 'canceled' ? 'cancelled' : strtolower($bk['booking_status']);
           $eventDate   = date('M j, Y', strtotime($bk['event_date']));
@@ -314,6 +338,7 @@ foreach ($monthsToDisplay as $m) {
           </td>
           <td><?= e($bk['venue_name']) ?></td>
           <td><?= $eventDate ?></td>
+          <td><span class="font-semibold" style="color:var(--navy-900);"><?= number_format((int)($bk['guest_count'] ?? 0)) ?></span> <span class="text-xs text-muted">attendees</span></td>
           <td class="font-semibold">$<?= number_format((float)$bk['total_amount'], 2) ?></td>
           <td><span class="pill pill-<?= $statusClass ?>"><?= strtoupper($statusClass) ?></span></td>
           <td><a href="admin-booking-approval.php?booking_id=<?= $bk['id'] ?>" class="btn btn-outline btn-sm">View Details</a></td>
@@ -330,5 +355,95 @@ foreach ($monthsToDisplay as $m) {
     </div>
   </div>
 <script src="../js/app.js"></script>
+<script>
+const rawDbTrendData = <?= json_encode($allTrendRaw, JSON_UNESCAPED_UNICODE) ?>;
+
+function switchTrendPeriod(period) {
+  const wrap = document.getElementById('trendChartWrap');
+  const totalEl = document.getElementById('trendTotalVol');
+  const peakEl = document.getElementById('trendPeakMonth');
+  const subtitleEl = document.getElementById('trendSubtitle');
+  if (!wrap) return;
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dataMap = {};
+  if (Array.isArray(rawDbTrendData)) {
+    rawDbTrendData.forEach(row => {
+      dataMap[row.ym] = {
+        ym: row.ym,
+        label: row.short_month,
+        full_label: row.full_label,
+        revenue: parseFloat(row.rev) || 0,
+        count: parseInt(row.cnt, 10) || 0
+      };
+    });
+  }
+
+  let list = [];
+  const curYear = 2026;
+  if (period === 'jul_dec') {
+    for (let m = 7; m <= 12; m++) {
+      const ym = curYear + '-' + String(m).padStart(2, '0');
+      list.push(dataMap[ym] || { ym: ym, label: monthNames[m-1], full_label: monthNames[m-1] + ' ' + curYear, revenue: 0, count: 0 });
+    }
+    if (subtitleEl) subtitleEl.textContent = 'Monthly confirmed & projected volume (Jul – Dec ' + curYear + ')';
+  } else if (period === 'rolling') {
+    const rollingYms = ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01'];
+    rollingYms.forEach(ym => {
+      const parts = ym.split('-');
+      const mIdx = parseInt(parts[1], 10) - 1;
+      list.push(dataMap[ym] || { ym: ym, label: monthNames[mIdx], full_label: monthNames[mIdx] + ' ' + parts[0], revenue: 0, count: 0 });
+    });
+    if (subtitleEl) subtitleEl.textContent = 'Rolling 6-month window (August 2026 – January 2027)';
+  } else if (period === 'year') {
+    for (let m = 1; m <= 12; m++) {
+      const ym = curYear + '-' + String(m).padStart(2, '0');
+      list.push(dataMap[ym] || { ym: ym, label: monthNames[m-1], full_label: monthNames[m-1] + ' ' + curYear, revenue: 0, count: 0 });
+    }
+    if (subtitleEl) subtitleEl.textContent = 'Full Calendar Year ' + curYear + ' volume breakdown';
+  } else {
+    const keys = Object.keys(dataMap).sort();
+    if (keys.length > 0) {
+      keys.forEach(k => list.push(dataMap[k]));
+    } else {
+      list = [{ ym: '', label: 'None', full_label: 'No data', revenue: 0, count: 0 }];
+    }
+    if (subtitleEl) subtitleEl.textContent = 'All recorded booking revenue in database';
+  }
+
+  const maxRev = Math.max(1, ...list.map(d => d.revenue));
+  const totalRev = list.reduce((sum, d) => sum + d.revenue, 0);
+  let peak = null;
+  list.forEach(d => {
+    if (d.revenue > 0 && (!peak || d.revenue > peak.revenue)) peak = d;
+  });
+
+  wrap.innerHTML = '';
+  list.forEach(d => {
+    const isPeak = (peak && d.revenue === peak.revenue && d.revenue > 0);
+    const pct = d.revenue > 0 ? Math.max(8, Math.round((d.revenue / maxRev) * 100)) : 4;
+    const valText = d.revenue > 0 ? ('$' + (d.revenue >= 1000 ? (d.revenue / 1000).toFixed(1) + 'k' : Math.round(d.revenue))) : '$0';
+
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+    col.innerHTML = `
+      <span class="bar-val" style="color:${d.revenue > 0 ? 'var(--navy-900)' : 'var(--gray-400)'};">${valText}</span>
+      <div class="bar-track">
+        <div class="bar ${isPeak ? 'active' : ''}" style="height:${pct}%;" title="${escapeHtml(d.full_label)}: $${d.revenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${d.count} booking${d.count === 1 ? '' : 's'})"></div>
+      </div>
+      <span class="bar-label ${isPeak ? 'font-bold' : ''}" style="${isPeak ? 'color:var(--primary); font-weight:700;' : ''}">${d.label.toUpperCase()}</span>
+    `;
+    wrap.appendChild(col);
+  });
+
+  if (totalEl) totalEl.textContent = '$' + totalRev.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  if (peakEl) peakEl.textContent = peak ? (peak.label + ' ($' + (peak.revenue >= 1000 ? (peak.revenue/1000).toFixed(1) + 'k' : Math.round(peak.revenue)) + ')') : 'None';
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
 </body>
 </html>

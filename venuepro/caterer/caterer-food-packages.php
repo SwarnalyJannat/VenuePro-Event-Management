@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -17,16 +17,6 @@ $stmtMP  = $db->prepare(
 );
 $stmtMP->execute([$catUser['id']]);
 $myPackages = $stmtMP->fetchAll();
-if (empty($myPackages)) {
-    $stmtAllP = $db->query(
-        "SELECT cp.*, COUNT(b.id) AS active_bookings
-         FROM catering_packages cp
-         LEFT JOIN bookings b ON b.package_id = cp.id AND b.booking_status IN ('confirmed','pending')
-         GROUP BY cp.id
-         ORDER BY cp.id ASC"
-    );
-    $myPackages = $stmtAllP->fetchAll();
-}
 $tierPills  = ['Gold'=>'pill-pending','Platinum'=>'pill-confirmed','Signature'=>'pill-inquiry','Custom'=>'pill-inquiry'];
 ?>
 <!DOCTYPE html>
@@ -89,7 +79,7 @@ $tierPills  = ['Gold'=>'pill-pending','Platinum'=>'pill-confirmed','Signature'=>
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <div class="topbar-user">

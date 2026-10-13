@@ -73,7 +73,7 @@ if ($bookingId > 0) {
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">3</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
@@ -106,9 +106,9 @@ if ($bookingId > 0) {
     <tr><td style="padding:4px 0;color:#6b7280;">Event</td><td style="padding:4px 0;"><?= e($booking['event_name']) ?></td></tr>
     <tr><td style="padding:4px 0;color:#6b7280;">Date</td><td style="padding:4px 0;"><?= date('F j, Y', strtotime($booking['event_date'])) ?></td></tr>
     <tr><td style="padding:4px 0;color:#6b7280;">Time</td><td style="padding:4px 0;"><?= substr($booking['start_time'],0,5) ?> – <?= substr($booking['end_time'],0,5) ?></td></tr>
-    <tr><td style="padding:4px 0;color:#6b7280;">Guests</td><td style="padding:4px 0;"><?= $booking['guest_count'] ?></td></tr>
-    <?php if (!empty($booking['package_title'])): ?>
-    <tr><td style="padding:4px 0;color:#6b7280;">Package</td><td style="padding:4px 0;"><?= e($booking['package_title']) ?></td></tr>
+    <tr><td style="padding:4px 0;color:#6b7280;">Guests</td><td style="padding:4px 0;font-weight:600;"><?= number_format((int)$booking['guest_count']) ?> Attendees</td></tr>
+    <?php if (!empty($booking['package_title']) || (float)($booking['package_cost'] ?? 0) > 0): ?>
+    <tr><td style="padding:4px 0;color:#6b7280;">Package</td><td style="padding:4px 0;font-weight:600;color:#059669;"><?= !empty($booking['package_title']) ? e($booking['package_title']) : 'Custom Hybrid Package' ?></td></tr>
     <?php endif; ?>
     <tr><td style="padding:4px 0;color:#166534;font-weight:700;border-top:1px solid #86efac;padding-top:8px;">Total Paid</td><td style="padding:4px 0;color:#166534;font-weight:700;border-top:1px solid #86efac;padding-top:8px;">$<?= number_format($booking['total_amount'], 2) ?></td></tr>
   </table>

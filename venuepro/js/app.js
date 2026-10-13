@@ -29,25 +29,32 @@
 
   // Helper: Display Alert Banner
   function showAlert(formElement, message, isSuccess = false) {
-    let alertBox = formElement.parentElement.querySelector('.vp-alert-banner');
+    let alertBox = null;
+    if (formElement && formElement.parentElement) {
+      alertBox = formElement.parentElement.querySelector('#registerAlert, #signupAlert, .vp-alert-banner');
+    }
     if (!alertBox) {
+      alertBox = document.getElementById('registerAlert') || document.getElementById('signupAlert');
+    }
+    if (!alertBox && formElement && formElement.parentElement) {
       alertBox = document.createElement('div');
       alertBox.className = 'vp-alert-banner';
       formElement.parentElement.insertBefore(alertBox, formElement);
     }
-    alertBox.style.cssText = `
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      animation: fadeIn 0.2s ease;
-      background: ${isSuccess ? '#dcfce7' : '#fee2e2'};
-      color: ${isSuccess ? '#166534' : '#991b1b'};
-      border: 1.5px solid ${isSuccess ? '#86efac' : '#fca5a5'};
-    `;
-    alertBox.innerHTML = `${isSuccess ? '✓' : '⚠️'} ${message}`;
-    alertBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (alertBox) {
+      alertBox.style.display = 'block';
+      alertBox.style.padding = '12px 16px';
+      alertBox.style.marginBottom = '16px';
+      alertBox.style.borderRadius = '6px';
+      alertBox.style.fontSize = '0.85rem';
+      alertBox.style.fontWeight = '600';
+      alertBox.style.animation = 'fadeIn 0.2s ease';
+      alertBox.style.background = isSuccess ? '#dcfce7' : '#fee2e2';
+      alertBox.style.color = isSuccess ? '#166534' : '#991b1b';
+      alertBox.style.border = `1.5px solid ${isSuccess ? '#86efac' : '#fca5a5'}`;
+      alertBox.innerHTML = `${isSuccess ? '✓' : '⚠️'} ${message}`;
+      alertBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
 
   // ============================================================
@@ -57,12 +64,29 @@
     // Detect login forms
     const loginForms = document.querySelectorAll('form[action*="login"], form#login-form, .auth-page form');
     loginForms.forEach(form => {
+      // Guard against multiple attachments
+      if (form.dataset.vpAuthInit) return;
+
       // Determine if form is login or register
-      const isRegister = form.action.includes('register') || form.action.includes('signup') || form.querySelector('input[type="password"][id*="confirm"]');
+      const isRegister = form.id === 'register-form' ||
+                         form.id === 'signup-form' ||
+                         (form.getAttribute('action') && (form.getAttribute('action').includes('register') || form.getAttribute('action').includes('signup'))) ||
+                         window.location.pathname.includes('register') ||
+                         window.location.pathname.includes('signup') ||
+                         form.querySelector('input[name*="confirm"]') ||
+                         form.querySelector('input[name="access_code"]');
       if (isRegister) return; // Handled below
 
+      form.dataset.vpAuthInit = 'true';
+
       form.addEventListener('submit', async function (e) {
+        if (form.dataset.submitting === 'true') {
+          e.preventDefault();
+          return;
+        }
         e.preventDefault();
+        form.dataset.submitting = 'true';
+
         const submitBtn = form.querySelector('button[type="submit"]');
         const origText = submitBtn ? submitBtn.innerHTML : 'Sign In';
         if (submitBtn) {
@@ -75,16 +99,22 @@
 
         // Extract role if on role-specific page
         let role = '';
-        const path = window.location.pathname.toLowerCase();
-        if (path.includes('customer')) role = 'customer';
-        else if (path.includes('caterer')) role = 'caterer';
-        else if (path.includes('staff')) role = 'staff';
-        else if (path.includes('admin')) role = 'admin';
+        const roleInput = form.querySelector('input[name="role"]');
+        if (roleInput && roleInput.value) {
+          role = roleInput.value.toLowerCase();
+        } else {
+          const path = window.location.pathname.toLowerCase();
+          if (path.includes('customer')) role = 'customer';
+          else if (path.includes('caterer')) role = 'caterer';
+          else if (path.includes('staff')) role = 'staff';
+          else if (path.includes('admin')) role = 'admin';
+        }
 
         try {
           const res = await fetch(API_BASE + 'auth.php?action=login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({
               email: emailInput ? emailInput.value.trim() : '',
               password: passInput ? passInput.value : '',
@@ -95,10 +125,18 @@
           const data = await res.json();
           if (data.success) {
             showAlert(form, data.message || 'Login successful!', true);
+            let dest = data.data && data.data.redirect ? data.data.redirect : '';
+            if (isSubfolder && dest.startsWith('../')) {
+              dest = dest.replace(/^\.\.\/[^\/]+\//, '');
+            }
+            if (!dest) {
+              dest = isSubfolder ? (role ? `${role}-dashboard.php` : 'customer-dashboard.php') : `customer/customer-dashboard.php`;
+            }
             setTimeout(() => {
-              window.location.href = data.data.redirect || (isSubfolder ? 'customer-dashboard.php' : 'customer/customer-dashboard.php');
+              window.location.href = dest;
             }, 500);
           } else {
+            delete form.dataset.submitting;
             showAlert(form, data.message || 'Login failed. Please check credentials.');
             if (submitBtn) {
               submitBtn.disabled = false;
@@ -106,6 +144,7 @@
             }
           }
         } catch (err) {
+          delete form.dataset.submitting;
           console.error(err);
           showAlert(form, 'Connection error. Please ensure XAMPP is running.');
           if (submitBtn) {
@@ -117,71 +156,127 @@
     });
 
     // Detect registration forms
-    const registerForms = document.querySelectorAll('form[action*="register"], form[action*="signup"], form[action*="pending"], form#register-form');
+    const registerForms = document.querySelectorAll('form[action*="register"], form[action*="signup"], form[action*="pending"], form#register-form, form#signup-form');
     registerForms.forEach(form => {
+      if (form.dataset.vpAuthInit) return;
+      form.dataset.vpAuthInit = 'true';
+
       form.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        const submitBtn = form.querySelector('button[type="submit"]');
-        const origText = submitBtn ? submitBtn.innerHTML : 'Create Account';
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.innerHTML = 'Registering...';
+        if (form.dataset.submitting === 'true') {
+          e.preventDefault();
+          return;
         }
+        e.preventDefault();
 
-        const nameInput = form.querySelector('input[name="name"], input[placeholder*="Name" i], input[placeholder*="Full" i]');
-        const emailInput = form.querySelector('input[type="email"]');
-        const accessCodeInput = form.querySelector('input[name="access_code"], input[placeholder*="Access Code" i], input[placeholder*="Token" i]');
-        const passInputs = Array.from(form.querySelectorAll('input[type="password"]')).filter(p => p !== accessCodeInput);
-        const pass = passInputs[0] ? passInputs[0].value : '';
-        const confirmPass = passInputs[1] ? passInputs[1].value : pass;
-
-        if (pass !== confirmPass) {
-          showAlert(form, 'Passwords do not match.');
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origText; }
+        // Check terms checkbox if present
+        const termsCheckbox = form.querySelector('input#terms, input[name="terms"]');
+        if (termsCheckbox && !termsCheckbox.checked) {
+          showAlert(form, 'Please agree to the Terms of Service & Privacy Policy.');
           return;
         }
 
-        let role = 'customer';
-        const path = window.location.pathname.toLowerCase();
-        if (path.includes('caterer')) role = 'caterer';
-        else if (path.includes('staff')) role = 'staff';
-        else if (path.includes('admin')) role = 'admin';
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const origText = submitBtn ? submitBtn.innerHTML : 'Create Account';
 
-        // Additional fields
-        const bizNameInput = form.querySelector('input[placeholder*="Business" i]');
-        const kitchenAddrInput = form.querySelector('input[placeholder*="Address" i], textarea[placeholder*="Address" i]');
-        const staffIdInput = form.querySelector('input[placeholder*="Staff ID" i], input[placeholder*="Code" i]');
+        const nameInput = form.querySelector('input[name="name"], input[placeholder*="Name" i], input[placeholder*="Full" i]');
+        const emailInput = form.querySelector('input[type="email"], input[name="email"]');
+        const phoneInput = form.querySelector('input[name="phone"], input[type="tel"]');
+        const accessCodeInput = form.querySelector('input[name="access_code"], input[name="admin_code"], input[placeholder*="Access Code" i], input[placeholder*="Token" i]');
+        
+        // Passwords
+        const passInput = form.querySelector('input[name="password"]');
+        const confirmPassInput = form.querySelector('input[name="confirm_password"], input[name="password_confirm"], input[placeholder*="Confirm" i]');
+        
+        const pass = passInput ? passInput.value : '';
+        const confirmPass = confirmPassInput ? confirmPassInput.value : pass;
+
+        if (confirmPassInput && pass !== confirmPass) {
+          showAlert(form, 'Passwords do not match.');
+          return;
+        }
+
+        if (pass.length < 6) {
+          showAlert(form, 'Password must be at least 6 characters.');
+          return;
+        }
+
+        // Lock form submission immediately to prevent race conditions or double clicks
+        form.dataset.submitting = 'true';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = 'Creating account...';
+        }
+
+        // Extract role
+        let role = 'customer';
+        const roleInput = form.querySelector('input[name="role"]');
+        if (roleInput && roleInput.value) {
+          role = roleInput.value.toLowerCase();
+        } else {
+          const path = window.location.pathname.toLowerCase();
+          if (path.includes('caterer')) role = 'caterer';
+          else if (path.includes('staff')) role = 'staff';
+          else if (path.includes('admin')) role = 'admin';
+        }
+
+        // Additional role-specific fields
+        const bizNameInput = form.querySelector('input[name="business_name"], input[placeholder*="Business" i]');
+        const kitchenAddrInput = form.querySelector('input[name="kitchen_address"], textarea[name="kitchen_address"], input[placeholder*="Address" i]');
+        const staffIdInput = form.querySelector('input[name="staff_id"], input[placeholder*="Staff ID" i], input[placeholder*="Code" i]');
+        const deptInput = form.querySelector('select[name="department"], input[name="department"]');
+        const assignedVenueInput = form.querySelector('select[name="assigned_venue_id"], select[name="assigned_venues"]');
+
+        const payload = {
+          name: nameInput ? nameInput.value.trim() : 'User',
+          email: emailInput ? emailInput.value.trim() : '',
+          password: pass,
+          role: role,
+          phone: phoneInput ? phoneInput.value.trim() : '',
+          business_name: bizNameInput ? bizNameInput.value.trim() : '',
+          kitchen_address: kitchenAddrInput ? kitchenAddrInput.value.trim() : '',
+          staff_id: staffIdInput ? staffIdInput.value.trim() : '',
+          department: deptInput ? deptInput.value : '',
+          assigned_venues: assignedVenueInput ? assignedVenueInput.value : '',
+          access_code: accessCodeInput ? accessCodeInput.value.trim() : ''
+        };
 
         try {
           const res = await fetch(API_BASE + 'auth.php?action=register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: nameInput ? nameInput.value.trim() : 'User',
-              email: emailInput ? emailInput.value.trim() : '',
-              password: pass,
-              role: role,
-              business_name: bizNameInput ? bizNameInput.value.trim() : '',
-              kitchen_address: kitchenAddrInput ? kitchenAddrInput.value.trim() : '',
-              staff_id: staffIdInput ? staffIdInput.value.trim() : '',
-              access_code: accessCodeInput ? accessCodeInput.value.trim() : ''
-            })
+            credentials: 'include',
+            body: JSON.stringify(payload)
           });
 
           const data = await res.json();
           if (data.success) {
-            showAlert(form, data.message || 'Registration successful!', true);
+            showAlert(form, data.message || 'Registration successful! Welcome to VenuePro.', true);
+            let dest = data.data && data.data.redirect ? data.data.redirect : '';
+            if (isSubfolder && dest.startsWith('../')) {
+              dest = dest.replace(/^\.\.\/[^\/]+\//, '');
+            }
+            if (!dest) {
+              dest = isSubfolder ? `${role}-dashboard.php` : `${role}/${role}-dashboard.php`;
+            }
             setTimeout(() => {
-              window.location.href = data.data.redirect || (isSubfolder ? 'customer-dashboard.php' : 'customer/customer-dashboard.php');
-            }, 600);
+              window.location.href = dest;
+            }, 700);
           } else {
-            showAlert(form, data.message || 'Registration error.');
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origText; }
+            delete form.dataset.submitting;
+            showAlert(form, data.message || 'Registration failed.');
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = origText;
+            }
           }
         } catch (err) {
+          delete form.dataset.submitting;
           console.error(err);
           showAlert(form, 'Connection error. Please try again.');
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origText; }
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origText;
+          }
         }
       });
     });
@@ -347,13 +442,24 @@
       });
 
       // Saved booking data or defaults from form/sessionStorage
+      const isCustom = sessionStorage.getItem('vp_is_custom_package') === '1' || (new URLSearchParams(window.location.search).get('custom_package') === '1');
+      let customDishes = [];
+      let customCost = 0;
+      if (isCustom) {
+        try {
+          customDishes = JSON.parse(sessionStorage.getItem('vp_custom_dishes') || '[]');
+        } catch (e) {}
+        customCost = parseFloat(sessionStorage.getItem('vp_custom_total') || '0');
+      }
+
       const venueId = (paymentForm.querySelector('[name="venue_id"]') || {}).value || sessionStorage.getItem('vp_venue_id') || 1;
-      const packageId = (paymentForm.querySelector('[name="package_id"]') || {}).value || sessionStorage.getItem('vp_package_id') || 2;
+      const packageId = isCustom ? null : ((paymentForm.querySelector('[name="package_id"]') || {}).value || sessionStorage.getItem('vp_package_id') || 2);
       const eventDate = (paymentForm.querySelector('[name="event_date"]') || {}).value || sessionStorage.getItem('vp_event_date') || sessionStorage.getItem('vp_date') || '2026-10-14';
-      const guests = (paymentForm.querySelector('[name="guest_count"]') || {}).value || sessionStorage.getItem('vp_guest_count') || sessionStorage.getItem('vp_guests') || 100;
+      const guests = parseInt((paymentForm.querySelector('[name="guest_count"]') || {}).value || (paymentForm.querySelector('[name="guests"]') || {}).value || sessionStorage.getItem('vp_guest_count') || sessionStorage.getItem('vp_guests') || 100) || 100;
       const startTime = (paymentForm.querySelector('[name="start_time"]') || {}).value || sessionStorage.getItem('vp_start_time') || '18:00:00';
       const endTime = (paymentForm.querySelector('[name="end_time"]') || {}).value || sessionStorage.getItem('vp_end_time') || '22:00:00';
-      const eventName = (paymentForm.querySelector('[name="event_name"]') || {}).value || 'Executive Corporate Gala';
+      const eventName = (paymentForm.querySelector('[name="event_name"]') || {}).value || (isCustom ? 'Custom Banquet Event' : 'Executive Corporate Gala');
+      const specialNotes = sessionStorage.getItem('vp_chef_notes') || '';
 
       try {
         const res = await fetch(API_BASE + 'bookings.php?action=create', {
@@ -362,12 +468,17 @@
           body: JSON.stringify({
             venue_id: venueId,
             package_id: packageId,
+            is_custom_package: isCustom ? 1 : 0,
+            custom_package_cost: isCustom ? customCost : null,
+            custom_dishes: isCustom ? customDishes : [],
             event_name: eventName,
             event_date: eventDate,
             start_time: startTime,
             end_time: endTime,
             guest_count: guests,
+            caterer_id: (paymentForm.querySelector('[name="caterer_id"]') || {}).value || sessionStorage.getItem('vp_caterer_id') || null,
             card_last4: '4242',
+            special_notes: specialNotes,
             singular_items: singularItems
           })
         });
@@ -377,8 +488,14 @@
           showAlert(paymentForm, 'Booking and Payment Confirmed! Redirecting...', true);
           sessionStorage.removeItem('vp_venue_id');
           sessionStorage.removeItem('vp_package_id');
+          sessionStorage.removeItem('vp_caterer_id');
           sessionStorage.removeItem('vp_event_date');
           sessionStorage.removeItem('vp_date');
+          sessionStorage.removeItem('vp_is_custom_package');
+          sessionStorage.removeItem('vp_custom_dishes');
+          sessionStorage.removeItem('vp_custom_total');
+          sessionStorage.removeItem('vp_custom_rate');
+          sessionStorage.removeItem('vp_chef_notes');
           setTimeout(() => {
             window.location.href = data.data.redirect || 'booking-success.php';
           }, 800);
@@ -531,6 +648,10 @@
     const sendBtn = document.querySelector('.chat-input button, .chat-send-btn');
     const messagesContainer = document.querySelector('.chat-messages, .chat-conversation');
 
+    if (window.location.pathname.includes('customer-chat.php') || window.location.pathname.includes('staff-chat.php')) {
+      return; // Dedicated real-time chat with live polling handles this
+    }
+
     if (!chatInput || !sendBtn || !messagesContainer) return;
 
     async function sendMessage() {
@@ -568,10 +689,32 @@
   }
 
   // ============================================================
-  // 8. NOTIFICATIONS MARK AS READ
+  // 8. NOTIFICATIONS MARK AS READ & DYNAMIC UNREAD BADGE SYNC
   // ============================================================
   function initNotifications() {
-    const markAllBtn = document.querySelector('.btn-mark-all-read, a[href*="mark_all"]');
+    async function syncNotificationBadge() {
+      try {
+        const res = await fetch(API_BASE + 'notifications.php?action=unread_count');
+        const data = await res.json();
+        const count = (data && data.success && data.data) ? (parseInt(data.data.count, 10) || 0) : 0;
+        const badges = document.querySelectorAll('.topbar-actions .badge, .topbar-icon-btn .badge, #notif-badge');
+        badges.forEach(b => {
+          b.dataset.count = count;
+          if (count > 0) {
+            b.textContent = count;
+            b.style.display = 'flex';
+          } else {
+            b.textContent = '';
+            b.style.display = 'none';
+          }
+        });
+      } catch (err) {}
+    }
+
+    // Always sync on page load to ensure fresh accounts immediately show 0/hidden badge
+    syncNotificationBadge();
+
+    const markAllBtn = document.querySelector('.btn-mark-all-read, #admin-mark-all-read, .btn-ghost.btn-sm, a[href*="mark_all"]');
     if (markAllBtn) {
       markAllBtn.addEventListener('click', async function (e) {
         e.preventDefault();
@@ -580,11 +723,32 @@
           document.querySelectorAll('.unread, .notif-unread').forEach(el => {
             el.classList.remove('unread', 'notif-unread');
           });
-          const badge = document.querySelector('.topbar-actions .badge');
-          if (badge) badge.style.display = 'none';
+          document.querySelectorAll('.notif-dot').forEach(el => {
+            el.style.display = 'none';
+          });
+          const badges = document.querySelectorAll('.topbar-actions .badge, .topbar-icon-btn .badge, #notif-badge');
+          badges.forEach(b => {
+            b.dataset.count = 0;
+            b.textContent = '';
+            b.style.display = 'none';
+          });
         } catch (err) {}
       });
     }
+
+    // Individual notification items click to mark as read
+    document.querySelectorAll('.notif-item[data-notif-id]').forEach(item => {
+      item.addEventListener('click', async function () {
+        const id = this.dataset.notifId;
+        if (this.classList.contains('unread')) {
+          try {
+            await fetch(API_BASE + 'notifications.php?action=mark_read&id=' + id);
+            this.classList.remove('unread');
+            syncNotificationBadge();
+          } catch(e) {}
+        }
+      });
+    });
   }
 
   // ============================================================

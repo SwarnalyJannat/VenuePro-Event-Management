@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -59,7 +59,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <div class="topbar-user">
@@ -117,36 +117,51 @@ $db = getDBConnection();
     </div>
   </div>
   <script>
-    let courseCount = 0;
     const defaultCourses = [
-      { title: 'Course 1: Appetizers', items: ['', ''] },
-      { title: 'Course 2: Main Entrée', items: ['', ''] },
-      { title: 'Course 3: Desserts', items: ['', ''] }
-    ];
-    const extraTitles = [
-      "Palate Cleanser", "Late Night Bites", "Cheese & Fruit", "Beverage Pairing"
+      { title: 'Course 1', items: ['', ''] },
+      { title: 'Course 2', items: ['', ''] },
+      { title: 'Course 3', items: ['', ''] }
     ];
 
+    function renumberCourses() {
+      const cards = document.querySelectorAll('#courses-container .course-card');
+      cards.forEach((card, idx) => {
+        const titleEl = card.querySelector('.course-card-title');
+        if (titleEl) {
+          titleEl.textContent = `Course ${idx + 1}`;
+        }
+      });
+    }
+
     function addCourse(title, items) {
-      courseCount++;
       const container = document.getElementById('courses-container');
       const card = document.createElement('div');
-      card.className = 'card mb-16';
+      card.className = 'card mb-16 course-card';
       card.style.background = 'var(--gray-50)';
-      const courseTitle = title || `Course ${courseCount}: ${extraTitles[(courseCount - defaultCourses.length - 1) % extraTitles.length] || 'Additional Course'}`;
+      const count = container.querySelectorAll('.course-card').length + 1;
+      const courseTitle = title || `Course ${count}`;
       const item1 = (items && items[0]) ? items[0] : '';
       const item2 = (items && items[1]) ? items[1] : '';
       card.innerHTML = `
         <div class="flex-between mb-8" style="align-items:center;">
-          <div class="font-bold text-sm">${courseTitle}</div>
-          <button type="button" class="btn btn-ghost btn-sm" style="color:#dc2626; font-size:12px; padding:2px 8px;" onclick="this.closest('.card').remove()">Remove</button>
+          <div class="font-bold text-sm course-card-title">${courseTitle}</div>
+          <button type="button" class="btn btn-ghost btn-sm" style="color:#dc2626; font-size:12px; padding:2px 8px;" onclick="removeCourse(this)">Remove</button>
         </div>
         <div class="grid-2 gap-12">
-          <input type="text" class="form-control course-item" placeholder="e.g. Dish name or dietary alternative" value="${item1}">
-          <input type="text" class="form-control course-item" placeholder="e.g. Vegetarian option" value="${item2}">
+          <input type="text" class="form-control course-item" placeholder="e.g. Primary dish or specialty" value="${item1}">
+          <input type="text" class="form-control course-item" placeholder="e.g. Vegetarian option or alternate" value="${item2}">
         </div>
       `;
       container.appendChild(card);
+      renumberCourses();
+    }
+
+    function removeCourse(btn) {
+      const card = btn.closest('.course-card');
+      if (card) {
+        card.remove();
+        renumberCourses();
+      }
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -157,10 +172,13 @@ $db = getDBConnection();
         return;
       }
 
-      // Load saved step2 courses or use defaults
+      // Load saved step2 courses or use defaults (normalize old course titles to Course 1, Course 2, etc.)
       var savedCourses = JSON.parse(sessionStorage.getItem('pkg_step2_courses') || 'null');
       if (savedCourses && savedCourses.length > 0) {
-        savedCourses.forEach(function(c) { addCourse(c.title, c.items); });
+        savedCourses.forEach(function(c, i) {
+          var cleanTitle = `Course ${i + 1}`;
+          addCourse(cleanTitle, c.items);
+        });
       } else {
         defaultCourses.forEach(function(c) { addCourse(c.title, c.items); });
       }
@@ -169,14 +187,14 @@ $db = getDBConnection();
       form.addEventListener('submit', function(e) {
         e.preventDefault();
         // Collect courses
-        var cards = document.querySelectorAll('#courses-container .card');
+        var cards = document.querySelectorAll('#courses-container .course-card');
         var courses = [];
-        cards.forEach(function(card) {
-          var titleEl = card.querySelector('.font-bold.text-sm');
+        cards.forEach(function(card, idx) {
+          var titleEl = card.querySelector('.course-card-title');
           var inputs = card.querySelectorAll('.course-item');
           var items = [];
           inputs.forEach(function(inp) { if (inp.value.trim()) items.push(inp.value.trim()); });
-          courses.push({ title: titleEl ? titleEl.textContent : '', items: items });
+          courses.push({ title: titleEl ? titleEl.textContent : `Course ${idx + 1}`, items: items });
         });
         sessionStorage.setItem('pkg_step2_courses', JSON.stringify(courses));
         window.location.href = 'caterer-create-package-3.php';

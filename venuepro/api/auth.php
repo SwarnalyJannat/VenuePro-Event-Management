@@ -106,8 +106,9 @@ switch ($action) {
                 $bizName = sanitize($input['business_name'] ?? "$name Catering Co.");
                 $kitchenAddr = sanitize($input['kitchen_address'] ?? "Kitchen Facility, Metropolis");
                 $specialty = sanitize($input['specialization'] ?? "Fine Dining & Events");
-                $stmtCaterer = $db->prepare("INSERT INTO caterer_profiles (user_id, business_name, owner_name, kitchen_address, specialization, approval_status) VALUES (?, ?, ?, ?, ?, 'approved')");
-                $stmtCaterer->execute([$userId, $bizName, $name, $kitchenAddr, $specialty]);
+                $assignedVenue = sanitize($input['assigned_venue'] ?? ($input['primary_venue'] ?? ''));
+                $stmtCaterer = $db->prepare("INSERT INTO caterer_profiles (user_id, business_name, owner_name, kitchen_address, specialization, assigned_venue, approval_status) VALUES (?, ?, ?, ?, ?, ?, 'approved')");
+                $stmtCaterer->execute([$userId, $bizName, $name, $kitchenAddr, $specialty, $assignedVenue]);
             }
 
             // Handle Staff profile

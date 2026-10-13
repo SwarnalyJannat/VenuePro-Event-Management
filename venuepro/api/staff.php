@@ -11,12 +11,35 @@ $db = getDBConnection();
 switch ($action) {
     case 'my_assignments':
         $user = requireRole(['staff', 'admin']);
-        $sql = "SELECT sa.*, b.booking_code, b.event_name, b.event_date, b.start_time, b.end_time, b.guest_count, v.name AS venue_name, v.district AS venue_district, u.name AS customer_name, u.phone AS customer_phone FROM staff_assignments sa JOIN bookings b ON sa.booking_id = b.id JOIN venues v ON b.venue_id = v.id JOIN users u ON b.customer_id = u.id";
+        $sql = "SELECT sa.*, b.venue_id, b.booking_code, b.event_name, b.event_date, b.start_time, b.end_time, b.guest_count, v.name AS venue_name, v.district AS venue_district, u.name AS customer_name, u.phone AS customer_phone 
+                FROM staff_assignments sa 
+                JOIN bookings b ON sa.booking_id = b.id 
+                JOIN venues v ON b.venue_id = v.id 
+                JOIN users u ON b.customer_id = u.id 
+                WHERE b.booking_status IN ('confirmed', 'completed')";
         $params = [];
 
         if ($user['role'] === 'staff') {
-            $sql .= " WHERE sa.staff_id = ?";
-            $params[] = $user['id'];
+            $stmtProf = $db->prepare("SELECT assigned_venues FROM staff_profiles WHERE user_id = ? LIMIT 1");
+            $stmtProf->execute([$user['id']]);
+            $prof = $stmtProf->fetch();
+            $assignedVenueIds = [];
+            if (!empty($prof['assigned_venues'])) {
+                foreach (explode(',', $prof['assigned_venues']) as $vId) {
+                    $vId = (int)trim($vId);
+                    if ($vId > 0) $assignedVenueIds[] = $vId;
+                }
+                $assignedVenueIds = array_values(array_unique($assignedVenueIds));
+            }
+
+            if (empty($assignedVenueIds)) {
+                jsonResponse(true, 'Staff assignments retrieved (none assigned)', ['assignments' => []]);
+                break;
+            }
+
+            $inPlaceholders = implode(',', array_fill(0, count($assignedVenueIds), '?'));
+            $sql .= " AND b.venue_id IN ($inPlaceholders)";
+            $params = $assignedVenueIds;
         }
 
         $sql .= " ORDER BY b.event_date ASC";
@@ -32,18 +55,55 @@ switch ($action) {
         break;
 
     case 'update_checklist':
-        requireRole(['staff', 'admin']);
+        $user = requireRole(['staff', 'admin']);
         $input = !empty($_POST) ? $_POST : getJsonInput();
         $assignmentId = (int)($input['assignment_id'] ?? 0);
-        $checklist = isset($input['checklist']) && is_array($input['checklist']) ? json_encode($input['checklist']) : null;
+        $checklist = isset($input['checklist']) ? (is_string($input['checklist']) ? $input['checklist'] : json_encode($input['checklist'])) : null;
         $status = sanitize($input['setup_status'] ?? 'in_progress');
+        $completionPct = isset($input['completion_pct']) ? min(100, max(0, (int)$input['completion_pct'])) : null;
 
         if ($assignmentId <= 0) {
             jsonResponse(false, 'Invalid assignment ID', null, 400);
         }
 
-        $stmt = $db->prepare("UPDATE staff_assignments SET checklist_json = COALESCE(?, checklist_json), setup_status = ? WHERE id = ?");
-        $stmt->execute([$checklist, $status, $assignmentId]);
+        if ($user['role'] === 'staff') {
+            $stmtChk = $db->prepare("SELECT b.venue_id FROM staff_assignments sa JOIN bookings b ON sa.booking_id = b.id WHERE sa.id = ? LIMIT 1");
+            $stmtChk->execute([$assignmentId]);
+            $venueId = (int)$stmtChk->fetchColumn();
+
+            $stmtProf = $db->prepare("SELECT assigned_venues FROM staff_profiles WHERE user_id = ? LIMIT 1");
+            $stmtProf->execute([$user['id']]);
+            $prof = $stmtProf->fetch();
+            $allowedVenueIds = [];
+            if (!empty($prof['assigned_venues'])) {
+                foreach (explode(',', $prof['assigned_venues']) as $vId) {
+                    $vId = (int)trim($vId);
+                    if ($vId > 0) $allowedVenueIds[] = $vId;
+                }
+            }
+            if (!in_array($venueId, $allowedVenueIds)) {
+                jsonResponse(false, 'Unauthorized: This event is not at one of your assigned operational venues.', null, 403);
+            }
+        }
+
+        if ($completionPct !== null) {
+            $stmt = $db->prepare("UPDATE staff_assignments SET checklist_json = COALESCE(?, checklist_json), setup_status = ?, completion_pct = ?, completed_at = IF(? = 100, NOW(), completed_at) WHERE id = ?");
+            $stmt->execute([$checklist, $status, $completionPct, $completionPct, $assignmentId]);
+        } else {
+            $stmt = $db->prepare("UPDATE staff_assignments SET checklist_json = COALESCE(?, checklist_json), setup_status = ? WHERE id = ?");
+            $stmt->execute([$checklist, $status, $assignmentId]);
+        }
+
+        if ($completionPct === 100 || $status === 'completed') {
+            try {
+                $stmtBk = $db->prepare("SELECT booking_id FROM staff_assignments WHERE id = ? LIMIT 1");
+                $stmtBk->execute([$assignmentId]);
+                $bId = $stmtBk->fetchColumn();
+                if ($bId) {
+                    $db->prepare("UPDATE bookings SET booking_status = 'completed' WHERE id = ? AND booking_status IN ('confirmed','pending')")->execute([$bId]);
+                }
+            } catch (Exception $e) {}
+        }
 
         jsonResponse(true, 'Setup checklist updated successfully!');
         break;
@@ -219,30 +279,90 @@ switch ($action) {
         break;
 
     case 'submit_report':
-        requireRole(['staff', 'admin']);
+        $user = requireRole(['staff', 'admin']);
         $input = !empty($_POST) ? $_POST : getJsonInput();
         $assignmentId = (int)($input['assignment_id'] ?? 0);
-        $completionPct = min(100, max(0, (int)($input['completion_pct'] ?? 0)));
+        $completionPct = 100;
         $venueName = sanitize($input['venue_name'] ?? '');
         $staffName = sanitize($input['staff_name'] ?? '');
-        $checklist = isset($input['checklist']) ? json_encode($input['checklist']) : null;
 
         if ($assignmentId <= 0) {
             jsonResponse(false, 'Invalid assignment ID', null, 400);
         }
 
+        if ($user['role'] === 'staff') {
+            $stmtChk = $db->prepare("SELECT b.venue_id FROM staff_assignments sa JOIN bookings b ON sa.booking_id = b.id WHERE sa.id = ? LIMIT 1");
+            $stmtChk->execute([$assignmentId]);
+            $venueId = (int)$stmtChk->fetchColumn();
+
+            $stmtProf = $db->prepare("SELECT assigned_venues FROM staff_profiles WHERE user_id = ? LIMIT 1");
+            $stmtProf->execute([$user['id']]);
+            $prof = $stmtProf->fetch();
+            $allowedVenueIds = [];
+            if (!empty($prof['assigned_venues'])) {
+                foreach (explode(',', $prof['assigned_venues']) as $vId) {
+                    $vId = (int)trim($vId);
+                    if ($vId > 0) $allowedVenueIds[] = $vId;
+                }
+            }
+            if (!in_array($venueId, $allowedVenueIds)) {
+                jsonResponse(false, 'Unauthorized: This event is not at one of your assigned operational venues.', null, 403);
+            }
+        }
+        
+        $checklistArr = isset($input['checklist']) && is_array($input['checklist']) ? $input['checklist'] : [];
+        if (empty($checklistArr)) {
+            $checklistArr = [];
+            for ($ti = 0; $ti < 10; $ti++) {
+                $checklistArr['task-' . $ti] = true;
+            }
+        } else {
+            // Confirming completion confirms all checklist items
+            foreach ($checklistArr as $k => $v) {
+                $checklistArr[$k] = true;
+            }
+        }
+        $checklist = json_encode($checklistArr);
+
         $stmt = $db->prepare(
             "UPDATE staff_assignments SET
              setup_status = 'completed',
-             completion_pct = ?,
+             completion_pct = 100,
              reported_venue = ?,
              reported_staff = ?,
-             checklist_json = COALESCE(?, checklist_json),
+             checklist_json = ?,
              completed_at = NOW()
              WHERE id = ?"
         );
-        $stmt->execute([$completionPct, $venueName, $staffName, $checklist, $assignmentId]);
-        jsonResponse(true, 'Report submitted successfully!', ['completion_pct' => $completionPct]);
+        $stmt->execute([$venueName, $staffName, $checklist, $assignmentId]);
+
+        // Sync with bookings and notify customer
+        try {
+            $stmtBk = $db->prepare("SELECT sa.booking_id, b.customer_id, b.event_name, v.name AS venue_name FROM staff_assignments sa JOIN bookings b ON sa.booking_id = b.id JOIN venues v ON b.venue_id = v.id WHERE sa.id = ? LIMIT 1");
+            $stmtBk->execute([$assignmentId]);
+            $bkInfo = $stmtBk->fetch();
+
+            if ($bkInfo) {
+                $stmtUpdBk = $db->prepare("UPDATE bookings SET booking_status = 'completed' WHERE id = ?");
+                $stmtUpdBk->execute([$bkInfo['booking_id']]);
+
+                $stmtNotif = $db->prepare("INSERT INTO notifications (user_id, title, message, type, link_url, is_read) VALUES (?, ?, ?, 'booking', ?, 0)");
+                $stmtNotif->execute([
+                    $bkInfo['customer_id'],
+                    'Setup Verified: ' . ($venueName ?: $bkInfo['venue_name']),
+                    'Event setup checklists and venue staging are 100% verified by venue staff for ' . $bkInfo['event_name'] . '.',
+                    'customer/customer-live-progress.php?booking_id=' . $bkInfo['booking_id']
+                ]);
+            }
+        } catch (Exception $e) {
+            // Non-critical notification logging
+        }
+
+        jsonResponse(true, 'Report submitted successfully!', [
+            'assignment_id'  => $assignmentId,
+            'completion_pct' => 100,
+            'setup_status'   => 'completed'
+        ]);
         break;
 
     default:

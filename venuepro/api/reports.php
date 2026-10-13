@@ -10,6 +10,7 @@ $action = $_GET['action'] ?? 'metrics';
 $db = getDBConnection();
 
 switch ($action) {
+    case 'dashboard':
     case 'metrics':
         // Total revenue
         $revStmt = $db->query("SELECT COALESCE(SUM(total_amount), 0) AS total_revenue FROM bookings WHERE payment_status = 'paid'");

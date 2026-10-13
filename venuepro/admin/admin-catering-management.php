@@ -7,18 +7,40 @@ $db = getDBConnection();
 ?>
 <?php
 $stmtC = $db->prepare(
-    "SELECT u.*, cp.business_name, cp.specialization, cp.approval_status,
+    "SELECT u.*, cp.business_name, cp.specialization, cp.assigned_venue, cp.approval_status,
      COUNT(DISTINCT co.id) AS active_orders,
      COUNT(DISTINCT pkg.id) AS package_count
      FROM users u
      JOIN caterer_profiles cp ON u.id = cp.user_id
-     LEFT JOIN caterer_orders co ON u.id = co.caterer_id AND co.preparation_status != 'Delivered'
+     LEFT JOIN caterer_orders co ON u.id = co.caterer_id AND co.preparation_status != 'Completed'
      LEFT JOIN catering_packages pkg ON u.id = pkg.caterer_id
      WHERE u.role = 'caterer' AND u.status = 'active' AND cp.approval_status != 'rejected'
      GROUP BY u.id ORDER BY cp.business_name"
 );
 $stmtC->execute();
 $caterers = $stmtC->fetchAll();
+
+// Find venues with no caterer assigned
+$stmtVenues = $db->query("SELECT id, name FROM venues ORDER BY name");
+$allVenues = $stmtVenues->fetchAll();
+$stmtProfiles = $db->query("SELECT assigned_venue FROM caterer_profiles WHERE approval_status = 'approved'");
+$profileRows = $stmtProfiles->fetchAll();
+
+// Build a set of venue names/IDs that have at least one caterer
+$coveredVenueIds = [];
+foreach ($profileRows as $pr) {
+    $raw = trim($pr['assigned_venue'] ?? '');
+    if (empty($raw)) continue;
+    foreach ($allVenues as $v) {
+        if ($raw === $v['name'] || $raw === (string)$v['id'] ||
+            strpos($raw, $v['name']) !== false ||
+            in_array($v['name'], array_map('trim', explode(',', $raw))) ||
+            in_array((string)$v['id'], array_map('trim', explode(',', $raw)))) {
+            $coveredVenueIds[] = $v['id'];
+        }
+    }
+}
+$uncoveredVenues = array_filter($allVenues, fn($v) => !in_array($v['id'], $coveredVenueIds));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -57,6 +79,9 @@ $caterers = $stmtC->fetchAll();
         <a href="admin-staff-management.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Staff Directory
         </a>
+        <a href="admin-user-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> User Governance
+        </a>
         <a href="admin-reports.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Reports &amp; Analytics
         </a>
@@ -79,7 +104,7 @@ $caterers = $stmtC->fetchAll();
         </div>
         <div class="topbar-actions">
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">8</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
@@ -99,6 +124,23 @@ $caterers = $stmtC->fetchAll();
   </div>
   <a href="admin-add-caterer.php" class="btn btn-primary">+ Add New Caterer</a>
 </div>
+
+<?php if (!empty($uncoveredVenues)): ?>
+<div class="card mb-16" style="border-left:4px solid #f59e0b; background:#fffbeb;">
+  <div class="flex-between mb-12">
+    <div>
+      <h3 style="color:#92400e; margin:0 0 4px;">⚠️ Venues With No Caterer Assigned</h3>
+      <p style="color:#78350f; font-size:.875rem; margin:0;">Customers browsing these venues will see no catering packages. Assign a caterer to each venue.</p>
+    </div>
+    <a href="admin-add-caterer.php" class="btn btn-primary btn-sm" style="background:#d97706;border-color:#d97706;white-space:nowrap;">+ Assign Caterer</a>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+    <?php foreach ($uncoveredVenues as $uv): ?>
+      <span style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:4px 12px;font-size:.82rem;font-weight:600;color:#92400e;">📍 <?= e($uv['name']) ?></span>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
 
 <?php
 $approvedCaterers = [];
@@ -120,14 +162,22 @@ foreach ($caterers as $c) {
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>KITCHEN</th><th>SPECIALTY</th><th>ORDERS</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
+        <thead><tr><th>KITCHEN</th><th>SPECIALTY</th><th>ASSIGNED VENUE(S)</th><th>PACKAGES</th><th>ORDERS</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
         <tbody>
           <?php if (empty($approvedCaterers)): ?>
-          <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--gray-400);">No approved caterers found.</td></tr>
+          <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray-400);">No approved caterers found.</td></tr>
           <?php else: foreach ($approvedCaterers as $c): ?>
           <tr id="caterer-row-<?= (int)$c['id'] ?>">
             <td><strong><?= e($c['business_name'] ?: $c['name']) ?></strong></td>
             <td><?= e($c['specialization'] ?? 'Fine Dining') ?></td>
+            <td style="max-width:240px;"><span class="text-xs font-semibold" style="color:var(--gray-700);">📍 <?= e($c['assigned_venue'] ?: '— None (Unassigned)') ?></span></td>
+            <td>
+              <?php if ((int)$c['package_count'] === 0): ?>
+                <span style="color:#dc2626;font-weight:600;font-size:.8rem;">0 ⚠️</span>
+              <?php else: ?>
+                <span style="color:#059669;font-weight:600;"><?= (int)$c['package_count'] ?></span>
+              <?php endif; ?>
+            </td>
             <td><?= (int)$c['active_orders'] ?></td>
             <td><span class="pill pill-confirmed">VERIFIED</span></td>
             <td>

@@ -88,10 +88,6 @@ $customerData = $stmtCust->fetch() ?: $currentUser;
 $stmtBk = $db->prepare("SELECT COUNT(*) AS total_bookings, COALESCE(SUM(total_amount), 0) AS total_spent FROM bookings WHERE customer_id = ?");
 $stmtBk->execute([$currentUser['id']]);
 $stats = $stmtBk->fetch() ?: ['total_bookings' => 0, 'total_spent' => 0];
-
-$stmtNotif = $db->prepare("SELECT COUNT(*) FROM bookings WHERE customer_id = ? AND booking_status = 'confirmed'");
-$stmtNotif->execute([$currentUser['id']]);
-$notifCount = (int)$stmtNotif->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -147,7 +143,7 @@ $notifCount = (int)$stmtNotif->fetchColumn();
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge"><?= $notifCount ?></span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">

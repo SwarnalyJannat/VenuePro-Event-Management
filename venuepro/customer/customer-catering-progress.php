@@ -88,7 +88,7 @@ exit;
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">3</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">

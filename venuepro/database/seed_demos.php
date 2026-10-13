@@ -19,6 +19,7 @@ echo "🏛️  VENUEPRO DEMO DATA REGENERATION UTILITY\n";
 echo "============================================================\n\n";
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/venue_db.php';
 
 try {
     $db = getDBConnection();
@@ -44,6 +45,7 @@ $tables = [
     'package_menu_items',
     'catering_packages',
     'singular_menu_items',
+    'venue_photos',
     'venues',
     'caterer_profiles',
     'staff_profiles',
@@ -55,7 +57,7 @@ foreach ($tables as $tbl) {
     $db->exec("TRUNCATE TABLE `$tbl`;");
 }
 $db->exec("SET FOREIGN_KEY_CHECKS = 1;");
-echo "       ✔ All 15 tables truncated and reset.\n\n";
+echo "       ✔ All 16 tables truncated and reset.\n\n";
 
 $passHash = password_hash('password123', PASSWORD_BCRYPT);
 
@@ -103,6 +105,43 @@ $db->exec("INSERT INTO venues (id, name, slug, venue_type, address, district, ca
 echo "       ✔ Inserted 7 premier venues.\n";
 
 // -------------------------------------------------------------
+// Step 4B: Provision Dedicated Venue Databases & Photos
+// -------------------------------------------------------------
+echo "       📸 Provisioning dedicated venue databases and photo assets...\n";
+$img1Path = __DIR__ . '/../assets/venue1.png';
+$img2Path = __DIR__ . '/../assets/venue2.png';
+$img1Data = file_exists($img1Path) ? file_get_contents($img1Path) : '';
+$img2Data = file_exists($img2Path) ? file_get_contents($img2Path) : '';
+
+for ($vId = 1; $vId <= 7; $vId++) {
+    try {
+        $vDb = getVenueDBConnection($vId);
+        $vDb->exec("TRUNCATE TABLE photos;");
+        $blobA = ($vId % 2 === 1) ? $img1Data : $img2Data;
+        $mimeA = ($vId % 2 === 1) ? 'image/png' : 'image/jpeg';
+        $blobB = ($vId % 2 === 1) ? $img2Data : $img1Data;
+        $mimeB = ($vId % 2 === 1) ? 'image/jpeg' : 'image/png';
+        
+        $stmtV1 = $vDb->prepare("INSERT INTO photos (venue_id, file_name, mime_type, file_size, photo_data, caption, is_cover, sort_order, uploaded_by) VALUES (?, 'cover.png', ?, ?, ?, 'Primary Event Space', 1, 1, 4)");
+        $stmtV1->execute([$vId, $mimeA, strlen($blobA), $blobA]);
+        $p1Id = (int)$vDb->lastInsertId();
+
+        $stmtV2 = $vDb->prepare("INSERT INTO photos (venue_id, file_name, mime_type, file_size, photo_data, caption, is_cover, sort_order, uploaded_by) VALUES (?, 'gallery.jpg', ?, ?, ?, 'Architectural Interior & Lighting', 0, 2, 4)");
+        $stmtV2->execute([$vId, $mimeB, strlen($blobB), $blobB]);
+        $p2Id = (int)$vDb->lastInsertId();
+
+        $streamUrl1 = "api/venue-photo.php?venue_id={$vId}&id={$p1Id}";
+        $streamUrl2 = "api/venue-photo.php?venue_id={$vId}&id={$p2Id}";
+        $db->prepare("INSERT INTO venue_photos (venue_id, photo_url, caption, is_cover, sort_order, uploaded_by) VALUES (?, ?, 'Primary Event Space', 1, 1, 4)")->execute([$vId, $streamUrl1]);
+        $db->prepare("INSERT INTO venue_photos (venue_id, photo_url, caption, is_cover, sort_order, uploaded_by) VALUES (?, ?, 'Architectural Interior & Lighting', 0, 2, 4)")->execute([$vId, $streamUrl2]);
+        $db->prepare("UPDATE venues SET image_url = ? WHERE id = ?")->execute(["api/venue-photo.php?venue_id={$vId}&cover=1", $vId]);
+    } catch (Exception $e) {
+        $db->prepare("INSERT INTO venue_photos (venue_id, photo_url, caption, is_cover, sort_order, uploaded_by) VALUES (?, '../assets/venue1.png', 'Primary Event Space', 1, 1, 4)")->execute([$vId]);
+    }
+}
+echo "       ✔ Provisioned 7 dedicated venue DBs and 14 photos.\n";
+
+// -------------------------------------------------------------
 // Step 5: Insert Catering Packages
 // -------------------------------------------------------------
 echo "[6/16] Seeding Catering Packages...\n";
@@ -118,18 +157,42 @@ echo "       ✔ Inserted 3 catering package tiers.\n";
 echo "[7/16] Seeding Package Menu Items...\n";
 $db->exec("INSERT INTO package_menu_items (package_id, course, item_name, dietary_tag, portion_note, unit_value) VALUES
 (1, 'Appetizers', 'Organic Heritage Garden Salad', 'Veg', 'Crisp field greens, shaved radishes, champagne vinaigrette', 8.00),
+(1, 'Appetizers', 'Truffled Arancini with Garlic Herb Aioli', 'Veg', 'Crispy saffron risotto spheres, melted mozzarella center', 9.50),
+(1, 'Appetizers', 'Heirloom Tomato & Basil Bruschetta', 'Veg', 'Toasted artisanal sourdough, garlic-rubbed, aged balsamic', 7.50),
 (1, 'Main Course', 'Pan-Seared Citrus Herb Chicken', 'GF', 'Free-range breast, Yukon potato mousseline, asparagus', 18.00),
+(1, 'Main Course', 'Slow-Braised Angus Beef Short Ribs', 'GF', 'Red wine reduction jus, parsnip puree, glazed baby carrots', 22.00),
+(1, 'Main Course', 'Wild Forest Mushroom Risotto', 'Veg', 'Arborio rice, roasted chanterelles, shaved Parmigiano-Reggiano', 16.00),
 (1, 'Desserts', 'Artisanal Berry Tartlet', 'Veg', 'Shortcrust pastry, vanilla bean diplomat cream, wild berries', 7.00),
+(1, 'Desserts', 'Classic Madagascar Vanilla Bean Panna Cotta', 'GF', 'Wild raspberry compote, fresh mint sprig', 7.50),
+(1, 'Desserts', 'Meyer Lemon Curd Tartlet', 'Veg', 'Torched Italian meringue, buttery shortbread crust', 7.00),
 (1, 'Beverages', 'Artisanal Coffee & Botanical Tea Bar', 'Veg', 'Freshly brewed espresso roast, single-origin teas', 4.50),
+(1, 'Beverages', 'Fresh Pressed Citrus & Mint Sparkler', 'Veg', 'Sparkling mineral water, blood orange, muddled garden mint', 5.00),
+(1, 'Beverages', 'Infused Botanical Iced Tea Flights', 'Veg', 'Hibiscus berry, peach oolong, and jasmine green tea', 4.50),
 (2, 'Appetizers', 'Butter-Poached Lobster Tail Canapes', '', 'Tarragon aioli, toasted brioche, Siberian caviar', 15.00),
+(2, 'Appetizers', 'Burrata di Campana with Heirloom Figs', 'Veg', '25-year Modena balsamic glaze, baby wild arugula, smoked sea salt', 13.00),
+(2, 'Appetizers', 'Pan-Seared Diver Scallops', 'GF', 'Saffron cauliflower emulsion, micro celery, crispy pancetta crumb', 16.00),
 (2, 'Main Course', 'Filet Mignon au Poivre & Chilean Sea Bass', 'GF', 'Prime center-cut tenderloin, cognac peppercorn reduction, truffle mash', 28.00),
+(2, 'Main Course', 'Herb-Crusted Colorado Rack of Lamb', 'GF', 'Rosemary mint lamb jus, roasted garlic puree, confit cherry tomatoes', 29.00),
+(2, 'Main Course', 'Handmade Black Truffle & Ricotta Gnocchi', 'Veg', 'Brown butter sage sauce, shaved Pecorino Romano', 21.00),
 (2, 'Desserts', 'Valrhona Dark Chocolate Molten Sphere', 'Veg', 'Warm salted caramel drizzle, 24k gold leaf, Tahitian vanilla gelato', 11.00),
+(2, 'Desserts', 'Deconstructed Passionfruit & Mango Pavlova', 'GF', 'Crisp meringue nest, mango puree, vanilla bean cream', 10.50),
+(2, 'Desserts', 'Salted Caramel Chocolate Entremet', 'Veg', 'Crispy hazelnut praline layer, dark chocolate glaze', 11.50),
 (2, 'Beverages', 'Top-Shelf Open Bar & Reserve Wine Pairing', '', 'Single malt scotch, botanical gin, vintage Cabernet Sauvignon', 16.00),
+(2, 'Beverages', 'Artisanal Botanical Mocktail Bar', 'Veg', 'Distilled non-alcoholic spirits, herbal tonics, smoked citrus', 9.50),
+(2, 'Beverages', 'Craft Microbrew & Hard Cider Selection', '', 'Local IPA, Belgian witbier, artisanal dry orchard cider', 12.00),
 (3, 'Appetizers', 'Hamachi Crudo with Yuzu Kosho', 'GF', 'Japanese amberjack, white ponzu, compressed watermelon, micro shiso', 19.00),
+(3, 'Appetizers', 'Siberian Osetra Caviar Brioche Points', '', 'Creme fraiche, chives, organic quail egg yolk, golden caviar', 24.00),
+(3, 'Appetizers', 'Thin-Sliced A5 Wagyu Beef Carpaccio', 'GF', 'White truffle emulsion, caper berries, shaved Parmigiano', 18.50),
 (3, 'Main Course', 'A5 Miyazaki Wagyu & Truffle Risotto', 'GF', 'Seared rare Wagyu strip, aged carnaroli rice, black winter truffles', 38.00),
+(3, 'Main Course', 'Whole Butter-Basted Maine Lobster Tail', 'GF', 'Tarragon drawn butter, sweet corn puree, charred asparagus', 36.00),
+(3, 'Main Course', 'Roasted King Oyster Steaks (Chef Vegan Main)', 'Veg', 'Herb chimichurri, black garlic puree, crispy shallots (Vegan, GF)', 25.00),
 (3, 'Desserts', 'Deconstructed Passion Fruit Meringue Dome', 'Veg', 'Mango coulis, toasted Swiss meringue, coconut sorbet', 14.00),
-(3, 'Beverages', 'Curated Grand Cru Wine & Champagne Flights', '', 'Champagne Dom Pérignon arrival, Burgundy and Bordeaux pairings', 22.00);");
-echo "       ✔ Inserted 12 package menu items.\n";
+(3, 'Desserts', '24K Gold Leaf Dark Chocolate Mousse Cube', 'Veg', 'Grand Marnier infusion, edible gold leaf, cacao nib crisp', 16.00),
+(3, 'Desserts', 'White Peach & Champagne Granita Coupe', 'GF', 'Dom Perignon splash, candied violet petals, lemon verbena', 13.00),
+(3, 'Beverages', 'Curated Grand Cru Wine & Champagne Flights', '', 'Champagne Dom Pérignon arrival, Burgundy and Bordeaux pairings', 22.00),
+(3, 'Beverages', 'Sommelier Reserve Rare Vintage Wine Flight', '', 'Bordeaux Premier Cru, Napa Valley Reserve Cabernet, vintage Blanc de Blancs', 26.00),
+(3, 'Beverages', 'Smoked Bourbon & Japanese Whisky Cart', '', 'Tableside wood smoke infusion, large hand-carved ice spheres', 24.00);");
+echo "       ✔ Inserted 36 package menu items across 3 packages.\n";
 
 // -------------------------------------------------------------
 // Step 7: Insert Singular Menu Items (À-La-Carte Add-ons)
@@ -161,15 +224,15 @@ echo "       ✔ Inserted 4 pristine demo bookings.\n";
 // Step 9: Insert Booking Singular Items
 // -------------------------------------------------------------
 echo "[10/16] Seeding Booking Singular Items...\n";
-$db->exec("INSERT INTO booking_singular_items (id, booking_id, singular_item_id, item_name, emoji, dietary_tag, unit_price, quantity, subtotal, item_status, notes) VALUES
-(1, 1, 1, 'Grilled Tiger Shrimp Skewers', '🍤', 'GF', 12.50, 24, 300.00, 'Accepted', 'Passed during executive welcome hour'),
-(2, 1, 2, 'Premium Coca-Cola (Glass Bottle 330ml)', '🥤', '', 3.50, 60, 210.00, 'Accepted', 'Pre-stocked in boardroom coolers'),
-(3, 1, 3, 'Greek Yogurt Parfait Cups', '🍶', 'Veg', 7.00, 15, 105.00, 'Accepted', 'VIP green room breakfast table'),
-(4, 1, 8, 'Handcrafted French Macarons (Box of 6)', '🫐', 'Veg', 14.00, 10, 140.00, 'Accepted', 'Take-home guest favours'),
-(5, 2, 6, 'Truffle & Wild Mushroom Bruschetta', '🥖', 'Veg', 6.00, 15, 90.00, 'Accepted', 'Passed during sunset terrace reception'),
-(6, 2, 5, 'San Pellegrino Sparkling Water (750ml)', '💧', '', 4.50, 20, 50.00, 'Accepted', 'Table carafes with sliced lemons'),
-(7, 3, 7, 'Artisan Farmstead Cheese Board', '🧀', 'Veg', 18.00, 6, 108.00, 'Pending', 'Green room hospitality station'),
-(8, 3, 8, 'Handcrafted French Macarons (Box of 6)', '🫐', 'Veg', 14.00, 12, 168.00, 'Pending', 'Midnight dessert enhancement');");
+$db->exec("INSERT INTO booking_singular_items (id, booking_id, singular_item_id, item_name, emoji, image_url, dietary_tag, unit_price, quantity, subtotal, item_status, notes) VALUES
+(1, 1, 1, 'Grilled Tiger Shrimp Skewers', '🍤', '../assets/dish-shrimp.jpg', 'GF', 12.50, 24, 300.00, 'Accepted', 'Passed during executive welcome hour'),
+(2, 1, 2, 'Premium Coca-Cola (Glass Bottle 330ml)', '🥤', '../assets/drink-coke.jpg', '', 3.50, 60, 210.00, 'Accepted', 'Pre-stocked in boardroom coolers'),
+(3, 1, 3, 'Greek Yogurt Parfait Cups', '🍶', '../assets/dish-yogurt.jpg', 'Veg', 7.00, 15, 105.00, 'Accepted', 'VIP green room breakfast table'),
+(4, 1, 8, 'Handcrafted French Macarons (Box of 6)', '🫐', '../assets/dish-macaron.jpg', 'Veg', 14.00, 10, 140.00, 'Accepted', 'Take-home guest favours'),
+(5, 2, 6, 'Truffle & Wild Mushroom Bruschetta', '🥖', '../assets/dish-bruschetta.jpg', 'Veg', 6.00, 15, 90.00, 'Accepted', 'Passed during sunset terrace reception'),
+(6, 2, 5, 'San Pellegrino Sparkling Water (750ml)', '💧', '../assets/drink-water.jpg', '', 4.50, 20, 50.00, 'Accepted', 'Table carafes with sliced lemons'),
+(7, 3, 7, 'Artisan Farmstead Cheese Board', '🧀', '../assets/dish-cheese.jpg', 'Veg', 18.00, 6, 108.00, 'Pending', 'Green room hospitality station'),
+(8, 3, 8, 'Handcrafted French Macarons (Box of 6)', '🫐', '../assets/dish-macaron.jpg', 'Veg', 14.00, 12, 168.00, 'Pending', 'Midnight dessert enhancement');");
 echo "       ✔ Inserted 8 booking singular items.\n";
 
 // -------------------------------------------------------------
@@ -187,10 +250,10 @@ echo "       ✔ Inserted 4 caterer kitchen orders.\n";
 // Step 11: Insert Staff Assignments
 // -------------------------------------------------------------
 echo "[12/16] Seeding Staff Assignments...\n";
-$db->exec("INSERT INTO staff_assignments (id, booking_id, staff_id, role_title, shift_time, setup_status, checklist_json, created_at) VALUES
-(1, 1, 3, 'Lead Event Coordinator', '16:00 - 23:00', 'in_progress', '{\"c1\":true,\"c2\":true,\"c3\":true,\"c4\":true,\"c5\":false,\"c6\":false,\"c7\":false,\"c8\":false,\"c9\":false,\"c10\":false}', '2026-09-16 09:00:00'),
-(2, 2, 5, 'Senior A/V & Stage Engineer', '16:30 - 23:00', 'pending', '{\"c1\":false,\"c2\":false,\"c3\":false,\"c4\":false,\"c5\":false}', '2026-09-19 11:00:00'),
-(3, 3, 6, 'Logistics & Guest Services Lead', '15:00 - 23:30', 'pending', '{\"c1\":false,\"c2\":false,\"c3\":false,\"c4\":false,\"c5\":false}', '2026-09-23 10:00:00');");
+$db->exec("INSERT INTO staff_assignments (id, booking_id, staff_id, role_title, shift_time, setup_status, completion_pct, reported_venue, reported_staff, checklist_json, created_at) VALUES
+(1, 1, 3, 'Lead Event Coordinator', '16:00 - 23:00', 'in_progress', 40, 'Grand Emerald Ballroom', 'Sarah Jenkins', '{\"c1\":true,\"c2\":true,\"c3\":true,\"c4\":true,\"c5\":false,\"c6\":false,\"c7\":false,\"c8\":false,\"c9\":false,\"c10\":false}', '2026-09-16 09:00:00'),
+(2, 2, 5, 'Senior A/V & Stage Engineer', '16:30 - 23:00', 'pending', 0, 'Skyline Vista Lounge', 'Marcus Vance', '{\"c1\":false,\"c2\":false,\"c3\":false,\"c4\":false,\"c5\":false}', '2026-09-19 11:00:00'),
+(3, 3, 6, 'Logistics & Guest Services Lead', '15:00 - 23:30', 'pending', 0, 'The Brick & Steel Gallery', 'Elena Rostova', '{\"c1\":false,\"c2\":false,\"c3\":false,\"c4\":false,\"c5\":false}', '2026-09-23 10:00:00');");
 echo "       ✔ Inserted 3 staff event assignments.\n";
 
 // -------------------------------------------------------------

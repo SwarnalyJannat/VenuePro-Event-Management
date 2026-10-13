@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -8,8 +8,8 @@ $db = getDBConnection();
 $pkgId = (int)($_GET['id'] ?? 0);
 $pkg = null;
 if ($pkgId > 0) {
-    $stmt = $db->prepare("SELECT * FROM catering_packages WHERE id = ? LIMIT 1");
-    $stmt->execute([$pkgId]);
+    $stmt = $db->prepare("SELECT * FROM catering_packages WHERE id = ? AND caterer_id = ? LIMIT 1");
+    $stmt->execute([$pkgId, $currentUser['id']]);
     $pkg = $stmt->fetch();
 }
 
@@ -82,7 +82,7 @@ if (!empty($pkg['features'])) {
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <div class="topbar-user">

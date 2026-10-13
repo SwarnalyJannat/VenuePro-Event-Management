@@ -4,6 +4,10 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('admin', 'admin-login.php');
 $db = getDBConnection();
+$venues = $db->query("SELECT id, name, district FROM venues WHERE status = 'active' ORDER BY name ASC")->fetchAll();
+if (empty($venues)) {
+    $venues = $db->query("SELECT id, name, district FROM venues ORDER BY name ASC")->fetchAll();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -65,6 +69,9 @@ $db = getDBConnection();
         <a href="admin-staff-management.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Staff Directory
         </a>
+        <a href="admin-user-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> User Governance
+        </a>
         <a href="admin-reports.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Reports &amp; Analytics
         </a>
@@ -87,7 +94,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">8</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
@@ -166,18 +173,28 @@ $db = getDBConnection();
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Primary Assigned Venue</label>
-        <select name="assigned_venue" class="form-control">
-          <option>Grand Emerald Ballroom</option>
-          <option>Skyline Vista Lounge</option>
-          <option>Crystal Tech Pavilion</option>
-          <option>The Brick &amp; Steel Gallery</option>
-        </select>
+        <label class="form-label">NID / Tax Registration Number *</label>
+        <input type="text" name="tax_id" class="form-control" placeholder="e.g. TAX-98420-VN" required>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">NID / Tax Registration Number *</label>
-      <input type="text" name="tax_id" class="form-control" placeholder="e.g. TAX-98420-VN" required>
+
+    <!-- Designated Venue Assignment -->
+    <div class="section-divider">Designated Venues Assignment *</div>
+    <p class="text-sm text-muted mb-8">Select the designated venue(s) where this catering partner is authorized to operate and provide dining services.</p>
+    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px; margin-bottom:16px;">
+      <?php if (empty($venues)): ?>
+      <p class="text-sm text-muted">No venues found in database. Add venues first.</p>
+      <?php else: foreach ($venues as $v): ?>
+      <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; border:1.5px solid var(--gray-200); border-radius:6px; cursor:pointer;">
+        <input type="checkbox" name="assigned_venues[]" value="<?= e($v['name']) ?>" style="accent-color:var(--primary);">
+        <div>
+          <div class="text-sm font-semibold"><?= e($v['name']) ?></div>
+          <?php if (!empty($v['district'])): ?>
+          <div class="text-xs text-muted"><?= e($v['district']) ?></div>
+          <?php endif; ?>
+        </div>
+      </label>
+      <?php endforeach; endif; ?>
     </div>
 
     <div class="section-divider">Verification Documents *</div>
@@ -353,6 +370,8 @@ document.addEventListener('DOMContentLoaded', function() {
     regBtn.disabled = true;
     regBtn.textContent = 'Registering Partner...';
 
+    var assignedVenues = Array.from(form.querySelectorAll('[name="assigned_venues[]"]:checked')).map(function(cb) { return cb.value; });
+
     var payload = {
       business_name:   form.querySelector('[name="business_name"]').value.trim(),
       owner_name:      form.querySelector('[name="owner_name"]').value.trim(),
@@ -360,7 +379,9 @@ document.addEventListener('DOMContentLoaded', function() {
       phone:           form.querySelector('[name="phone"]').value.trim(),
       kitchen_address: form.querySelector('[name="kitchen_address"]').value.trim(),
       password:        pw,
-      specialization:  form.querySelector('[name="specialization"]').value
+      specialization:  form.querySelector('[name="specialization"]').value,
+      assigned_venues: assignedVenues,
+      assigned_venue:  assignedVenues.join(', ')
     };
 
     try {

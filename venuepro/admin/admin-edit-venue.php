@@ -149,7 +149,7 @@ if (str_starts_with($currentCover, '../')) {
         </div>
         <div class="topbar-actions">
           <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">8</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">

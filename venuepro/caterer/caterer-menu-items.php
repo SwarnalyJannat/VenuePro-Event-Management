@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -104,7 +104,7 @@ function dietList($tags) {
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>🔔
+            <?= renderNotifBadge() ?>🔔
           </a>
           <div class="topbar-user">
             <div class="user-avatar" style="background:#059669;"><?= e($currentUser['avatar_text'] ?? 'U') ?></div>
@@ -246,8 +246,17 @@ function dietList($tags) {
           <textarea name="description" class="form-control" rows="2" placeholder="e.g. Freshly grilled with garlic butter and lemon zest..."></textarea>
         </div>
         <div class="form-group mb-14">
-          <label class="form-label">Emoji Icon</label>
-          <input type="text" name="emoji" class="form-control" placeholder="e.g. 🍤" maxlength="4">
+          <label class="form-label">Item Image URL</label>
+          <input type="url" name="image_url" id="add-image-url" class="form-control" placeholder="https://example.com/food-photo.jpg"
+            oninput="previewImg('add-img-preview', this.value)">
+          <div id="add-img-preview" style="margin-top:8px; width:100%; height:110px; border-radius:var(--radius-sm); overflow:hidden; background:var(--gray-100); display:none; border:1px solid var(--gray-200);">
+            <img id="add-img-preview-img" src="" alt="Preview" style="width:100%;height:100%;object-fit:cover;">
+          </div>
+          <div class="text-xs text-muted mt-4">Paste a direct image URL. Leave blank to use the emoji fallback.</div>
+        </div>
+        <div class="form-group mb-14">
+          <label class="form-label">Emoji Fallback <span class="text-muted">(used if no image URL)</span></label>
+          <input type="text" name="emoji" class="form-control" placeholder="e.g. 🍤" maxlength="4" value="🍴">
         </div>
         <div class="form-group mb-14">
           <label class="form-label">Dietary Tags</label>
@@ -311,6 +320,19 @@ function dietList($tags) {
           <textarea name="description" id="edit-description" class="form-control" rows="2" placeholder="e.g. Freshly prepared..."></textarea>
         </div>
         <div class="form-group mb-14">
+          <label class="form-label">Item Image URL</label>
+          <input type="url" name="image_url" id="edit-image-url" class="form-control" placeholder="https://example.com/food-photo.jpg"
+            oninput="previewImg('edit-img-preview', this.value)">
+          <div id="edit-img-preview" style="margin-top:8px; width:100%; height:110px; border-radius:var(--radius-sm); overflow:hidden; background:var(--gray-100); display:none; border:1px solid var(--gray-200);">
+            <img id="edit-img-preview-img" src="" alt="Preview" style="width:100%;height:100%;object-fit:cover;">
+          </div>
+          <div class="text-xs text-muted mt-4">Paste a direct image URL. Leave blank to use emoji fallback.</div>
+        </div>
+        <div class="form-group mb-14">
+          <label class="form-label">Emoji Fallback <span class="text-muted">(used if no image URL)</span></label>
+          <input type="text" name="emoji" id="edit-emoji" class="form-control" placeholder="e.g. 🍤" maxlength="4">
+        </div>
+        <div class="form-group mb-14">
           <label class="form-label">Dietary Tags</label>
           <div class="flex gap-16 flex-wrap" style="margin-top:6px;" id="edit-diet-tags">
             <label class="flex-center gap-6 text-sm"><input type="checkbox" name="dietary_tags[]" value="Vegetarian"> Vegetarian</label>
@@ -345,9 +367,24 @@ function showGlobalAlert(msg, ok) {
   setTimeout(function() { a.style.display = 'none'; }, 4000);
 }
 
+function previewImg(containerId, url) {
+  var container = document.getElementById(containerId);
+  var img = document.getElementById(containerId + '-img');
+  if (!container || !img) return;
+  if (url && url.trim().length > 0) {
+    img.src = url.trim();
+    img.onload = function() { container.style.display = 'block'; };
+    img.onerror = function() { container.style.display = 'none'; };
+  } else {
+    container.style.display = 'none';
+    img.src = '';
+  }
+}
+
 function openAddModal() {
   document.getElementById('addItemForm').reset();
   document.getElementById('addAlert').style.display = 'none';
+  previewImg('add-img-preview', '');
   document.getElementById('modal-add').classList.add('open');
 }
 
@@ -360,6 +397,9 @@ function openEditModal(item) {
   document.getElementById('edit-category').value = item.category || 'Food';
   document.getElementById('edit-unit').value = item.unit_label || '';
   document.getElementById('edit-description').value = item.description || '';
+  document.getElementById('edit-image-url').value = item.image_url || '';
+  document.getElementById('edit-emoji').value = item.emoji || '🍴';
+  previewImg('edit-img-preview', item.image_url || '');
 
   // Dietary tags
   var dietaryList = [];
@@ -408,6 +448,7 @@ document.getElementById('addItemForm').addEventListener('submit', async function
     category:           (form.querySelector('[name="category"]') || {}).value || 'Food',
     unit_label:         (form.querySelector('[name="unit_label"]') || {}).value || 'piece',
     description:        (form.querySelector('[name="description"]') || {}).value || '',
+    image_url:          (form.querySelector('[name="image_url"]') || {}).value || '',
     emoji:              (form.querySelector('[name="emoji"]') || {}).value || '🍴',
     dietary_tags:       diets
   };
@@ -460,6 +501,8 @@ document.getElementById('editItemForm').addEventListener('submit', async functio
     category:           document.getElementById('edit-category').value || 'Food',
     unit_label:         document.getElementById('edit-unit').value || 'piece',
     description:        document.getElementById('edit-description').value || '',
+    image_url:          document.getElementById('edit-image-url').value || '',
+    emoji:              document.getElementById('edit-emoji').value || '🍴',
     dietary_tags:       diets
   };
 

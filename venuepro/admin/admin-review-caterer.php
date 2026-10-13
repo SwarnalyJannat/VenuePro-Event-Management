@@ -8,12 +8,12 @@ $db = getDBConnection();
 $catererId = (int)($_GET['id'] ?? 0);
 $caterer = null;
 if ($catererId > 0) {
-    $stmtC = $db->prepare("SELECT u.*, cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization, cp.approval_status FROM users u JOIN caterer_profiles cp ON u.id = cp.user_id WHERE u.id = ? AND u.role = 'caterer' LIMIT 1");
+    $stmtC = $db->prepare("SELECT u.*, cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization, cp.assigned_venue, cp.approval_status FROM users u JOIN caterer_profiles cp ON u.id = cp.user_id WHERE u.id = ? AND u.role = 'caterer' LIMIT 1");
     $stmtC->execute([$catererId]);
     $caterer = $stmtC->fetch();
 }
 if (!$caterer) {
-    $stmtC = $db->query("SELECT u.*, cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization, cp.approval_status FROM users u JOIN caterer_profiles cp ON u.id = cp.user_id WHERE u.role = 'caterer' ORDER BY (cp.approval_status = 'under_review' OR cp.approval_status = 'pending') DESC, cp.id DESC LIMIT 1");
+    $stmtC = $db->query("SELECT u.*, cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization, cp.assigned_venue, cp.approval_status FROM users u JOIN caterer_profiles cp ON u.id = cp.user_id WHERE u.role = 'caterer' ORDER BY (cp.approval_status = 'under_review' OR cp.approval_status = 'pending') DESC, cp.id DESC LIMIT 1");
     $caterer = $stmtC ? $stmtC->fetch() : null;
     $catererId = $caterer ? (int)$caterer['id'] : 0;
 }
@@ -55,6 +55,9 @@ if (!$caterer) {
         <a href="admin-staff-management.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Staff Directory
         </a>
+        <a href="admin-user-management.php" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> User Governance
+        </a>
         <a href="admin-reports.php" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Reports &amp; Analytics
         </a>
@@ -77,7 +80,7 @@ if (!$caterer) {
         </div>
         <div class="topbar-actions">
         <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">8</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="Edit My Profile">
@@ -114,6 +117,10 @@ if (!$caterer) {
     <div class="mb-16">
       <div class="text-xs text-muted">Specialization</div>
       <div class="font-semibold text-sm"><?= e($caterer['specialization'] ?? 'Contemporary Fine Dining') ?></div>
+    </div>
+    <div class="mb-16">
+      <div class="text-xs text-muted">Primary Assigned Venue</div>
+      <div class="font-semibold text-sm"><?= e(!empty($caterer['assigned_venue']) ? $caterer['assigned_venue'] : 'All Properties (Floating Partner)') ?></div>
     </div>
     <div class="mb-16">
       <div class="text-xs text-muted">Contact Information</div>

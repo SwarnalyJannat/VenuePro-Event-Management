@@ -4,6 +4,57 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('customer', 'customer-login.php');
 $db = getDBConnection();
+
+$venueId = (int)($_GET['venue_id'] ?? 1);
+$stmtV = $db->prepare("SELECT * FROM venues WHERE id = ? LIMIT 1");
+$stmtV->execute([$venueId]);
+$venue = $stmtV->fetch() ?: $db->query("SELECT * FROM venues WHERE status = 'active' ORDER BY id ASC LIMIT 1")->fetch();
+$venueId = (int)$venue['id'];
+
+// Default dynamic event date (from param or 14 days out)
+$defaultEventDate = !empty($_GET['date']) ? sanitize($_GET['date']) : date('Y-m-d', strtotime('+14 days'));
+$defaultDateLabel = date('M j, Y', strtotime($defaultEventDate));
+
+// Resolve caterers assigned to this specific designated venue by admin
+$venueName = $venue['name'] ?? '';
+$venueIdStr = (string)$venueId;
+
+$stmtCaterers = $db->prepare("
+    SELECT DISTINCT u.id, u.name, cp.business_name, cp.assigned_venue
+    FROM users u
+    JOIN caterer_profiles cp ON u.id = cp.user_id
+    WHERE u.role = 'caterer' 
+      AND u.status = 'active' 
+      AND cp.approval_status = 'approved'
+      AND (
+          cp.assigned_venue = ? 
+          OR cp.assigned_venue = ? 
+          OR FIND_IN_SET(?, cp.assigned_venue) > 0 
+          OR FIND_IN_SET(?, cp.assigned_venue) > 0 
+          OR cp.assigned_venue LIKE ?
+      )
+    ORDER BY cp.business_name ASC
+");
+$stmtCaterers->execute([$venueName, $venueIdStr, $venueIdStr, $venueName, "%$venueName%"]);
+$caterersList = $stmtCaterers ? $stmtCaterers->fetchAll(PDO::FETCH_ASSOC) : [];
+$assignedCatererIds = array_map('intval', array_column($caterersList, 'id'));
+
+// Load packages strictly from caterers assigned to this venue
+$packages = [];
+if (!empty($assignedCatererIds)) {
+    $inPlaceholders = implode(',', array_fill(0, count($assignedCatererIds), '?'));
+    $stmtPkgs = $db->prepare("
+        SELECT cp.*, u.name AS caterer_name, pr.business_name, pr.assigned_venue
+        FROM catering_packages cp
+        LEFT JOIN users u ON cp.caterer_id = u.id
+        LEFT JOIN caterer_profiles pr ON u.id = pr.user_id
+        WHERE cp.status IN ('published', 'active')
+          AND cp.caterer_id IN ($inPlaceholders)
+        ORDER BY cp.price_per_event ASC
+    ");
+    $stmtPkgs->execute($assignedCatererIds);
+    $packages = $stmtPkgs->fetchAll(PDO::FETCH_ASSOC);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -81,7 +132,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">3</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
@@ -101,7 +152,7 @@ $db = getDBConnection();
 <div class="flex-between mb-8">
   <div>
     <h1>Book a Venue Event</h1>
-    <p>Grand Emerald Ballroom — Downtown District</p>
+    <p><?= e($venue['name']) ?> — <?= e($venue['district'] ?? 'Prime Location') ?></p>
   </div>
   <a href="venue-listings.php" class="btn btn-ghost btn-sm">← Back to Listings</a>
 </div>
@@ -132,7 +183,7 @@ $db = getDBConnection();
         <p class="mb-20">Select your event date, duration and expected attendance.</p>
         <div class="form-group">
           <label class="form-label">Event Date *</label>
-          <input type="date" class="form-control" value="2026-11-20" required>
+          <input type="date" class="form-control" id="bv-event-date" value="<?= e($defaultEventDate) ?>" min="<?= date('Y-m-d') ?>" required>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -148,11 +199,11 @@ $db = getDBConnection();
         <div class="form-group">
           <label class="form-label">Expected Guest Count *</label>
           <div class="flex-center gap-12">
-            <button type="button" class="btn btn-ghost btn-sm" style="width:40px;">−</button>
-            <div class="guest-display">150</div>
-            <button type="button" class="btn btn-ghost btn-sm" style="width:40px;">+</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-guest-minus" style="width:40px;">−</button>
+            <div class="guest-display" id="bv-guest-val">150</div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-guest-plus" style="width:40px;">+</button>
           </div>
-          <div class="form-hint text-center">Maximum capacity: 600 guests</div>
+          <div class="form-hint text-center">Maximum capacity: <?= number_format($venue['capacity']) ?> guests</div>
         </div>
 
         <div class="form-group">
@@ -178,15 +229,19 @@ $db = getDBConnection();
       <!-- Summary sidebar -->
       <div class="card" style="background:var(--gray-50);">
         <h3 class="mb-12">Booking Summary</h3>
-        <div style="width:100%; height:120px; border-radius:var(--radius-sm); background:url('https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=600&q=80') center/cover; margin-bottom:12px;"></div>
-        <div class="font-bold mb-4">Grand Emerald Ballroom</div>
-        <div class="text-xs text-muted mb-16">Downtown District · Enterprise Tier · $1,200/day base</div>
-        <div class="text-sm mb-4"><span class="text-muted">Selected Date:</span> <strong>Nov 20, 2026</strong></div>
+        <?php
+          $rawImg = !empty($venue['image_url']) ? $venue['image_url'] : '../assets/venues pic/images.jpg';
+          $img = str_starts_with($rawImg, 'http') ? $rawImg : (str_starts_with($rawImg, '../') ? $rawImg : ('../' . $rawImg));
+        ?>
+        <div style="width:100%; height:120px; border-radius:var(--radius-sm); background:url('<?= e($img) ?>') center/cover; margin-bottom:12px;"></div>
+        <div class="font-bold mb-4"><?= e($venue['name']) ?></div>
+        <div class="text-xs text-muted mb-16"><?= e($venue['district'] ?? 'District') ?> · Up to <?= number_format($venue['capacity']) ?> Guests · $<?= number_format($venue['base_rate'], 0) ?>/day base</div>
+        <div class="text-sm mb-4"><span class="text-muted">Selected Date:</span> <strong id="bv-summary-date"><?= $defaultDateLabel ?></strong></div>
         <div class="text-sm mb-4"><span class="text-muted">Duration:</span> <strong>12 Hours</strong></div>
         <div class="text-sm mb-16"><span class="text-muted">Guest Count:</span> <strong>150 attendees</strong></div>
         <div style="border-top:1px solid var(--gray-200); padding-top:12px;" class="flex-between">
           <span class="text-muted text-sm">Venue Est.</span>
-          <span class="font-bold text-primary">$4,800.00</span>
+          <span class="font-bold text-primary">$<?= number_format($venue['base_rate'], 2) ?></span>
         </div>
       </div>
     </div>
@@ -209,35 +264,44 @@ $db = getDBConnection();
             <div class="text-xs text-muted">I will arrange external catering independently.</div>
           </label>
 
-          <input type="radio" class="pkg-radio" name="pkg" id="pkg-gold">
-          <label class="pkg-sel-card" for="pkg-gold">
+          <?php if (empty($packages)): ?>
+          <div style="padding:16px; background:var(--gray-50); border:1px dashed var(--gray-300); border-radius:var(--radius); text-align:center; color:var(--gray-600); font-size:0.85rem;">
+            🍽️ <strong>No Catering Partners Assigned:</strong> The administration has not designated catering partners to this venue yet. You may proceed with Venue Only.
+          </div>
+          <?php else: ?>
+          <?php foreach ($packages as $pi => $pkg):
+            $pkgId = (int)$pkg['id'];
+            $isPop = ($pi === 1);
+            $tierEmoji = ($pi === 0) ? '🥇 ' : (($pi === 1) ? '🏆 ' : '✨ ');
+          ?>
+          <input type="radio" class="pkg-radio" name="pkg" id="pkg-<?= $pkgId ?>">
+          <label class="pkg-sel-card" for="pkg-<?= $pkgId ?>" <?= $isPop ? 'style="border-color:#059669;"' : '' ?>>
             <div class="flex-between mb-4">
-              <div class="font-bold">🥇 Gold Luncheon Package</div>
-              <span class="font-bold text-primary">+$1,200.00</span>
+              <div class="font-bold flex-center gap-6" style="flex-wrap:wrap;">
+                <span><?= $tierEmoji . e($pkg['title']) ?></span>
+                <span class="pill pill-pending" style="font-size:0.65rem; padding:2px 6px;">👨‍🍳 <?= e($pkg['business_name'] ?: ($pkg['caterer_name'] ?: 'Culinary Partner')) ?></span>
+                <?= $isPop ? '<span class="stat-badge positive" style="font-size:.6rem;">MOST POPULAR</span>' : '' ?>
+              </div>
+              <span class="font-bold text-primary">+$<?= number_format($pkg['price_per_event'], 2) ?></span>
             </div>
-            <div class="text-xs text-muted mb-4">Per head: $24.00 · 30–80 guests</div>
-            <div class="text-xs">2-course plated lunch · Coffee &amp; tea station · Seasonal salads</div>
+            <div class="text-xs text-muted mb-4">Min <?= (int)$pkg['min_guests'] ?> guests</div>
+            <div class="text-xs"><?= e($pkg['description'] ?? '') ?></div>
           </label>
+          <?php endforeach; ?>
+          <?php endif; ?>
 
-          <input type="radio" class="pkg-radio" name="pkg" id="pkg-plat">
-          <label class="pkg-sel-card" for="pkg-plat" style="border-color:#059669;">
-            <div class="flex-between mb-4">
-              <div class="font-bold">🏆 Platinum Evening Banquet <span class="stat-badge positive" style="margin-left:6px; font-size:.6rem;">MOST POPULAR</span></div>
-              <span class="font-bold text-primary">+$1,850.00</span>
-            </div>
-            <div class="text-xs text-muted mb-4">Per head: $37.00 · 50–200 guests</div>
-            <div class="text-xs">3-course dinner · 4h open bar · Sommelier service · Passed canapés</div>
-          </label>
-
+          <?php if (!empty($assignedCatererIds)): ?>
           <input type="radio" class="pkg-radio" name="pkg" id="pkg-custom">
           <label class="pkg-sel-card" for="pkg-custom">
             <div class="flex-between mb-4">
-              <div class="font-bold">✨ Chef's Signature Tasting (Bespoke)</div>
-              <span class="font-bold text-primary">+$2,400.00</span>
+              <div class="font-bold">✨ Bespoke Custom Hybrid Package</div>
+              <span class="font-bold text-primary">Dynamic Pricing</span>
             </div>
-            <div class="text-xs text-muted mb-4">Per head: $80.00 · 20–60 guests</div>
-            <div class="text-xs mb-4">5-course tasting menu · Private sommelier · Chef's table experience</div><a href="caterer-custom-package.php" class="text-xs font-semibold text-primary">✨ Open Custom Package Builder →</a>
+            <div class="text-xs text-muted mb-4">Mix &amp; match dishes across assigned kitchen tiers</div>
+            <div class="text-xs mb-4">Fully customizable courses &amp; staffing add-ons.</div>
+            <a href="caterer-custom-package.php?venue_id=<?= $venueId ?>&caterer_id=<?= $assignedCatererIds[0] ?>" class="text-xs font-semibold text-primary">✨ Open Custom Package Builder →</a>
           </label>
+          <?php endif; ?>
         </div>
 
         <div class="flex gap-12">
@@ -248,12 +312,12 @@ $db = getDBConnection();
 
       <div class="card" style="background:var(--gray-50);">
         <h3 class="mb-12">Running Total</h3>
-        <div class="text-sm mb-8"><span class="text-muted">Venue (Grand Emerald):</span> <span class="font-bold">$4,800.00</span></div>
-        <div class="text-sm mb-8"><span class="text-muted">Catering Package:</span> <span class="font-bold">TBC</span></div>
-        <div class="text-sm mb-8"><span class="text-muted">Guest Count:</span> <span class="font-bold">150</span></div>
+        <div class="text-sm mb-8"><span class="text-muted">Venue (<?= e($venue['name']) ?>):</span> <span class="font-bold">$<?= number_format($venue['base_rate'], 2) ?></span></div>
+        <div class="text-sm mb-8"><span class="text-muted">Catering Package:</span> <span class="font-bold">Included / Optional</span></div>
+        <div class="text-sm mb-8"><span class="text-muted">Guest Count:</span> <span class="font-bold" id="bv-summary-guests">150</span></div>
         <div style="border-top:1px solid var(--gray-200); padding-top:12px; margin-top:8px;" class="flex-between">
           <span class="text-muted text-sm">Subtotal Est.</span>
-          <span class="font-bold text-primary" style="font-size:1.1rem;">$4,800+</span>
+          <span class="font-bold text-primary" style="font-size:1.1rem;">$<?= number_format($venue['base_rate'], 2) ?></span>
         </div>
       </div>
     </div>
@@ -268,10 +332,10 @@ $db = getDBConnection();
 
         <div class="card mb-20" style="background:var(--gray-50);">
           <div class="font-bold text-sm mb-12">Booking Confirmation Summary</div>
-          <div class="flex-between text-sm mb-6"><span class="text-muted">Venue</span><span class="font-bold">Grand Emerald Ballroom</span></div>
-          <div class="flex-between text-sm mb-6"><span class="text-muted">Date &amp; Duration</span><span class="font-bold">Nov 20, 2026 · 12h</span></div>
-          <div class="flex-between text-sm mb-6"><span class="text-muted">Guests</span><span class="font-bold">150 attendees</span></div>
-          <div class="flex-between text-sm mb-6"><span class="text-muted">Catering</span><span class="font-bold">Platinum Evening Banquet</span></div>
+          <div class="flex-between text-sm mb-6"><span class="text-muted">Venue</span><span class="font-bold"><?= e($venue['name']) ?></span></div>
+          <div class="flex-between text-sm mb-6"><span class="text-muted">Date &amp; Duration</span><span class="font-bold"><?= $defaultDateLabel ?> · 12h</span></div>
+          <div class="flex-between text-sm mb-6"><span class="text-muted">Guests</span><span class="font-bold" id="bv-step3-guests">150 attendees</span></div>
+          <div class="flex-between text-sm mb-6"><span class="text-muted">Catering</span><span class="font-bold">Selected Culinary Tier</span></div>
         </div>
 
         <div class="form-group">
@@ -295,18 +359,18 @@ $db = getDBConnection();
 
         <div class="flex gap-12 mt-16">
           <label for="ws2" class="btn btn-ghost" style="flex:1; cursor:pointer;">← Back</label>
-          <a href="booking-success.php" class="btn btn-primary" style="flex:2;">🔒 Confirm &amp; Pay $6,650.00</a>
+          <a href="booking-summary-payment.php?venue_id=<?= $venueId ?>&date=<?= e($defaultEventDate) ?>&guests=150" id="bv-pay-link" class="btn btn-primary" style="flex:2;">Review &amp; Pay →</a>
         </div>
         <div class="text-xs text-center text-muted mt-8">🔒 Secured by Stripe · End-to-end encrypted</div>
       </div>
 
       <div class="card">
         <h3 class="mb-16">Final Cost Breakdown</h3>
-        <div class="flex-between text-sm mb-8"><span class="text-muted">Grand Emerald Ballroom (12h)</span><span>$4,800.00</span></div>
-        <div class="flex-between text-sm mb-8"><span class="text-muted">Platinum Catering Package</span><span>$1,850.00</span></div>
+        <div class="flex-between text-sm mb-8"><span class="text-muted"><?= e($venue['name']) ?></span><span>$<?= number_format($venue['base_rate'], 2) ?></span></div>
+        <div class="flex-between text-sm mb-8"><span class="text-muted">Catering &amp; Logistics</span><span>Calculated at Checkout</span></div>
         <div class="flex-between" style="background:#eff6ff; padding:14px; border-radius:var(--radius-sm);">
-          <span class="font-bold">TOTAL AMOUNT</span>
-          <span class="font-bold text-primary" style="font-size:1.5rem;">$6,650.00</span>
+          <span class="font-bold">BASE VENUE RATE</span>
+          <span class="font-bold text-primary" style="font-size:1.5rem;">$<?= number_format($venue['base_rate'], 2) ?></span>
         </div>
         <div class="text-xs text-muted mt-8">Free cancellation within 48h. Refund in 5–10 business days.</div>
       </div>
@@ -326,5 +390,52 @@ $db = getDBConnection();
     </div>
   </div>
 <script src="../js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const maxCap = <?= (int)$venue['capacity'] ?>;
+  const initialGuests = parseInt(sessionStorage.getItem('vp_guest_count') || sessionStorage.getItem('vp_guests') || '150') || 150;
+  let currentGuests = Math.min(Math.max(10, initialGuests), maxCap);
+
+  const displayEl = document.getElementById('bv-guest-val');
+  const sumEl = document.getElementById('bv-summary-guests');
+  const step3El = document.getElementById('bv-step3-guests');
+  const payLink = document.getElementById('bv-pay-link');
+  const dateInp = document.getElementById('bv-event-date');
+
+  function updateGuestDisplay() {
+    if (displayEl) displayEl.textContent = currentGuests;
+    if (sumEl) sumEl.textContent = currentGuests;
+    if (step3El) step3El.textContent = currentGuests + ' attendees';
+    sessionStorage.setItem('vp_guest_count', currentGuests.toString());
+    sessionStorage.setItem('vp_guests', currentGuests.toString());
+
+    if (payLink) {
+      const d = dateInp && dateInp.value ? dateInp.value : '<?= e($defaultEventDate) ?>';
+      payLink.href = `booking-summary-payment.php?venue_id=<?= $venueId ?>&date=${encodeURIComponent(d)}&guests=${currentGuests}&guest_count=${currentGuests}`;
+    }
+  }
+
+  const minusBtn = document.getElementById('btn-guest-minus');
+  const plusBtn = document.getElementById('btn-guest-plus');
+
+  if (minusBtn) {
+    minusBtn.addEventListener('click', function() {
+      currentGuests = Math.max(10, currentGuests - 10);
+      updateGuestDisplay();
+    });
+  }
+  if (plusBtn) {
+    plusBtn.addEventListener('click', function() {
+      currentGuests = Math.min(maxCap, currentGuests + 10);
+      updateGuestDisplay();
+    });
+  }
+  if (dateInp) {
+    dateInp.addEventListener('change', updateGuestDisplay);
+  }
+
+  updateGuestDisplay();
+});
+</script>
 </body>
 </html>

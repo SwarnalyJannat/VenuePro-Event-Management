@@ -4,6 +4,81 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('customer', 'customer-login.php');
 $db = getDBConnection();
+
+$venueId = (int)($_GET['venue_id'] ?? (session_id() ? ($_SESSION['vp_venue_id'] ?? 1) : 1));
+$stmtV = $db->prepare("SELECT * FROM venues WHERE id = ? LIMIT 1");
+$stmtV->execute([$venueId]);
+$venue = $stmtV->fetch() ?: $db->query("SELECT * FROM venues ORDER BY id ASC LIMIT 1")->fetch();
+$venueId = (int)$venue['id'];
+
+$packageId = (int)($_GET['package_id'] ?? 0);
+$package = null;
+if ($packageId > 0) {
+    $stmtP = $db->prepare("SELECT cp.*, u.name AS caterer_name, pr.business_name FROM catering_packages cp LEFT JOIN users u ON cp.caterer_id = u.id LEFT JOIN caterer_profiles pr ON u.id = pr.user_id WHERE cp.id = ? LIMIT 1");
+    $stmtP->execute([$packageId]);
+    $package = $stmtP->fetch();
+}
+$isCustom = isset($_GET['custom_package']) && $_GET['custom_package'] == '1';
+
+// Determine assigned caterers for this venue
+$venueName = $venue['name'] ?? '';
+$venueIdStr = (string)$venueId;
+
+$stmtAssigned = $db->prepare("
+    SELECT DISTINCT u.id, u.name, cp.business_name, cp.assigned_venue
+    FROM users u
+    JOIN caterer_profiles cp ON u.id = cp.user_id
+    WHERE u.role = 'caterer' 
+      AND u.status = 'active' 
+      AND cp.approval_status = 'approved'
+      AND (
+          cp.assigned_venue = ? 
+          OR cp.assigned_venue = ? 
+          OR FIND_IN_SET(?, cp.assigned_venue) > 0 
+          OR FIND_IN_SET(?, cp.assigned_venue) > 0 
+          OR cp.assigned_venue LIKE ?
+      )
+    ORDER BY cp.business_name ASC
+");
+$stmtAssigned->execute([$venueName, $venueIdStr, $venueIdStr, $venueName, "%$venueName%"]);
+$assignedCaterers = $stmtAssigned ? $stmtAssigned->fetchAll(PDO::FETCH_ASSOC) : [];
+$assignedCatererIds = array_map('intval', array_column($assignedCaterers, 'id'));
+
+// Determine caterer strictly (from chosen package, explicit parameter, or assigned caterers for this venue)
+$catererId = (int)($_GET['caterer_id'] ?? ($package['caterer_id'] ?? 0));
+if ($catererId > 0 && !in_array($catererId, $assignedCatererIds, true)) {
+    // If passed caterer is not assigned to this venue, fallback to venue's assigned caterer
+    $catererId = !empty($assignedCatererIds) ? $assignedCatererIds[0] : 0;
+}
+if ($catererId <= 0 && !empty($assignedCatererIds)) {
+    $catererId = $assignedCatererIds[0];
+}
+
+$catererInfo = null;
+$singularItems = [];
+$catererBizTitle = 'No Catering Selected';
+
+if ($catererId > 0) {
+    $stmtCatInfo = $db->prepare("SELECT cp.*, u.name as caterer_name FROM caterer_profiles cp JOIN users u ON cp.user_id = u.id WHERE u.id = ? LIMIT 1");
+    $stmtCatInfo->execute([$catererId]);
+    $catererInfo = $stmtCatInfo->fetch();
+    $catererBizTitle = $catererInfo['business_name'] ?? ($package['business_name'] ?? ($package['caterer_name'] ?? 'Partner Catering Kitchen'));
+
+    // Dynamic singular menu items strictly scoped to this caterer
+    $stmtSingular = $db->prepare("SELECT * FROM singular_menu_items WHERE caterer_id = ? AND status = 'active' ORDER BY category ASC, name ASC");
+    $stmtSingular->execute([$catererId]);
+    $singularItems = $stmtSingular->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Schedule parameters from query or defaults
+$selectedDate = sanitize($_GET['date'] ?? ($_GET['event_date'] ?? ''));
+$selectedStartTime = sanitize($_GET['start_time'] ?? '10:00:00');
+$selectedEndTime   = sanitize($_GET['end_time'] ?? '22:00:00');
+$selectedGuests    = (int)($_GET['guests'] ?? ($_GET['guest_count'] ?? 0));
+if ($selectedGuests <= 0 && !empty($_SESSION['vp_guests'])) {
+    $selectedGuests = (int)$_SESSION['vp_guests'];
+}
+$selectedDuration  = (int)($_GET['duration_hours'] ?? 4);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -34,6 +109,7 @@ $db = getDBConnection();
       width: 52px; height: 52px; border-radius: 8px;
       background: #f1f5f9; display: flex; align-items: center;
       justify-content: center; font-size: 1.8rem; flex-shrink: 0;
+      overflow: hidden;
     }
     .addon-info { flex: 1; }
     .addon-name { font-weight: 700; font-size: 0.875rem; color: var(--gray-900); }
@@ -123,7 +199,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">3</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
@@ -155,16 +231,17 @@ $db = getDBConnection();
           <div style="display:flex; flex-direction:column; gap:24px;">
 
             <!-- ===== ADD-ON SINGULAR ITEMS CARD (Beside the package) ===== -->
+            <?php if ($catererId > 0 && !empty($singularItems)): ?>
             <div class="addon-card">
               <div class="flex-between mb-12">
                 <div class="flex-center gap-8">
                   <div style="width:38px; height:38px; border-radius:50%; background:#eff6ff; display:flex; align-items:center; justify-content:center; font-size:1.3rem;">🍽️</div>
                   <div>
                     <h2 style="font-size:1.25rem; font-weight:800; margin:0;">Singular Add-On Items</h2>
-                    <p class="text-xs text-muted" style="margin:2px 0 0;">Would you like to add any singular items beside your main package?</p>
+                    <p class="text-xs text-muted" style="margin:2px 0 0;">Curated by <strong><?= e($catererBizTitle) ?></strong> for your event</p>
                   </div>
                 </div>
-                <span class="stat-badge positive" style="font-size:0.75rem;">From Caterer</span>
+                <span class="stat-badge positive" style="font-size:0.75rem;">👨‍🍳 <?= e($catererBizTitle) ?></span>
               </div>
 
               <div class="decision-radio-group">
@@ -178,128 +255,40 @@ $db = getDBConnection();
 
               <div id="addon-selection-body">
                 <div class="text-xs text-muted mb-16">
-                  Select any singular items you need and adjust quantities. Your caterer will receive these along with your package order:
+                  Select any singular items you need and adjust quantities. Your caterer (<strong><?= e($catererBizTitle) ?></strong>) will receive these along with your package order:
                 </div>
 
-                <!-- Item 1: Shrimp -->
-                <div class="addon-item" id="addon-shrimp">
-                  <div class="addon-img">🍤</div>
+                <!-- Dynamic Singular Menu Add-Ons from Database -->
+                <?php if (empty($singularItems)): ?>
+                <div class="text-xs text-muted" style="padding:16px; text-align:center;">No singular add-on items currently offered by <?= e($catererBizTitle) ?>.</div>
+                <?php else: foreach ($singularItems as $si):
+                  $itemId = (int)$si['id'];
+                  $price = (float)$si['price'];
+                  $emoji = !empty($si['emoji']) ? $si['emoji'] : '🍽️';
+                  $unitLabel = !empty($si['unit_label']) ? ('/' . $si['unit_label']) : '';
+                  $maxQty = max(10, min(200, (int)($si['quantity_available'] ?: 50)));
+                  $dietary = !empty($si['dietary_tags']) ? (' · ' . $si['dietary_tags']) : '';
+                ?>
+                <div class="addon-item" id="addon-<?= $itemId ?>">
+                  <div class="addon-img">
+                    <?php if (!empty($si['image_url'])): ?>
+                    <img src="<?= e($si['image_url']) ?>" alt="<?= e($si['name']) ?>" style="width:100%;height:100%;object-fit:cover;">
+                    <?php else: ?>
+                    <?= $emoji ?>
+                    <?php endif; ?>
+                  </div>
                   <div class="addon-info">
-                    <div class="addon-name">Grilled Tiger Shrimp</div>
-                    <div class="addon-desc">Garlic butter &amp; lemon zest · Gluten-Free · Freshly grilled</div>
+                    <div class="addon-name"><?= e($si['name']) ?></div>
+                    <div class="addon-desc"><?= e($si['description'] ?? '') ?><?= e($dietary) ?></div>
                   </div>
                   <div class="addon-qty">
-                    <button class="qty-btn" type="button" onclick="changeQty('shrimp', -1)">−</button>
-                    <input class="qty-input" type="number" id="qty-shrimp" value="0" min="0" max="50" data-price="12.50" data-name="Grilled Tiger Shrimp" oninput="recalcTotal()">
-                    <button class="qty-btn" type="button" onclick="changeQty('shrimp', 1)">+</button>
+                    <button class="qty-btn" type="button" onclick="changeQty(<?= $itemId ?>, -1)">−</button>
+                    <input class="qty-input" type="number" id="qty-<?= $itemId ?>" value="0" min="0" max="<?= $maxQty ?>" data-item-id="<?= $itemId ?>" data-price="<?= number_format($price, 2, '.', '') ?>" data-name="<?= e($si['name']) ?>" oninput="recalcTotal()">
+                    <button class="qty-btn" type="button" onclick="changeQty(<?= $itemId ?>, 1)">+</button>
                   </div>
-                  <div class="addon-price">$12.50/pc</div>
+                  <div class="addon-price">$<?= number_format($price, 2) ?><?= $unitLabel ?></div>
                 </div>
-
-                <!-- Item 2: Coke -->
-                <div class="addon-item" id="addon-coke">
-                  <div class="addon-img">🥤</div>
-                  <div class="addon-info">
-                    <div class="addon-name">Premium Coca-Cola (Glass Bottle)</div>
-                    <div class="addon-desc">Chilled 330ml · Served on ice with fresh lime</div>
-                  </div>
-                  <div class="addon-qty">
-                    <button class="qty-btn" type="button" onclick="changeQty('coke', -1)">−</button>
-                    <input class="qty-input" type="number" id="qty-coke" value="0" min="0" max="120" data-price="3.50" data-name="Coca-Cola (Glass)" oninput="recalcTotal()">
-                    <button class="qty-btn" type="button" onclick="changeQty('coke', 1)">+</button>
-                  </div>
-                  <div class="addon-price">$3.50/btl</div>
-                </div>
-
-                <!-- Item 3: Yogurt Parfait -->
-                <div class="addon-item" id="addon-yogurt">
-                  <div class="addon-img">🍶</div>
-                  <div class="addon-info">
-                    <div class="addon-name">Greek Yogurt Parfait</div>
-                    <div class="addon-desc">Granola &amp; seasonal berries · Vegetarian · GF</div>
-                  </div>
-                  <div class="addon-qty">
-                    <button class="qty-btn" type="button" onclick="changeQty('yogurt', -1)">−</button>
-                    <input class="qty-input" type="number" id="qty-yogurt" value="0" min="0" max="30" data-price="7.00" data-name="Greek Yogurt Parfait" oninput="recalcTotal()">
-                    <button class="qty-btn" type="button" onclick="changeQty('yogurt', 1)">+</button>
-                  </div>
-                  <div class="addon-price">$7.00/cup</div>
-                </div>
-
-                <!-- Item 4: Dessert - Vanilla Panna Cotta -->
-                <div class="addon-item" id="addon-panna">
-                  <div class="addon-img">🍮</div>
-                  <div class="addon-info">
-                    <div class="addon-name">Vanilla Panna Cotta Dessert</div>
-                    <div class="addon-desc">Mixed berry coulis &amp; mint garnish · Italian artisan classic</div>
-                  </div>
-                  <div class="addon-qty">
-                    <button class="qty-btn" type="button" onclick="changeQty('panna', -1)">−</button>
-                    <input class="qty-input" type="number" id="qty-panna" value="0" min="0" max="40" data-price="9.50" data-name="Vanilla Panna Cotta" oninput="recalcTotal()">
-                    <button class="qty-btn" type="button" onclick="changeQty('panna', 1)">+</button>
-                  </div>
-                  <div class="addon-price">$9.50/srv</div>
-                </div>
-
-                <!-- Item 5: Sparkling Water -->
-                <div class="addon-item" id="addon-water">
-                  <div class="addon-img">💧</div>
-                  <div class="addon-info">
-                    <div class="addon-name">San Pellegrino Sparkling Water</div>
-                    <div class="addon-desc">500ml premium Italian mineral water · Table service</div>
-                  </div>
-                  <div class="addon-qty">
-                    <button class="qty-btn" type="button" onclick="changeQty('water', -1)">−</button>
-                    <input class="qty-input" type="number" id="qty-water" value="0" min="0" max="30" data-price="4.50" data-name="San Pellegrino Sparkling" oninput="recalcTotal()">
-                    <button class="qty-btn" type="button" onclick="changeQty('water', 1)">+</button>
-                  </div>
-                  <div class="addon-price">$4.50/btl</div>
-                </div>
-
-                <!-- Item 6: Truffle Bruschetta -->
-                <div class="addon-item" id="addon-bruschetta">
-                  <div class="addon-img">🥖</div>
-                  <div class="addon-info">
-                    <div class="addon-name">Truffle Bruschetta</div>
-                    <div class="addon-desc">White truffle oil, sun-dried tomatoes · Vegetarian</div>
-                  </div>
-                  <div class="addon-qty">
-                    <button class="qty-btn" type="button" onclick="changeQty('bruschetta', -1)">−</button>
-                    <input class="qty-input" type="number" id="qty-bruschetta" value="0" min="0" max="30" data-price="6.00" data-name="Truffle Bruschetta" oninput="recalcTotal()">
-                    <button class="qty-btn" type="button" onclick="changeQty('bruschetta', 1)">+</button>
-                  </div>
-                  <div class="addon-price">$6.00/pc</div>
-                </div>
-
-                <!-- Item 7: Cheese Board -->
-                <div class="addon-item" id="addon-cheese">
-                  <div class="addon-img">🧀</div>
-                  <div class="addon-info">
-                    <div class="addon-name">Artisan Cheese Board</div>
-                    <div class="addon-desc">Brie, Gouda, Manchego · Serves 4 · Vegetarian</div>
-                  </div>
-                  <div class="addon-qty">
-                    <button class="qty-btn" type="button" onclick="changeQty('cheese', -1)">−</button>
-                    <input class="qty-input" type="number" id="qty-cheese" value="0" min="0" max="15" data-price="18.00" data-name="Artisan Cheese Board" oninput="recalcTotal()">
-                    <button class="qty-btn" type="button" onclick="changeQty('cheese', 1)">+</button>
-                  </div>
-                  <div class="addon-price">$18.00/brd</div>
-                </div>
-
-                <!-- Item 8: French Macarons Dessert -->
-                <div class="addon-item" id="addon-macarons">
-                  <div class="addon-img">🫐</div>
-                  <div class="addon-info">
-                    <div class="addon-name">French Macarons Box/6 (Dessert)</div>
-                    <div class="addon-desc">Pistachio, raspberry, caramel, vanilla · GF &amp; Vegetarian</div>
-                  </div>
-                  <div class="addon-qty">
-                    <button class="qty-btn" type="button" onclick="changeQty('macarons', -1)">−</button>
-                    <input class="qty-input" type="number" id="qty-macarons" value="0" min="0" max="30" data-price="14.00" data-name="French Macarons (Box/6)" oninput="recalcTotal()">
-                    <button class="qty-btn" type="button" onclick="changeQty('macarons', 1)">+</button>
-                  </div>
-                  <div class="addon-price">$14.00/box</div>
-                </div>
+                <?php endforeach; endif; ?>
 
                 <!-- Add-On Subtotal Preview -->
                 <div id="addon-subtotal-box" style="display:none; margin-top:16px; padding:14px 16px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:var(--radius-sm);">
@@ -312,6 +301,13 @@ $db = getDBConnection();
                 </div>
               </div>
             </div>
+            <?php elseif ($catererId <= 0): ?>
+            <div class="card" style="background:#f8fafc; border:1px dashed var(--gray-300); text-align:center; padding:20px;">
+              <div style="font-size:1.8rem; margin-bottom:6px;">🏛️</div>
+              <div class="font-bold text-sm">Venue-Only Booking (No In-House Catering)</div>
+              <div class="text-xs text-muted mt-4">You are booking <strong><?= e($venue['name']) ?></strong> without in-house catering. You can coordinate your own culinary arrangements.</div>
+            </div>
+            <?php endif; ?>
 
             <!-- Payment Method Card -->
             <div class="card">
@@ -365,27 +361,32 @@ $db = getDBConnection();
           <!-- RIGHT COLUMN: Booking Summary (Updates dynamically) -->
           <div class="card" style="position:sticky; top:80px;">
             <h3 class="mb-8">Booking Summary</h3>
-            <div class="text-xs text-muted mb-16">📅 December 14, 2026 • 18:00 - 22:00</div>
+            <div class="text-xs text-muted mb-16" id="summary-datetime-display">📅 <span id="summary-date-val"><?= !empty($selectedDate) ? date('F j, Y', strtotime($selectedDate)) : 'December 14, 2026' ?></span> • <span id="summary-time-val"><?= e($selectedStartTime) ?> - <?= e($selectedEndTime) ?></span></div>
 
             <!-- Venue -->
             <div style="border-bottom:1px solid var(--gray-100); padding-bottom:14px; margin-bottom:14px;">
               <div class="flex-between text-sm mb-4">
                 <div>
-                  <div class="font-bold">The Glass House – Grand Hall</div>
-                  <div class="text-xs text-muted">Main Space + Terrace</div>
+                  <div class="font-bold" id="summary-venue-name"><?= e($venue['name'] ?? 'The Glass House – Grand Hall') ?></div>
+                  <div class="text-xs text-muted" id="summary-venue-type"><?= e($venue['venue_type'] ?? 'Ballroom') ?> · Max Capacity: <?= (int)($venue['capacity'] ?? 250) ?> Guests</div>
+                  <div class="text-xs font-semibold" style="color:var(--primary); margin-top:2px;" id="summary-attendees-display">👥 <span id="summary-guests-count-val"><?= $selectedGuests ?: '100' ?></span> Attendees Expected</div>
                 </div>
-                <div class="font-semibold">$2,400.00</div>
+                <div class="font-semibold" id="summary-venue-rate">$<?= number_format((float)($venue['base_rate'] ?? 2400), 2) ?></div>
               </div>
             </div>
 
-            <!-- Catering Package (Main Package) -->
+            <!-- Catering Package (Main Package or Custom Hybrid) -->
             <div style="border-bottom:1px solid var(--gray-100); padding-bottom:14px; margin-bottom:14px;">
               <div class="flex-between text-sm mb-4">
                 <div>
-                  <div class="font-bold" style="color:var(--primary);">Catering: Platinum Package</div>
-                  <div class="text-xs text-muted">150 Guests • 3-Course Dinner • Open Bar (4h)</div>
+                  <div class="font-bold" style="color:var(--primary);" id="summary-pkg-title">Catering: <?= $package ? e($package['title']) : 'Custom Hybrid Package' ?></div>
+                  <div class="text-xs text-muted" id="summary-pkg-desc"><?= $package ? ('Min ' . (int)$package['min_guests'] . ' Guests · Standard Tier') : 'Multi-tier selection across Gold, Platinum & Signature' ?></div>
                 </div>
-                <div class="font-semibold">$1,850.00</div>
+                <div class="font-semibold" id="summary-pkg-price">$<?= number_format((float)($package['price_per_event'] ?? 1850), 2) ?></div>
+              </div>
+              <div id="summary-custom-dishes-box" style="display:none; margin-top:8px; padding:10px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px;">
+                <div class="font-bold text-xs" style="color:#166534; margin-bottom:4px;">🍽️ Custom Selected Dishes:</div>
+                <div id="summary-custom-dishes-list" style="display:flex; flex-direction:column; gap:3px; font-size:0.75rem; color:#14532d;"></div>
               </div>
             </div>
 
@@ -396,7 +397,7 @@ $db = getDBConnection();
                   <div class="font-bold">Professional Staffing</div>
                   <div class="text-xs text-muted">4 Waitstaff • 2 Bartenders • 1 Coordinator</div>
                 </div>
-                <div class="font-semibold">$640.00</div>
+                <div class="font-semibold" id="summary-staffing-rate">$640.00</div>
               </div>
             </div>
 
@@ -414,7 +415,7 @@ $db = getDBConnection();
             <div style="border-bottom:1px solid var(--gray-200); padding-bottom:14px; margin-bottom:16px;">
               <div class="flex-between text-sm mb-4">
                 <span class="text-muted">Package &amp; Venue Base</span>
-                <span>$4,890.00</span>
+                <span id="summary-base-display">$4,890.00</span>
               </div>
               <div class="flex-between text-sm mb-4" id="summary-row-addons" style="display:none;">
                 <span class="text-muted">Singular Items</span>
@@ -461,20 +462,73 @@ $db = getDBConnection();
   </div>
 
   <script>
-    const BASE = 4890;      // Venue ($2,400) + Package ($1,850) + Staffing ($640)
+    const VENUE_BASE = <?= (float)($venue['base_rate'] ?? 2400) ?>;
+    let packageCost = <?= $package ? (float)$package['price_per_event'] : 1850 ?>;
+    const STAFFING_COST = 640;
     const SERVICE_RATE = 0.10;
     const VAT_RATE = 0.08;
 
-    const ITEMS = [
-      { id: 'shrimp',     price: 12.50 },
-      { id: 'coke',       price: 3.50  },
-      { id: 'yogurt',     price: 7.00  },
-      { id: 'panna',      price: 9.50  },
-      { id: 'water',      price: 4.50  },
-      { id: 'bruschetta', price: 6.00  },
-      { id: 'cheese',     price: 18.00 },
-      { id: 'macarons',   price: 14.00 }
-    ];
+    const ITEMS = <?= json_encode(array_map(function($it) {
+      return [
+        'id'    => (int)$it['id'],
+        'price' => (float)$it['price'],
+        'name'  => $it['name']
+      ];
+    }, $singularItems)) ?>;
+
+    // Sync booking date/time from sessionStorage if available
+    const savedEventDate = sessionStorage.getItem('vp_event_date') || sessionStorage.getItem('vp_date');
+    if (savedEventDate) {
+      const parts = savedEventDate.split('-');
+      if (parts.length === 3) {
+        const dObj = new Date(parts[0], parts[1] - 1, parts[2]);
+        const dVal = document.getElementById('summary-date-val');
+        if (dVal && !isNaN(dObj.getTime())) {
+          dVal.textContent = dObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        }
+      }
+    }
+    const savedStart = sessionStorage.getItem('vp_start_time');
+    const savedEnd   = sessionStorage.getItem('vp_end_time');
+    if (savedStart && savedEnd) {
+      const tVal = document.getElementById('summary-time-val');
+      if (tVal) tVal.textContent = savedStart.substring(0, 5) + ' - ' + savedEnd.substring(0, 5);
+    }
+
+    // Sync guest count and display from sessionStorage or initial value
+    const savedGuests = sessionStorage.getItem('vp_guest_count') || sessionStorage.getItem('vp_guests') || '<?= $selectedGuests ?: 100 ?>';
+    const guestCountEl = document.getElementById('summary-guests-count-val');
+    if (guestCountEl) guestCountEl.textContent = savedGuests;
+
+    // Check if custom package in sessionStorage
+    const isCustomPkg = sessionStorage.getItem('vp_is_custom_package') === '1' || (new URLSearchParams(window.location.search).get('custom_package') === '1');
+    if (isCustomPkg) {
+      const customTotal = parseFloat(sessionStorage.getItem('vp_custom_total') || '0');
+      if (customTotal > 0) packageCost = customTotal;
+
+      const titleEl = document.getElementById('summary-pkg-title');
+      const descEl = document.getElementById('summary-pkg-desc');
+      const priceEl = document.getElementById('summary-pkg-price');
+      const customBox = document.getElementById('summary-custom-dishes-box');
+      const customList = document.getElementById('summary-custom-dishes-list');
+
+      if (titleEl) titleEl.textContent = 'Catering: ' + (sessionStorage.getItem('vp_custom_title') || 'Custom Hybrid Package');
+      if (descEl) descEl.textContent = savedGuests + ' Guests · Multi-Tier Dish Selection';
+      if (priceEl) priceEl.textContent = '$' + packageCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+      try {
+        const dishes = JSON.parse(sessionStorage.getItem('vp_custom_dishes') || '[]');
+        if (dishes.length > 0 && customBox && customList) {
+          customBox.style.display = 'block';
+          customList.innerHTML = dishes.map(d => `
+            <div class="flex-between" style="border-bottom:1px dashed #bbf7d0; padding-bottom:3px; margin-bottom:3px;">
+              <span>• <strong>${d.name}</strong> <small style="color:#059669; font-weight:700;">[From ${d.tier}]</small></span>
+              <span style="font-weight:700;">$${parseFloat(d.price).toFixed(2)}/head</span>
+            </div>
+          `).join('');
+        }
+      } catch (e) {}
+    }
 
     function toggleAddonChoice(enable) {
       const yesBtn = document.getElementById('tab-addons-yes');
@@ -551,24 +605,37 @@ $db = getDBConnection();
       summaryRowAddonsVal.textContent = '$' + addonTotal.toFixed(2);
 
       // Recalculate dynamic grand total
-      const subtotal = BASE + addonTotal;
+      const baseSubtotal = VENUE_BASE + packageCost + STAFFING_COST;
+      const baseDisplay = document.getElementById('summary-base-display');
+      if (baseDisplay) baseDisplay.textContent = '$' + baseSubtotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+      const subtotal = baseSubtotal + addonTotal;
       const fee = subtotal * SERVICE_RATE;
       const vat = subtotal * VAT_RATE;
       const grand = subtotal + fee + vat;
 
       document.getElementById('fee-display').textContent = '$' + fee.toFixed(2);
       document.getElementById('vat-display').textContent = '$' + vat.toFixed(2);
-      document.getElementById('grand-total').textContent = '$' + grand.toFixed(2);
+      document.getElementById('grand-total').textContent = '$' + grand.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
+
+    document.addEventListener('DOMContentLoaded', recalcTotal);
   </script>
 <script src="../js/app.js"></script>
 <script>
 // Read booking params from sessionStorage (set during venue/date selection flow)
-var vpVenueId   = sessionStorage.getItem('vp_venue_id')   || '1';
-var vpPackageId = sessionStorage.getItem('vp_package_id') || '';
-var vpEventDate = sessionStorage.getItem('vp_event_date') || '';
+var vpVenueId   = sessionStorage.getItem('vp_venue_id')   || '<?= $venueId ?>';
+var vpPackageId = sessionStorage.getItem('vp_package_id') || '<?= $packageId ?>';
+var vpEventDate = sessionStorage.getItem('vp_event_date') || sessionStorage.getItem('vp_date') || '<?= e($selectedDate) ?>';
+var vpGuests    = sessionStorage.getItem('vp_guest_count') || sessionStorage.getItem('vp_guests') || '<?= $selectedGuests ?: 100 ?>';
+var vpStart     = sessionStorage.getItem('vp_start_time') || '<?= e($selectedStartTime) ?>' || '10:00:00';
+var vpEnd       = sessionStorage.getItem('vp_end_time')   || '<?= e($selectedEndTime) ?>'   || '22:00:00';
+var vpDuration  = sessionStorage.getItem('vp_duration_hours') || '<?= $selectedDuration ?: 4 ?>';
 
 document.addEventListener('DOMContentLoaded', function() {
+  var gEl = document.getElementById('summary-guests-count-val');
+  if (gEl && vpGuests) gEl.textContent = vpGuests;
+
   // Inject hidden fields into payment form
   var pf = document.getElementById('payment-form');
   if (pf) {
@@ -577,14 +644,16 @@ document.addEventListener('DOMContentLoaded', function() {
       h.type = 'hidden'; h.name = name; h.value = val;
       pf.appendChild(h);
     }
-    addHidden('venue_id',   vpVenueId);
-    addHidden('package_id', vpPackageId);
-    addHidden('event_date', vpEventDate);
-    addHidden('start_time', '18:00:00');
-    addHidden('end_time',   '22:00:00');
-    addHidden('guest_count','100');
-    addHidden('event_name', 'Event at Venue #' + vpVenueId);
-    addHidden('duration_hours','4');
+    addHidden('venue_id',       vpVenueId);
+    addHidden('package_id',     vpPackageId);
+    addHidden('caterer_id',     '<?= $catererId ?>');
+    addHidden('event_date',     vpEventDate);
+    addHidden('start_time',     vpStart);
+    addHidden('end_time',       vpEnd);
+    addHidden('guest_count',    vpGuests);
+    addHidden('guests',         vpGuests);
+    addHidden('event_name',     'Event at ' + (document.getElementById('summary-venue-name')?.textContent || ('Venue #' + vpVenueId)));
+    addHidden('duration_hours', vpDuration);
   }
 
   // Clear session on successful booking
@@ -592,6 +661,9 @@ document.addEventListener('DOMContentLoaded', function() {
     sessionStorage.removeItem('vp_venue_id');
     sessionStorage.removeItem('vp_package_id');
     sessionStorage.removeItem('vp_event_date');
+    sessionStorage.removeItem('vp_date');
+    sessionStorage.removeItem('vp_guests');
+    sessionStorage.removeItem('vp_guest_count');
   });
 });
 </script>

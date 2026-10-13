@@ -190,6 +190,12 @@ small { font-size: .75rem; }
   font-size: .6rem; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
+.topbar-icon-btn .badge:empty,
+.topbar-icon-btn .badge[data-count="0"],
+.badge:empty,
+.badge[data-count="0"] {
+  display: none !important;
+}
 .topbar-user {
   display: flex; align-items: center; gap: 10px;
   padding-left: 12px; border-left: 1px solid var(--gray-200);
@@ -581,11 +587,14 @@ tbody tr:hover td { background: var(--gray-50); }
 .progress-fill.gray { background: var(--gray-400); }
 
 /* ── Charts (CSS-only) ── */
-.bar-chart { display: flex; align-items: flex-end; gap: 12px; height: 180px; }
-.bar-col { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; }
-.bar { width: 100%; border-radius: 4px 4px 0 0; background: var(--primary); opacity: .4; transition: opacity var(--transition); }
-.bar.active { opacity: 1; }
-.bar-label { font-size: .7rem; color: var(--gray-500); }
+.bar-chart { display: flex; align-items: flex-end; gap: 12px; height: 190px; padding: 10px 4px 0; }
+.bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; flex: 1; height: 100%; }
+.bar-track { width: 100%; height: 130px; display: flex; align-items: flex-end; justify-content: center; }
+.bar { width: 100%; max-width: 44px; min-height: 6px; border-radius: 6px 6px 0 0; background: #93c5fd; opacity: .85; transition: all var(--transition); cursor: pointer; }
+.bar:hover { opacity: 1; filter: brightness(1.08); transform: translateY(-2px); }
+.bar.active { background: var(--primary); opacity: 1; box-shadow: 0 3px 10px rgba(37, 99, 235, 0.3); }
+.bar-label { font-size: .72rem; color: var(--gray-500); font-weight: 600; margin-top: 2px; }
+.bar-val { font-size: .7rem; font-weight: 700; color: var(--navy-900); margin-bottom: 2px; white-space: nowrap; }
 
 /* ── Role Cards ── */
 .role-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 900px; width: 100%; }

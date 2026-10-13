@@ -76,7 +76,7 @@ $pendingCount = (int)$db->query("SELECT COUNT(*) FROM bookings WHERE booking_sta
         </div>
         <div class="topbar-actions">
           <a href="notification-center.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge"><?= $pendingCount ?></span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="admin-profile.php" class="topbar-user" style="text-decoration:none; cursor:pointer;" title="View & Edit My Profile">
@@ -100,9 +100,6 @@ $pendingCount = (int)$db->query("SELECT COUNT(*) FROM bookings WHERE booking_sta
           <div>
             <h1>User Governance &amp; Account Controls</h1>
             <p>Administer customer accounts and administrator privileges, with audit-safe removal and suspension.</p>
-          </div>
-          <div class="flex gap-12">
-            <a href="admin-signup.php" class="btn btn-primary btn-sm">+ Provision Administrator</a>
           </div>
         </div>
 

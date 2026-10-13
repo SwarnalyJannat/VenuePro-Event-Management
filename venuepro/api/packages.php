@@ -11,8 +11,21 @@ $db = getDBConnection();
 switch ($action) {
     case 'list':
         $tier = sanitize($_GET['tier'] ?? '');
-        $sql = "SELECT p.*, u.name AS caterer_name, cp.business_name FROM catering_packages p LEFT JOIN users u ON p.caterer_id = u.id LEFT JOIN caterer_profiles cp ON u.id = cp.user_id WHERE p.status = 'published'";
+        $catererId = (int)($_GET['caterer_id'] ?? 0);
+        $status = sanitize($_GET['status'] ?? 'published');
+
+        $sql = "SELECT p.*, u.name AS caterer_name, cp.business_name FROM catering_packages p LEFT JOIN users u ON p.caterer_id = u.id LEFT JOIN caterer_profiles cp ON u.id = cp.user_id WHERE 1=1";
         $params = [];
+
+        if (!empty($status) && $status !== 'all') {
+            $sql .= " AND p.status = ?";
+            $params[] = $status;
+        }
+
+        if ($catererId > 0) {
+            $sql .= " AND p.caterer_id = ?";
+            $params[] = $catererId;
+        }
 
         if (!empty($tier) && $tier !== 'All') {
             $sql .= " AND p.tier = ?";
@@ -77,8 +90,24 @@ switch ($action) {
 
         $stmt = $db->prepare("INSERT INTO catering_packages (caterer_id, title, tier, price_per_event, price_per_guest, min_guests, max_capacity, description, cuisine_type, service_style, features, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')");
         $stmt->execute([$user['id'], $title, $tier, $priceEvent, $priceGuest, $minGuests, $maxCapacity, $description, $cuisine, $service, $features]);
+        $packageId = (int)$db->lastInsertId();
 
-        jsonResponse(true, 'Catering package created successfully', ['package_id' => $db->lastInsertId()], 201);
+        if (!empty($input['courses']) && is_array($input['courses'])) {
+            $stmtItem = $db->prepare("INSERT INTO package_menu_items (package_id, course, item_name, unit_value) VALUES (?, ?, ?, ?)");
+            foreach ($input['courses'] as $course) {
+                $cTitle = !empty($course['title']) ? sanitize($course['title']) : 'Course 1';
+                if (!empty($course['items']) && is_array($course['items'])) {
+                    foreach ($course['items'] as $item) {
+                        $itemName = trim(sanitize($item));
+                        if ($itemName !== '') {
+                            $stmtItem->execute([$packageId, $cTitle, $itemName, 15.00]);
+                        }
+                    }
+                }
+            }
+        }
+
+        jsonResponse(true, 'Catering package created successfully', ['package_id' => $packageId], 201);
         break;
 
     case 'update':
@@ -95,6 +124,10 @@ switch ($action) {
         $pkg = $stmtChk->fetch();
         if (!$pkg) {
             jsonResponse(false, 'Package not found', null, 404);
+        }
+
+        if ($user['role'] === 'caterer' && (int)$pkg['caterer_id'] !== (int)$user['id']) {
+            jsonResponse(false, 'Unauthorized. You do not own this catering package.', null, 403);
         }
 
         $title = sanitize($input['title'] ?? '');
@@ -122,6 +155,32 @@ switch ($action) {
         }
 
         jsonResponse(true, 'Catering package updated successfully!');
+        break;
+
+    case 'delete':
+        requireRole(['caterer', 'admin']);
+        $user = getCurrentUser();
+        $input = !empty($_POST) ? $_POST : getJsonInput();
+        $id = (int)($input['id'] ?? ($_GET['id'] ?? 0));
+        if ($id <= 0) {
+            jsonResponse(false, 'Missing package ID', null, 400);
+        }
+
+        $stmtChk = $db->prepare("SELECT * FROM catering_packages WHERE id = ? LIMIT 1");
+        $stmtChk->execute([$id]);
+        $pkg = $stmtChk->fetch();
+        if (!$pkg) {
+            jsonResponse(false, 'Package not found', null, 404);
+        }
+
+        if ($user['role'] === 'caterer' && (int)$pkg['caterer_id'] !== (int)$user['id']) {
+            jsonResponse(false, 'Unauthorized. You do not own this catering package.', null, 403);
+        }
+
+        $stmtDel = $db->prepare("UPDATE catering_packages SET status = 'inactive' WHERE id = ?");
+        $stmtDel->execute([$id]);
+
+        jsonResponse(true, 'Catering package archived successfully.');
         break;
 
     default:

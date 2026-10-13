@@ -12,7 +12,7 @@ switch ($action) {
     case 'list':
         $status = sanitize($_GET['status'] ?? '');
         $sql = "SELECT u.id, u.name, u.email, u.phone, u.avatar_text,
-                       cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization,
+                       cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization, cp.assigned_venue,
                        cp.rating, cp.review_count, cp.approval_status
                 FROM users u
                 JOIN caterer_profiles cp ON u.id = cp.user_id
@@ -36,7 +36,7 @@ switch ($action) {
         }
         $stmt = $db->prepare(
             "SELECT u.id, u.name, u.email, u.phone, u.avatar_text,
-                    cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization,
+                    cp.business_name, cp.owner_name, cp.kitchen_address, cp.specialization, cp.assigned_venue,
                     cp.rating, cp.review_count, cp.approval_status
              FROM users u
              JOIN caterer_profiles cp ON u.id = cp.user_id
@@ -82,6 +82,12 @@ switch ($action) {
         $phone = sanitize($input['phone'] ?? '');
         $kitchenAddress = sanitize($input['kitchen_address'] ?? ($input['address'] ?? ''));
         $specialization = sanitize($input['specialization'] ?? 'Fine Dining');
+        $rawVenues = $input['assigned_venues'] ?? ($input['assigned_venue'] ?? ($input['primary_venue'] ?? ''));
+        if (is_array($rawVenues)) {
+            $assignedVenue = implode(', ', array_filter(array_map('trim', array_map('sanitize', $rawVenues))));
+        } else {
+            $assignedVenue = sanitize((string)$rawVenues);
+        }
         $password = $input['password'] ?? 'password123';
 
         if (empty($businessName) || empty($email)) {
@@ -102,8 +108,8 @@ switch ($action) {
         $stmtUser->execute([$ownerName ?: $businessName, $email, $hashed, $phone, $avatarText]);
         $newUserId = (int)$db->lastInsertId();
 
-        $stmtProfile = $db->prepare("INSERT INTO caterer_profiles (user_id, business_name, owner_name, kitchen_address, specialization, rating, review_count, approval_status) VALUES (?, ?, ?, ?, ?, 5.0, 1, 'approved')");
-        $stmtProfile->execute([$newUserId, $businessName, $ownerName, $kitchenAddress, $specialization]);
+        $stmtProfile = $db->prepare("INSERT INTO caterer_profiles (user_id, business_name, owner_name, kitchen_address, specialization, assigned_venue, rating, review_count, approval_status) VALUES (?, ?, ?, ?, ?, ?, 5.0, 1, 'approved')");
+        $stmtProfile->execute([$newUserId, $businessName, $ownerName, $kitchenAddress, $specialization, $assignedVenue]);
 
         jsonResponse(true, 'Caterer registered and approved successfully', ['caterer_id' => $newUserId], 201);
         break;
@@ -120,6 +126,12 @@ switch ($action) {
         $phone = sanitize($input['phone'] ?? '');
         $kitchenAddress = sanitize($input['kitchen_address'] ?? '');
         $specialization = sanitize($input['specialization'] ?? 'Fine Dining');
+        $rawVenues = $input['assigned_venues'] ?? ($input['assigned_venue'] ?? ($input['primary_venue'] ?? ''));
+        if (is_array($rawVenues)) {
+            $assignedVenue = implode(', ', array_filter(array_map('trim', array_map('sanitize', $rawVenues))));
+        } else {
+            $assignedVenue = sanitize((string)$rawVenues);
+        }
         $approvalStatus = sanitize($input['approval_status'] ?? 'approved');
         $status = sanitize($input['status'] ?? 'active');
 
@@ -142,11 +154,11 @@ switch ($action) {
         $stmtProfChk = $db->prepare("SELECT id FROM caterer_profiles WHERE user_id = ? LIMIT 1");
         $stmtProfChk->execute([$catererId]);
         if ($stmtProfChk->fetch()) {
-            $stmtProf = $db->prepare("UPDATE caterer_profiles SET business_name = ?, owner_name = ?, kitchen_address = ?, specialization = ?, approval_status = ? WHERE user_id = ?");
-            $stmtProf->execute([$businessName, $ownerName, $kitchenAddress, $specialization, $approvalStatus, $catererId]);
+            $stmtProf = $db->prepare("UPDATE caterer_profiles SET business_name = ?, owner_name = ?, kitchen_address = ?, specialization = ?, assigned_venue = ?, approval_status = ? WHERE user_id = ?");
+            $stmtProf->execute([$businessName, $ownerName, $kitchenAddress, $specialization, $assignedVenue, $approvalStatus, $catererId]);
         } else {
-            $stmtProf = $db->prepare("INSERT INTO caterer_profiles (user_id, business_name, owner_name, kitchen_address, specialization, approval_status) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmtProf->execute([$catererId, $businessName, $ownerName, $kitchenAddress, $specialization, $approvalStatus]);
+            $stmtProf = $db->prepare("INSERT INTO caterer_profiles (user_id, business_name, owner_name, kitchen_address, specialization, assigned_venue, approval_status) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmtProf->execute([$catererId, $businessName, $ownerName, $kitchenAddress, $specialization, $assignedVenue, $approvalStatus]);
         }
 
         jsonResponse(true, 'Caterer details updated successfully in the database.', ['caterer_id' => $catererId]);
@@ -168,7 +180,7 @@ switch ($action) {
             $hasOrders = (int)$stmtOrders->fetchColumn() > 0;
 
             if ($hasOrders) {
-                $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
+                $db->prepare("UPDATE users SET status = 'suspended' WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
                 $db->prepare("UPDATE caterer_profiles SET approval_status = 'rejected' WHERE user_id = ?")->execute([$catererId]);
             } else {
                 $db->prepare("DELETE FROM catering_packages WHERE caterer_id = ?")->execute([$catererId]);
@@ -177,7 +189,7 @@ switch ($action) {
             }
             jsonResponse(true, 'Caterer removed successfully from the database.');
         } catch (Exception $e) {
-            $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
+            $db->prepare("UPDATE users SET status = 'suspended' WHERE id = ? AND role = 'caterer'")->execute([$catererId]);
             $db->prepare("UPDATE caterer_profiles SET approval_status = 'rejected' WHERE user_id = ?")->execute([$catererId]);
             jsonResponse(true, 'Caterer deactivated and removed.');
         }

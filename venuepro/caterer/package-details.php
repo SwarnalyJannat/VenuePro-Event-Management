@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -8,15 +8,9 @@ $db = getDBConnection();
 $pkgId = (int)($_GET['id'] ?? 0);
 $pkg = null;
 if ($pkgId > 0) {
-    $stmt = $db->prepare("SELECT cp.*, u.name AS caterer_name FROM catering_packages cp LEFT JOIN users u ON cp.caterer_id = u.id WHERE cp.id = ? LIMIT 1");
-    $stmt->execute([$pkgId]);
+    $stmt = $db->prepare("SELECT cp.*, u.name AS caterer_name FROM catering_packages cp LEFT JOIN users u ON cp.caterer_id = u.id WHERE cp.id = ? AND cp.caterer_id = ? LIMIT 1");
+    $stmt->execute([$pkgId, $currentUser['id']]);
     $pkg = $stmt->fetch();
-}
-
-if (!$pkg) {
-    $stmt = $db->query("SELECT cp.*, u.name AS caterer_name FROM catering_packages cp LEFT JOIN users u ON cp.caterer_id = u.id ORDER BY cp.id ASC LIMIT 1");
-    $pkg = $stmt ? $stmt->fetch() : null;
-    $pkgId = $pkg ? (int)$pkg['id'] : 0;
 }
 
 if (!$pkg) {
@@ -109,7 +103,7 @@ $totalRevenue = (float)($stats['total_rev'] ?? 0);
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <div class="topbar-user">
@@ -174,15 +168,15 @@ $totalRevenue = (float)($stats['total_rev'] ?? 0);
                 </ul>
               <?php else: ?>
                 <div class="mb-16">
-                  <div class="font-bold text-sm text-primary mb-4">Course 1: Passed Hors d'oeuvres</div>
+                  <div class="font-bold text-sm text-primary mb-4">Course 1</div>
                   <p class="text-sm">Handcrafted canapés, artisanal mini tartlets, seasonal savory bites.</p>
                 </div>
                 <div class="mb-16">
-                  <div class="font-bold text-sm text-primary mb-4">Course 2: Plated Entree</div>
+                  <div class="font-bold text-sm text-primary mb-4">Course 2</div>
                   <p class="text-sm">Premium cut entrees with gourmet sides, seasonal greens, and dietary accommodations.</p>
                 </div>
                 <div>
-                  <div class="font-bold text-sm text-primary mb-4">Course 3: Dessert &amp; Coffee</div>
+                  <div class="font-bold text-sm text-primary mb-4">Course 3</div>
                   <p class="text-sm">Artisan pastry selection, dessert station, and roasted espresso bar service.</p>
                 </div>
               <?php endif; ?>

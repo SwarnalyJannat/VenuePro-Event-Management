@@ -1,9 +1,37 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/helpers.php';
 $currentUser = getCurrentUser();
 $db = getDBConnection();
+
+$catererFilter = (int)($_GET['caterer_id'] ?? 0);
+
+// Fetch approved caterers offering active packages for filter tabs
+$stmtCaterers = $db->query("
+    SELECT DISTINCT u.id, u.name, cp.business_name, cp.assigned_venue
+    FROM users u
+    JOIN caterer_profiles cp ON u.id = cp.user_id
+    JOIN catering_packages pkg ON pkg.caterer_id = u.id
+    WHERE u.role = 'caterer' AND u.status = 'active' AND pkg.status IN ('published', 'active')
+    ORDER BY cp.business_name ASC
+");
+$caterersList = $stmtCaterers ? $stmtCaterers->fetchAll(PDO::FETCH_ASSOC) : [];
+
+$sqlPkgs = "SELECT cp.*, u.name AS caterer_name, pr.business_name, pr.assigned_venue
+    FROM catering_packages cp
+    LEFT JOIN users u ON cp.caterer_id = u.id
+    LEFT JOIN caterer_profiles pr ON u.id = pr.user_id
+    WHERE cp.status IN ('published', 'active')";
+$pkgParams = [];
+if ($catererFilter > 0) {
+    $sqlPkgs .= " AND cp.caterer_id = ?";
+    $pkgParams[] = $catererFilter;
+}
+$sqlPkgs .= " ORDER BY cp.price_per_event ASC";
+$stmtPkgs = $db->prepare($sqlPkgs);
+$stmtPkgs->execute($pkgParams);
+$packages = $stmtPkgs ? $stmtPkgs->fetchAll(PDO::FETCH_ASSOC) : [];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -113,80 +141,73 @@ $db = getDBConnection();
       <a href="venues.php" class="btn btn-outline btn-sm">Explore Venues →</a>
     </div>
 
+    <?php if (count($caterersList) > 1 || $catererFilter > 0): ?>
+    <div class="flex gap-8 mb-24 flex-wrap" style="align-items:center;">
+      <span class="text-xs font-bold text-muted">Filter by Caterer:</span>
+      <a href="packages.php"
+         class="btn btn-sm <?= $catererFilter <= 0 ? 'btn-primary' : 'btn-outline' ?>"
+         style="border-radius:20px; font-size:0.75rem; padding:4px 14px;">
+        All Caterers (<?= count($caterersList) ?>)
+      </a>
+      <?php foreach ($caterersList as $cat): ?>
+      <a href="packages.php?caterer_id=<?= $cat['id'] ?>"
+         class="btn btn-sm <?= $catererFilter === (int)$cat['id'] ? 'btn-primary' : 'btn-outline' ?>"
+         style="border-radius:20px; font-size:0.75rem; padding:4px 14px;">
+        👨‍🍳 <?= e($cat['business_name'] ?: $cat['name']) ?>
+      </a>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
     <div class="packages-grid mb-32">
-      <!-- Card 1 -->
-      <div class="package-card">
+      <?php if (empty($packages)): ?>
+      <div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--gray-400);">No catering packages currently available from this caterer.</div>
+      <?php else:
+      $tierStyles = [
+        0 => ['class' => 'package-card',                'badge' => 'CLASSIC TIER',    'badge_class' => 'stat-badge neutral mb-8', 'btn' => 'btn btn-outline btn-full btn-sm font-semibold'],
+        1 => ['class' => 'package-card highlight',       'badge' => 'MOST REQUESTED',  'badge_class' => 'stat-badge positive mb-8', 'btn' => 'btn btn-primary btn-full btn-sm font-semibold'],
+        2 => ['class' => 'package-card signature-tier',  'badge' => "CHEF'S TASTING",  'badge_class' => 'stat-badge neutral mb-8" style="background:#ede9fe; color:#6d28d9;', 'btn' => 'btn btn-outline btn-full btn-sm font-semibold" style="border-color:#8b5cf6; color:#6d28d9;'],
+      ];
+      foreach ($packages as $pi => $pkg):
+        $st = $tierStyles[$pi % 3];
+        $ppEvent = number_format((float)($pkg['price_per_event'] ?? 0), 0);
+        $minG = (int)($pkg['min_guests'] ?? 30);
+        $perHead = $minG > 0 ? number_format((float)($pkg['price_per_event'] ?? 0) / $minG, 2) : '0.00';
+        $features = [];
+        if (!empty($pkg['features'])) {
+            $features = is_array($pkg['features']) ? $pkg['features'] : (json_decode($pkg['features'], true) ?: []);
+        }
+        if (empty($features)) {
+            $features = ['Multi-course chef preparation', 'Artisanal beverage service', 'Complete banquet setup & linens'];
+        }
+      ?>
+      <div class="<?= $st['class'] ?>">
         <div>
           <div class="pkg-header">
-            <span class="stat-badge neutral mb-8">CLASSIC TIER</span>
-            <div class="pkg-title">Gold Package</div>
+            <div class="flex-between mb-8" style="align-items:center;">
+              <span class="<?= $st['badge_class'] ?>" style="margin-bottom:0;"><?= $st['badge'] ?></span>
+              <span class="pill pill-pending" style="font-size:0.68rem; font-weight:700;">👨‍🍳 <?= e($pkg['business_name'] ?: ($pkg['caterer_name'] ?: 'Culinary Partner')) ?></span>
+            </div>
+            <div class="pkg-title"><?= e($pkg['title']) ?></div>
             <div class="pkg-price-block">
-              <div class="pkg-price">$1,200 <small class="text-muted" style="font-size:0.8rem; font-weight:500;">/ event</small></div>
-              <div class="pkg-subprice">$24.00 per guest · Min 30 guests</div>
+              <div class="pkg-price">$<?= $ppEvent ?> <small class="text-muted" style="font-size:0.8rem; font-weight:500;">/ event</small></div>
+              <div class="pkg-subprice">$<?= $perHead ?> per guest · Min <?= $minG ?> guests</div>
             </div>
           </div>
-          <div class="pkg-desc">Perfect for daytime corporate seminars, executive luncheons, and symposium sessions.</div>
+          <div class="pkg-desc"><?= e($pkg['description'] ?? '') ?></div>
           <ul class="pkg-features">
-            <li><span>✓</span> 2-Course Gourmet Plated Lunch</li>
-            <li><span>✓</span> Artisanal Coffee &amp; Herbal Tea Lounge</li>
-            <li><span>✓</span> Passed Seasonal Finger Foods &amp; Canapés</li>
-            <li><span>✓</span> Standard Banquet Table Settings &amp; Linens</li>
+            <?php foreach (array_slice($features, 0, 4) as $feat): ?>
+            <li><span>✓</span> <?= e($feat) ?></li>
+            <?php endforeach; ?>
           </ul>
         </div>
         <div>
-          <a href="#signin-modal" class="btn btn-outline btn-full btn-sm font-semibold">🔒 Sign In to Order</a>
+          <a href="#signin-modal" class="<?= $st['btn'] ?>">🔒 Sign In to Order</a>
         </div>
       </div>
+      <?php endforeach; endif; ?>
 
-      <!-- Card 2 -->
-      <div class="package-card highlight">
-        <div>
-          <div class="pkg-header">
-            <span class="stat-badge positive mb-8">MOST REQUESTED</span>
-            <div class="pkg-title">Platinum Package</div>
-            <div class="pkg-price-block">
-              <div class="pkg-price">$1,850 <small class="text-muted" style="font-size:0.8rem; font-weight:500;">/ event</small></div>
-              <div class="pkg-subprice">$37.00 per guest · Min 50 guests</div>
-            </div>
-          </div>
-          <div class="pkg-desc">Full gala dining experience with open bar mixology, table service, and sommelier curation.</div>
-          <ul class="pkg-features">
-            <li><span>✓</span> 3-Course Fine Dining Plated Dinner</li>
-            <li><span>✓</span> 4-Hour Premium Open Bar &amp; Wine Curation</li>
-            <li><span>✓</span> Executive Chef's Signature Dessert Trio</li>
-            <li><span>✓</span> VIP Green Room Cocktail &amp; Canapés Service</li>
-          </ul>
-        </div>
-        <div>
-          <a href="#signin-modal" class="btn btn-primary btn-full btn-sm font-semibold">🔒 Sign In to Order</a>
-        </div>
-      </div>
-
-      <!-- Card 3 -->
-      <div class="package-card signature-tier">
-        <div>
-          <div class="pkg-header">
-            <span class="stat-badge neutral mb-8" style="background:#ede9fe; color:#6d28d9;">CHEF'S TASTING</span>
-            <div class="pkg-title">Custom Signature</div>
-            <div class="pkg-price-block">
-              <div class="pkg-price">$2,400 <small class="text-muted" style="font-size:0.8rem; font-weight:500;">/ event</small></div>
-              <div class="pkg-subprice">$48.00 per guest · Min 40 guests</div>
-            </div>
-          </div>
-          <div class="pkg-desc">Fixed 5-course private tasting banquet curated and orchestrated by Master Chef Alex Rivera.</div>
-          <ul class="pkg-features">
-            <li><span>✓</span> 5-Course Wine-Paired Fine Dining Menu</li>
-            <li><span>✓</span> Executive Head Chef Live at Captain's Table</li>
-            <li><span>✓</span> Midnight Savory Bites &amp; Nightcap Station</li>
-            <li><span>✓</span> Artisanal Organic Farmstead Ingredients</li>
-          </ul>
-        </div>
-        <div>
-          <a href="#signin-modal" class="btn btn-outline btn-full btn-sm font-semibold" style="border-color:#8b5cf6; color:#6d28d9;">🔒 Sign In to Order</a>
-        </div>
-      </div>
-
-      <!-- Card 4 -->
+      <!-- Card 4: Bespoke Custom Hybrid Package -->
       <div class="package-card custom-tier">
         <div>
           <div class="pkg-header">

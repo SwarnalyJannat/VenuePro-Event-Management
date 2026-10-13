@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -16,6 +16,7 @@ $stmtAO = $db->prepare(
      JOIN venues v ON b.venue_id = v.id
      LEFT JOIN catering_packages cp ON b.package_id = cp.id
      WHERE co.caterer_id = ?
+       AND b.booking_status IN ('confirmed', 'completed')
        AND co.package_decision = 'accepted'
        AND (co.preparation_status IS NULL OR co.preparation_status != 'Delivered')
      ORDER BY b.event_date ASC
@@ -28,8 +29,20 @@ $activeOrders = $stmtAO->fetchAll();
 $totalActive  = count($activeOrders);
 $readyCount   = 0;
 foreach ($activeOrders as $o) {
-    if (($o['preparation_status'] ?? '') === 'Ready') $readyCount++;
+    if (($o['preparation_status'] ?? '') === 'Ready' || ($o['preparation_status'] ?? '') === 'Delivering') $readyCount++;
 }
+
+// Completed orders count
+$stmtComp = $db->prepare(
+    "SELECT COUNT(*) 
+     FROM caterer_orders co 
+     JOIN bookings b ON co.booking_id = b.id 
+     WHERE co.caterer_id = ? 
+       AND co.preparation_status = 'Completed' 
+       AND b.booking_status IN ('confirmed', 'completed')"
+);
+$stmtComp->execute([$currentUser['id']]);
+$compCount = (int)$stmtComp->fetchColumn();
 
 // Recent orders (last 8 regardless of status)
 $stmtRO = $db->prepare(
@@ -40,6 +53,7 @@ $stmtRO = $db->prepare(
      JOIN venues v ON b.venue_id = v.id
      LEFT JOIN catering_packages cp ON b.package_id = cp.id
      WHERE co.caterer_id = ?
+       AND b.booking_status IN ('confirmed', 'completed')
      ORDER BY co.id DESC
      LIMIT 8"
 );
@@ -126,7 +140,7 @@ function decisionPill($d) {
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <div class="topbar-user">
@@ -152,7 +166,7 @@ function decisionPill($d) {
   <div class="stat-card green"><div class="stat-label">Active Orders</div><div class="stat-value"><?= $totalActive ?></div></div>
   <div class="stat-card"><div class="stat-label">Ready for Dispatch</div><div class="stat-value"><?= $readyCount ?></div></div>
   <div class="stat-card orange"><div class="stat-label">Total Packages</div><div class="stat-value"><?= count($recentOrders) ?></div></div>
-  <div class="stat-card"><div class="stat-label">Completed This Week</div><div class="stat-value">—</div></div>
+  <div class="stat-card"><div class="stat-label">Completed Orders</div><div class="stat-value"><?= $compCount ?></div></div>
 </div>
 
 <!-- Active Kitchen Queue (DB-connected) -->

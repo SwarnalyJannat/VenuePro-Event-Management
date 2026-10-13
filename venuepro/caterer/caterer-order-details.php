@@ -8,9 +8,12 @@ $db = getDBConnection();
 <?php
 $catUser = $currentUser;
 $orderId = (int)($_GET['order_id'] ?? 0);
+$bookingId = (int)($_GET['booking_id'] ?? 0);
+$orderCodeParam = sanitize($_GET['order_code'] ?? ($_GET['code'] ?? ''));
+
 $orderDetail = null; $singularItems = [];
 
-// Fetch all pending/in-progress orders for this caterer (for selector)
+// Fetch all confirmed/completed orders for this caterer (for selector)
 $stmtOrds = $db->prepare(
     "SELECT co.*, b.event_name, b.event_date, b.start_time, b.end_time, b.guest_count, b.total_amount,
      v.name AS venue_name, cp.title AS package_title, cp.price_per_event AS package_cost,
@@ -21,38 +24,66 @@ $stmtOrds = $db->prepare(
      LEFT JOIN catering_packages cp ON b.package_id = cp.id
      JOIN users u ON b.customer_id = u.id
      WHERE co.caterer_id = ?
+       AND b.booking_status IN ('confirmed', 'completed')
      ORDER BY b.event_date ASC"
 );
 $stmtOrds->execute([$catUser['id']]);
 $allOrders = $stmtOrds->fetchAll();
 
-if ($orderId > 0) {
-    foreach ($allOrders as $o) {
-        if ((int)$o['id'] === $orderId) { $orderDetail = $o; break; }
+if (!empty($allOrders)) {
+    if ($orderId > 0) {
+        foreach ($allOrders as $o) {
+            if ((int)$o['id'] === $orderId) { $orderDetail = $o; break; }
+        }
+    } elseif ($bookingId > 0) {
+        foreach ($allOrders as $o) {
+            if ((int)$o['booking_id'] === $bookingId) { $orderDetail = $o; break; }
+        }
+    } elseif (!empty($orderCodeParam)) {
+        $cleanCode = ltrim($orderCodeParam, '#');
+        foreach ($allOrders as $o) {
+            if (strcasecmp($o['order_code'], $cleanCode) === 0) { $orderDetail = $o; break; }
+        }
     }
-}
-if (!$orderDetail && !empty($allOrders)) {
-    $orderDetail = $allOrders[0];
+    if (!$orderDetail) {
+        $orderDetail = $allOrders[0];
+    }
     $orderId = (int)$orderDetail['id'];
 }
+$selectedCode = $orderDetail ? $orderDetail['order_code'] : '';
+
 $jsOrderStore = [];
 foreach ($allOrders as $ord) {
     $code = $ord['order_code'];
-    $stmtItems = $db->prepare("SELECT * FROM booking_singular_items WHERE booking_id = ?");
+    $stmtItems = $db->prepare("
+        SELECT bsi.*, smi.quantity_available AS current_stock, smi.image_url AS smi_image_url
+        FROM booking_singular_items bsi
+        LEFT JOIN singular_menu_items smi ON bsi.singular_item_id = smi.id
+        WHERE bsi.booking_id = ?
+    ");
     $stmtItems->execute([$ord['booking_id']]);
     $bItems = $stmtItems->fetchAll();
 
     $singItems = [];
     foreach ($bItems as $bi) {
+        $hasStockRef = !is_null($bi['current_stock']);
+        $currentStock = $hasStockRef ? (int)$bi['current_stock'] : null;
+        $orderQty = (int)$bi['quantity'];
+        $stockOk = $hasStockRef ? ($orderQty <= $currentStock) : true;
+
         $singItems[] = [
-            'id' => (int)$bi['id'],
-            'name' => $bi['item_name'],
-            'emoji' => $bi['emoji'] ?? '🍽️',
-            'diet' => $bi['dietary_tag'] ?? '',
-            'qty' => (int)$bi['quantity'],
-            'unitPrice' => (float)$bi['unit_price'],
-            'note' => $bi['notes'] ?? '',
-            'status' => $bi['item_status'] ?? 'Pending'
+            'id'             => (int)$bi['id'],
+            'name'           => $bi['item_name'],
+            'emoji'          => $bi['emoji'] ?? '🍽️',
+            'imageUrl'       => !empty($bi['image_url']) ? $bi['image_url'] : ($bi['smi_image_url'] ?? ''),
+            'diet'           => $bi['dietary_tag'] ?? '',
+            'qty'            => $orderQty,
+            'unitPrice'      => (float)$bi['unit_price'],
+            'note'           => $bi['notes'] ?? '',
+            'status'         => $bi['item_status'] ?? 'Pending',
+            'hasStockRef'    => $hasStockRef,
+            'stockAvailable' => $currentStock,
+            'stockOk'        => $stockOk
         ];
     }
 
@@ -70,6 +101,7 @@ foreach ($allOrders as $ord) {
         'status' => $ord['preparation_status'] ?? 'Preparing',
         'total' => 'Total: $' . number_format($ord['total_amount'], 2),
         'packageDecision' => $ord['package_decision'] ?? 'Pending',
+        'rejectionReason' => $ord['rejection_reason'] ?? '',
         'packagePrice' => '$' . number_format($ord['package_cost'] ?? 1200, 2),
         'packageDesc' => 'Package dining service and presentation for ' . $ord['guest_count'] . ' guests.',
         'singularItems' => $singItems
@@ -193,6 +225,7 @@ foreach ($allOrders as $ord) {
       font-size: 1.8rem;
       flex-shrink: 0;
       border: 1px solid var(--gray-200);
+      overflow: hidden;
     }
     .si-info {
       flex: 1;
@@ -343,7 +376,7 @@ foreach ($allOrders as $ord) {
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <div class="topbar-user">
@@ -381,13 +414,15 @@ foreach ($allOrders as $ord) {
             <div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--gray-400);">No orders assigned to your kitchen at this time.</div>
             <?php else: foreach ($allOrders as $idx => $ord): 
               $code = $ord['order_code'];
-              $isFirst = $idx === 0;
+              $isActive = ($code === $selectedCode);
+              $dec = $ord['package_decision'] ?? 'Pending';
+              $badgeClass = ($dec === 'Accepted') ? 'pill-confirmed' : (($dec === 'Rejected') ? 'pill-canceled' : 'pill-inquiry');
             ?>
-            <div id="ocard-<?= e($code) ?>" class="order-select-card <?= $isFirst ? 'active' : '' ?>" onclick="loadOrder('<?= e($code) ?>')">
+            <div id="ocard-<?= e($code) ?>" class="order-select-card <?= $isActive ? 'active' : '' ?>" onclick="loadOrder('<?= e($code) ?>')">
               <div class="flex-between mb-2">
                 <span class="font-bold text-primary" style="font-size:1.05rem;">#<?= e($code) ?></span>
-                <span id="olist-badge-<?= e($code) ?>" class="pill pill-<?= $ord['package_decision']==='Accepted' ? 'confirmed' : 'cancelled' ?>" style="font-size:0.65rem;">
-                  <?= $ord['package_decision']==='Accepted' ? 'Accepted' : 'Rejected' ?>
+                <span id="olist-badge-<?= e($code) ?>" class="pill <?= $badgeClass ?>" style="font-size:0.65rem;">
+                  <?= e($dec) ?>
                 </span>
               </div>
               <div class="font-semibold text-xs" style="color:var(--navy-900);"><?= e($ord['event_name']) ?></div>
@@ -400,18 +435,25 @@ foreach ($allOrders as $ord) {
         <!-- Order Header Card -->
         <div class="order-header-card">
           <div>
-            <div id="order-header-id" class="order-header-id">#ORD-2045</div>
+            <div id="order-header-id" class="order-header-id">#<?= e($selectedCode ?: 'ORD-0000') ?></div>
             <div id="order-header-meta" class="order-header-meta">
-              <div class="order-meta-item">🎉 <strong id="meta-event">Annual Gala Night</strong></div>
-              <div class="order-meta-item">🏛️ <strong id="meta-venue">Grand Ballroom, Floor 3</strong></div>
-              <div class="order-meta-item">📅 <strong id="meta-date">Sep 14, 2026</strong></div>
-              <div class="order-meta-item">⏰ <strong id="meta-time">7:00 PM – 11:00 PM</strong></div>
-              <div class="order-meta-item">👥 <strong id="meta-guests">320 Guests</strong></div>
+              <div class="order-meta-item">🎉 <strong id="meta-event"><?= e($orderDetail['event_name'] ?? 'Event') ?></strong></div>
+              <div class="order-meta-item">🏛️ <strong id="meta-venue"><?= e($orderDetail['venue_name'] ?? 'Venue') ?></strong></div>
+              <div class="order-meta-item">📅 <strong id="meta-date"><?= !empty($orderDetail['event_date']) ? date('M j, Y', strtotime($orderDetail['event_date'])) : '—' ?></strong></div>
+              <div class="order-meta-item">⏰ <strong id="meta-time"><?= !empty($orderDetail['start_time']) ? (substr($orderDetail['start_time'],0,5) . ' – ' . substr($orderDetail['end_time'],0,5)) : '—' ?></strong></div>
+              <div class="order-meta-item">👥 <strong id="meta-guests"><?= (int)($orderDetail['guest_count'] ?? 0) ?> Guests</strong></div>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;">
-            <span id="order-status-badge" class="pill pill-in-progress" style="font-size:0.85rem; padding:6px 14px;">Preparing</span>
-            <span class="text-xs" style="color:#94a3b8;">Package: <strong id="meta-package" style="color:#fff;">Gold Package</strong></span>
+            <div class="flex-center gap-8">
+              <span class="text-xs" style="color:#cbd5e1;">Prep Status:</span>
+              <select id="order-prep-select" class="form-control text-xs" style="width:auto; padding:4px 10px; background:#1e293b; color:#6ee7b7; border-color:#475569; border-radius:6px; font-weight:700; cursor:pointer;" onchange="changePrepStatus(this.value)">
+                <option value="Preparing" <?= ($orderDetail['preparation_status'] ?? '') === 'Preparing' ? 'selected' : '' ?>>Preparing</option>
+                <option value="Delivering" <?= ($orderDetail['preparation_status'] ?? '') === 'Delivering' ? 'selected' : '' ?>>Delivering</option>
+                <option value="Completed" <?= ($orderDetail['preparation_status'] ?? '') === 'Completed' ? 'selected' : '' ?>>Completed</option>
+              </select>
+            </div>
+            <span class="text-xs" style="color:#94a3b8;">Package: <strong id="meta-package" style="color:#fff;"><?= e($orderDetail['package_title'] ?? 'Custom Package') ?></strong></span>
           </div>
         </div>
 
@@ -423,8 +465,8 @@ foreach ($allOrders as $ord) {
             <div class="flex-center gap-8">
               <span style="font-size:1.4rem;">📦</span>
               <div>
-                <h3 style="font-size:1.15rem; font-weight:800; margin:0;" id="pkg-card-title">Catering Package Order: Gold Package</h3>
-                <div class="text-xs text-muted" id="pkg-card-subtitle">Covers 320 guests · Base package order submitted by customer</div>
+                <h3 style="font-size:1.15rem; font-weight:800; margin:0;" id="pkg-card-title">Catering Package Order: <?= e($orderDetail['package_title'] ?? 'Custom Package') ?></h3>
+                <div class="text-xs text-muted" id="pkg-card-subtitle">Covers <?= (int)($orderDetail['guest_count'] ?? 0) ?> guests · Base package order submitted by customer</div>
               </div>
             </div>
             <span id="pkg-status-badge" class="pill pill-inquiry" style="font-size:0.8rem; padding:4px 12px; font-weight:700;">PENDING REVIEW</span>
@@ -436,7 +478,7 @@ foreach ($allOrders as $ord) {
                 Includes full multi-course plated dining service, staff coordination, and banquet equipment setup.
               </div>
               <div class="text-xs text-muted">
-                Package Value: <strong class="text-primary font-bold" id="pkg-card-price" style="font-size:1rem;">$13,260.00</strong>
+                Package Value: <strong class="text-primary font-bold" id="pkg-card-price" style="font-size:1rem;">$<?= number_format((float)($orderDetail['package_cost'] ?? 1200), 2) ?></strong>
               </div>
             </div>
 
@@ -446,7 +488,7 @@ foreach ($allOrders as $ord) {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 Accept Package
               </button>
-              <button type="button" class="btn-reject" id="btn-pkg-reject" onclick="decidePackage('Rejected')">
+              <button type="button" class="btn-reject" id="btn-pkg-reject" onclick="togglePkgRejectBox()">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 Reject Package
               </button>
@@ -457,11 +499,12 @@ foreach ($allOrders as $ord) {
           <div id="pkg-feedback-box" style="margin-top:14px; display:none; padding:10px 14px; border-radius:var(--radius-sm); font-size:0.85rem;"></div>
 
           <!-- Optional Rejection Reason Box -->
-          <div id="pkg-reject-box" style="margin-top:12px; display:none;">
-            <label class="form-label text-xs">Reason for rejection (shared with customer &amp; event coordinator):</label>
-            <div class="flex gap-8 mt-4">
+          <div id="pkg-reject-box" style="margin-top:12px; display:none; background:#fef2f2; border:1px solid #fca5a5; padding:14px; border-radius:var(--radius-sm);">
+            <label class="form-label text-xs font-bold" style="color:#991b1b;">Reason for rejection (shared with customer &amp; event coordinator):</label>
+            <div class="flex gap-8 mt-6">
               <input type="text" class="form-control text-sm" id="pkg-reject-reason" placeholder="e.g., Kitchen capacity full for this date / ingredients unavailable...">
-              <button type="button" class="btn btn-outline btn-sm font-bold" onclick="savePkgRejectReason()">Save Note</button>
+              <button type="button" class="btn btn-sm font-bold" style="background:#dc2626; color:#fff;" onclick="savePkgRejectReason()">Confirm Rejection</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="cancelPkgRejectBox()">Cancel</button>
             </div>
           </div>
         </div>
@@ -474,11 +517,11 @@ foreach ($allOrders as $ord) {
             <div>
               <div class="flex-center gap-8">
                 <span style="font-size:1.4rem;">🍽️</span>
-                <h3 style="font-size:1.15rem; font-weight:800; margin:0;">Customer Add-On Singular Items</h3>
-                <span class="pill pill-inquiry" id="si-count-badge" style="font-size:0.75rem;">4 Items</span>
+                <h3 style="font-size:1.15rem; font-weight:800; margin:0;">Customer Singular Items &amp; Custom Selected Dishes</h3>
+                <span class="pill pill-inquiry" id="si-count-badge" style="font-size:0.75rem;">0 Items</span>
               </div>
               <div class="text-xs text-muted mt-4">
-                The customer ordered these specific singular items alongside the main package. Accept or reject each item according to inventory.
+                The customer ordered these specific singular items and/or custom package dishes across tiers. Accept or reject each dish according to culinary kitchen inventory and prep capacity.
               </div>
             </div>
 
@@ -502,11 +545,11 @@ foreach ($allOrders as $ord) {
           <div style="background:#f8fafc; border:1px solid var(--gray-200); border-radius:var(--radius-sm); padding:14px 18px; margin-top:16px;">
             <div class="flex-between text-sm mb-4">
               <span class="text-muted">Total Add-Ons Requested:</span>
-              <strong id="si-total-requested">$755.00</strong>
+              <strong id="si-total-requested">$0.00</strong>
             </div>
             <div class="flex-between text-sm mb-4" style="color:#166534;">
               <span>Accepted Add-Ons Revenue:</span>
-              <strong id="si-total-accepted">$210.00</strong>
+              <strong id="si-total-accepted">$0.00</strong>
             </div>
             <div class="flex-between text-sm" style="color:#991b1b;">
               <span>Rejected Add-Ons Excluded:</span>
@@ -558,9 +601,19 @@ foreach ($allOrders as $ord) {
   </div>
 
   <script>
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     // Master data store populated dynamically from MySQL database
     const orderStore = <?= json_encode($jsOrderStore, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
-    let activeOrderKey = Object.keys(orderStore)[0] || "";
+    let activeOrderKey = <?= json_encode($selectedCode) ?> || Object.keys(orderStore)[0] || "";
 
     // -------------------------------------------------------------
     // LOAD ORDER FUNCTION
@@ -587,14 +640,9 @@ foreach ($allOrders as $ord) {
       document.getElementById('meta-time').innerText = order.time;
       document.getElementById('meta-guests').innerText = order.guests;
       document.getElementById('meta-package').innerText = order.package;
-      const pcb = document.getElementById('package-covers-badge');
-      if (pcb) pcb.innerText = order.coversText;
-      const otd = document.getElementById('order-total-display');
-      if (otd) otd.innerText = order.total;
 
-      const badge = document.getElementById('order-status-badge');
-      badge.innerText = order.status;
-      badge.className = order.status === 'Delivering' ? 'pill pill-confirmed' : 'pill pill-in-progress';
+      const prepSelect = document.getElementById('order-prep-select');
+      if (prepSelect) prepSelect.value = order.status;
 
       // 1. Render Package Decision Card
       renderPackageDecision();
@@ -604,6 +652,34 @@ foreach ($allOrders as $ord) {
 
       // 3. Update Dynamically Calculated Total Revenue
       updateTotalRevenue();
+
+      // Keep browser URL aligned
+      try {
+        history.replaceState(null, '', 'caterer-order-details.php?order_code=' + encodeURIComponent(key));
+      } catch(e) {}
+    }
+
+    // -------------------------------------------------------------
+    // PREPARATION STATUS
+    // -------------------------------------------------------------
+    async function changePrepStatus(newStatus) {
+      const order = orderStore[activeOrderKey];
+      if (!order) return;
+      try {
+        const res = await fetch('../api/caterer-orders.php?action=update_prep_status', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ order_id: order.orderDbId, status: newStatus })
+        });
+        const d = await res.json();
+        if (d.success) {
+          order.status = newStatus;
+        } else {
+          alert(d.message || 'Could not update status');
+        }
+      } catch(e) {
+        alert('Connection error');
+      }
     }
 
     // -------------------------------------------------------------
@@ -611,6 +687,7 @@ foreach ($allOrders as $ord) {
     // -------------------------------------------------------------
     function renderPackageDecision() {
       const order = orderStore[activeOrderKey];
+      if (!order) return;
       const card = document.getElementById('pkg-decision-card');
       const title = document.getElementById('pkg-card-title');
       const subtitle = document.getElementById('pkg-card-subtitle');
@@ -630,32 +707,43 @@ foreach ($allOrders as $ord) {
       card.classList.remove('accepted', 'rejected');
       btnAccept.classList.remove('active');
       btnReject.classList.remove('active');
+      btnAccept.disabled = false;
+      btnReject.disabled = false;
       rejectBox.style.display = 'none';
 
       if (order.packageDecision === 'Accepted') {
         card.classList.add('accepted');
         statusBadge.className = 'pill pill-confirmed';
-        statusBadge.textContent = 'PACKAGE ACCEPTED';
+        statusBadge.textContent = 'ACCEPTED';
         btnAccept.classList.add('active');
+        btnAccept.title = 'Package is currently Accepted';
+        btnReject.title = 'Click to switch decision to Rejected';
         feedback.style.display = 'block';
         feedback.style.background = '#dcfce7';
         feedback.style.border = '1px solid #86efac';
         feedback.style.color = '#166534';
-        feedback.innerHTML = '✓ <strong>Package Accepted!</strong> Kitchen preparation and scheduling are confirmed for this event.';
+        feedback.innerHTML = '✓ <strong>Package Accepted</strong>: Kitchen preparation and scheduling are confirmed.';
       } else if (order.packageDecision === 'Rejected') {
         card.classList.add('rejected');
         statusBadge.className = 'pill pill-canceled';
-        statusBadge.textContent = 'PACKAGE REJECTED';
+        statusBadge.textContent = 'REJECTED';
         btnReject.classList.add('active');
+        btnReject.title = 'Package is currently Rejected';
+        btnAccept.title = 'Click to switch decision to Accepted';
         rejectBox.style.display = 'block';
+        if (document.getElementById('pkg-reject-reason')) {
+          document.getElementById('pkg-reject-reason').value = order.rejectionReason || '';
+        }
         feedback.style.display = 'block';
         feedback.style.background = '#fee2e2';
         feedback.style.border = '1px solid #fca5a5';
         feedback.style.color = '#991b1b';
-        feedback.innerHTML = '✕ <strong>Package Rejected.</strong> Customer and Venue Staff have been notified to arrange alternatives.';
+        feedback.innerHTML = '✕ <strong>Package Rejected</strong>' + (order.rejectionReason ? ': ' + escapeHtml(order.rejectionReason) : '.');
       } else {
         statusBadge.className = 'pill pill-inquiry';
         statusBadge.textContent = 'PENDING REVIEW';
+        btnAccept.title = 'Accept this package';
+        btnReject.title = 'Reject this package';
         feedback.style.display = 'none';
       }
 
@@ -663,18 +751,24 @@ foreach ($allOrders as $ord) {
       updateSelectorBadge(activeOrderKey);
     }
 
-    async function decidePackage(decision) {
+    async function decidePackage(decision, reason) {
       const order = orderStore[activeOrderKey];
       if (!order) return;
       const orderId = order.orderDbId;
+      const reasonVal = (reason !== undefined) ? reason : (document.getElementById('pkg-reject-reason') ? document.getElementById('pkg-reject-reason').value : '');
       try {
         const res = await fetch('../api/caterer-orders.php?action=decide_package', {
           method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ order_id: orderId, decision: decision, reason: '' })
+          body: JSON.stringify({ order_id: orderId, decision: decision, reason: reasonVal })
         });
         const d = await res.json();
         if (d.success) {
           order.packageDecision = decision;
+          if (decision === 'Rejected') {
+            order.rejectionReason = reasonVal;
+          } else {
+            order.rejectionReason = '';
+          }
           renderPackageDecision();
         } else {
           alert(d.message || 'Could not save decision.');
@@ -682,21 +776,29 @@ foreach ($allOrders as $ord) {
       } catch(e) { alert('Connection error. Please try again.'); }
     }
 
-    async function savePkgRejectReason() {
+    function togglePkgRejectBox() {
+      const rejectBox = document.getElementById('pkg-reject-box');
+      if (rejectBox.style.display === 'block') {
+        const reason = document.getElementById('pkg-reject-reason') ? document.getElementById('pkg-reject-reason').value.trim() : '';
+        decidePackage('Rejected', reason);
+      } else {
+        rejectBox.style.display = 'block';
+        const inp = document.getElementById('pkg-reject-reason');
+        if (inp) inp.focus();
+      }
+    }
+
+    function cancelPkgRejectBox() {
+      const rejectBox = document.getElementById('pkg-reject-box');
       const order = orderStore[activeOrderKey];
-      if (!order) return;
-      const reason = document.getElementById('pkg-reject-reason') ? document.getElementById('pkg-reject-reason').value : '';
-      try {
-        const res = await fetch('../api/caterer-orders.php?action=decide_package', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ order_id: order.orderDbId, decision: 'Rejected', reason: reason })
-        });
-        const d = await res.json();
-        if (d.success) {
-          const fb = document.getElementById('pkg-feedback-box');
-          if (fb) { fb.innerHTML = '✕ <strong>Rejection reason saved.</strong>'; }
-        } else { alert(d.message || 'Could not save rejection reason.'); }
-      } catch(e) { alert('Connection error.'); }
+      if (order && order.packageDecision !== 'Rejected') {
+        rejectBox.style.display = 'none';
+      }
+    }
+
+    function savePkgRejectReason() {
+      const reason = document.getElementById('pkg-reject-reason') ? document.getElementById('pkg-reject-reason').value.trim() : '';
+      decidePackage('Rejected', reason);
     }
 
     // -------------------------------------------------------------
@@ -724,18 +826,44 @@ foreach ($allOrders as $ord) {
         const pillText = item.status === 'Accepted' ? 'ACCEPTED' : (item.status === 'Rejected' ? 'REJECTED' : 'PENDING');
         const dietHtml = item.diet ? `<span class="diet-tag ${item.diet === 'GF' ? 'diet-gf' : 'diet-veg'}">${item.diet}</span>` : '';
 
+        // Stock check: stockOk is set by decideSingularItem after API call; undefined = initial
+        const stockInsufficient = (item.stockOk === false);
+
+        // Image or emoji display
+        const mediaHtml = item.imageUrl
+          ? `<img src="${item.imageUrl}" alt="${escapeHtml(item.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`
+          : (item.emoji || '🍽️');
+
+        // Accept button state
+        let acceptBtnAttr, rejectBtnAttr;
+        if (stockInsufficient) {
+          acceptBtnAttr = `disabled style="opacity:0.45; cursor:not-allowed;" title="Insufficient stock — increase 'Items Left' in Singular Menu Items first"`;
+          rejectBtnAttr = 'title="Reject this item"';
+        } else {
+          acceptBtnAttr = 'title="Accept this item"';
+          rejectBtnAttr = 'title="Reject this item"';
+        }
+
+        const stockWarningHtml = stockInsufficient
+          ? `<div style="margin-top:6px; padding:6px 10px; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; font-size:0.75rem; color:#92400e; display:flex; align-items:center; gap:6px;">
+               ⚠️ <strong>Insufficient stock.</strong> Customer ordered <strong>${item.qty}</strong> units but only <strong>${item.stockAvailable ?? 0}</strong> available.
+               <a href="caterer-menu-items.php" style="margin-left:6px; font-weight:700; color:#b45309; text-decoration:underline;">→ Increase stock first</a>
+             </div>`
+          : '';
+
         html += `
           <div class="si-row ${statusClass}" id="si-row-${idx}">
-            <div class="si-emoji">${item.emoji || '🍽️'}</div>
+            <div class="si-emoji">${mediaHtml}</div>
             <div class="si-info">
               <div class="si-name">
-                <span>${item.name}</span>
+                <span>${escapeHtml(item.name)}</span>
                 ${dietHtml}
               </div>
               <div class="si-meta">
                 Qty: <strong>${item.qty}</strong> · Unit Price: <strong>$${item.unitPrice.toFixed(2)}</strong>
-                ${item.note ? ` · <span style="font-style:italic;">Note: "${item.note}"</span>` : ''}
+                ${item.note ? ` · <span style="font-style:italic;">Note: "${escapeHtml(item.note)}"</span>` : ''}
               </div>
+              ${stockWarningHtml}
             </div>
             <div class="si-price-col">
               <div class="si-total">$${itemSubtotal}</div>
@@ -743,12 +871,12 @@ foreach ($allOrders as $ord) {
             </div>
             <div class="si-actions">
               <span class="${pillClass}" style="font-size:0.7rem; padding:4px 8px;">${pillText}</span>
-              <button type="button" class="btn-accept ${item.status === 'Accepted' ? 'active' : ''}" 
-                title="Accept this item" onclick="decideSingularItem(${idx}, 'Accepted')">
+              <button type="button" class="btn-accept ${item.status === 'Accepted' ? 'active' : ''}"
+                ${acceptBtnAttr} onclick="decideSingularItem(${idx}, 'Accepted')">
                 ✓ Accept
               </button>
-              <button type="button" class="btn-reject ${item.status === 'Rejected' ? 'active' : ''}" 
-                title="Reject this item" onclick="decideSingularItem(${idx}, 'Rejected')">
+              <button type="button" class="btn-reject ${item.status === 'Rejected' ? 'active' : ''}"
+                ${rejectBtnAttr} onclick="decideSingularItem(${idx}, 'Rejected')">
                 ✕ Reject
               </button>
             </div>
@@ -764,6 +892,12 @@ foreach ($allOrders as $ord) {
       const order = orderStore[activeOrderKey];
       if (!order || !order.singularItems || !order.singularItems[idx]) return;
       const item = order.singularItems[idx];
+
+      // Client-side guard: prevent Accept if stock is known insufficient
+      if (decision === 'Accepted' && item.stockOk === false) {
+        alert(`⚠️ Cannot accept: only ${item.stockAvailable ?? 0} units available in stock but customer ordered ${item.qty}. Go to Singular Menu Items and increase the stock first.`);
+        return;
+      }
       const itemId = item.id;
       try {
         const res = await fetch('../api/caterer-orders.php?action=decide_singular_item', {
@@ -773,8 +907,14 @@ foreach ($allOrders as $ord) {
         const d = await res.json();
         if (d.success) {
           item.status = decision;
+          item.stockOk = undefined;
           renderSingularItems();
           updateSelectorBadge(activeOrderKey);
+        } else if (d.stock_insufficient) {
+          item.stockOk = false;
+          item.stockAvailable = d.stock_available ?? 0;
+          renderSingularItems();
+          alert(`⚠️ ${d.message}`);
         } else {
           alert(d.message || 'Could not save item decision.');
         }
@@ -784,6 +924,16 @@ foreach ($allOrders as $ord) {
     async function decideAllSingularItems(decision) {
       const order = orderStore[activeOrderKey];
       if (!order) return;
+
+      if (decision === 'Accepted') {
+        const hasLowStock = order.singularItems && order.singularItems.some(function(item) {
+          return item.stockOk === false;
+        });
+        if (hasLowStock) {
+          alert('⚠️ Cannot accept all items: one or more items exceed current kitchen stock. Please increase their stock in Singular Menu Items first or decide items individually.');
+          return;
+        }
+      }
       const bookingId = order.bookingId;
       try {
         const res = await fetch('../api/caterer-orders.php?action=decide_all_singular_items', {
@@ -793,7 +943,9 @@ foreach ($allOrders as $ord) {
         const d = await res.json();
         if (d.success) {
           if (order.singularItems) {
-            order.singularItems.forEach(function(item) { item.status = decision; });
+            order.singularItems.forEach(function(item) {
+              item.status = decision;
+            });
           }
           renderSingularItems();
           updateSelectorBadge(activeOrderKey);
@@ -805,7 +957,7 @@ foreach ($allOrders as $ord) {
 
     function updateSingularFinancials() {
       const order = orderStore[activeOrderKey];
-      const items = order.singularItems || [];
+      const items = (order && order.singularItems) ? order.singularItems : [];
 
       let requested = 0;
       let accepted = 0;
@@ -818,9 +970,13 @@ foreach ($allOrders as $ord) {
         else if (item.status === 'Rejected') rejected += sub;
       });
 
-      document.getElementById('si-total-requested').textContent = '$' + requested.toFixed(2);
-      document.getElementById('si-total-accepted').textContent = '$' + accepted.toFixed(2);
-      document.getElementById('si-total-rejected').textContent = '$' + rejected.toFixed(2);
+      const elReq = document.getElementById('si-total-requested');
+      const elAcc = document.getElementById('si-total-accepted');
+      const elRej = document.getElementById('si-total-rejected');
+
+      if (elReq) elReq.textContent = '$' + requested.toFixed(2);
+      if (elAcc) elAcc.textContent = '$' + accepted.toFixed(2);
+      if (elRej) elRej.textContent = '$' + rejected.toFixed(2);
 
       updateTotalRevenue();
     }
@@ -866,24 +1022,22 @@ foreach ($allOrders as $ord) {
       if (order.packageDecision === 'Accepted') {
         badge.className = 'pill pill-confirmed';
         badge.textContent = 'Accepted';
-      } else {
+      } else if (order.packageDecision === 'Rejected') {
         badge.className = 'pill pill-canceled';
         badge.textContent = 'Rejected';
-      }
-    }
-
-    function updateOrderStatus(newStatus) {
-      if (orderStore[activeOrderKey]) {
-        orderStore[activeOrderKey].status = newStatus;
-        const badge = document.getElementById('order-status-badge');
-        badge.innerText = newStatus;
-        badge.className = newStatus === 'Delivering' ? 'pill pill-confirmed' : 'pill pill-in-progress';
+      } else {
+        badge.className = 'pill pill-inquiry';
+        badge.textContent = 'Pending';
       }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      const firstKey = Object.keys(orderStore)[0];
-      if (firstKey) loadOrder(firstKey);
+      if (activeOrderKey && orderStore[activeOrderKey]) {
+        loadOrder(activeOrderKey);
+      } else {
+        const first = Object.keys(orderStore)[0];
+        if (first) loadOrder(first);
+      }
     });
   </script>
 <script src="../js/app.js"></script>

@@ -68,7 +68,7 @@ $typeColors = ['booking'=>'#16a34a','payment'=>'#2563eb','message'=>'#7c3aed','s
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge" id="notif-badge"><?= $unreadCount > 0 ? $unreadCount : '' ?></span>
+            <?= renderNotifBadge($unreadCount) ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">

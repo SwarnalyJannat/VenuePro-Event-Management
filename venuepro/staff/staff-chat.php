@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -65,7 +65,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
           <a href="staff-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">4</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="staff-chat.php" class="topbar-icon-btn" title="Customer Chat">
@@ -89,13 +89,19 @@ $db = getDBConnection();
         </div>
 
 <?php
-$stmtCust = $db->query("SELECT DISTINCT u.id, u.name, u.email, u.avatar_text, u.avatar_bg, b.id as booking_id, b.booking_code, b.event_name, v.name as venue_name
-FROM users u
-LEFT JOIN bookings b ON b.customer_id = u.id
-LEFT JOIN venues v ON b.venue_id = v.id
-WHERE u.role = 'customer' AND u.status = 'active'
-GROUP BY u.id
-ORDER BY u.id ASC");
+$stmtCust = $db->query("
+    SELECT u.id, u.name, u.email, u.avatar_text, u.avatar_bg, 
+           b.id as booking_id, b.booking_code, b.event_name, v.name as venue_name,
+           (SELECT message FROM chat_messages cm WHERE (cm.sender_id = u.id OR cm.receiver_id = u.id) ORDER BY cm.id DESC LIMIT 1) AS last_message,
+           (SELECT created_at FROM chat_messages cm WHERE (cm.sender_id = u.id OR cm.receiver_id = u.id) ORDER BY cm.id DESC LIMIT 1) AS last_message_time,
+           (SELECT COUNT(*) FROM chat_messages cm WHERE cm.sender_id = u.id AND cm.is_read = 0) AS unread_count
+    FROM users u
+    LEFT JOIN bookings b ON b.customer_id = u.id AND b.booking_status IN ('confirmed', 'completed')
+    LEFT JOIN venues v ON b.venue_id = v.id
+    WHERE u.role = 'customer' AND u.status = 'active'
+    GROUP BY u.id
+    ORDER BY unread_count DESC, last_message_time DESC, u.id ASC
+");
 $customers = $stmtCust->fetchAll();
 
 $activeCustomerId = (int)($_GET['customer_id'] ?? ($customers[0]['id'] ?? 1));
@@ -111,16 +117,30 @@ if (!$activeCustomer && !empty($customers)) {
     $activeCustomerId = (int)$activeCustomer['id'];
 }
 
-$stmtMsgs = $db->prepare("SELECT cm.*, u.name as sender_name, u.avatar_text FROM chat_messages cm JOIN users u ON cm.sender_id = u.id WHERE (cm.sender_id = ? AND cm.receiver_id = ?) OR (cm.sender_id = ? AND cm.receiver_id = ?) ORDER BY cm.created_at ASC");
-$stmtMsgs->execute([$currentUser['id'], $activeCustomerId, $activeCustomerId, $currentUser['id']]);
+$stmtMsgs = $db->prepare("
+    SELECT cm.*, 
+           sender.name AS sender_name, sender.avatar_text AS sender_avatar, sender.avatar_bg AS sender_avatar_bg, sender.role AS sender_role,
+           receiver.name AS receiver_name, receiver.avatar_text AS receiver_avatar, receiver.avatar_bg AS receiver_avatar_bg, receiver.role AS receiver_role
+    FROM chat_messages cm
+    JOIN users sender ON cm.sender_id = sender.id
+    JOIN users receiver ON cm.receiver_id = receiver.id
+    WHERE (sender.role = 'staff' AND cm.receiver_id = ?)
+       OR (cm.sender_id = ? AND receiver.role = 'staff')
+    ORDER BY cm.created_at ASC
+");
+$stmtMsgs->execute([$activeCustomerId, $activeCustomerId]);
 $chatMessages = $stmtMsgs->fetchAll();
+
+// Mark messages as read
+$db->prepare("UPDATE chat_messages SET is_read = 1 WHERE sender_id = ? AND is_read = 0")->execute([$activeCustomerId]);
 ?>
         <div class="card" style="padding:0; overflow:hidden;">
           <div class="chat-layout">
             <!-- Customer Conversations List -->
             <div class="chat-list">
-              <div style="padding:14px 16px; border-bottom:1px solid var(--gray-200); background:var(--gray-50);">
-                <div class="font-bold text-xs text-muted mb-6">EVENT CLIENTS (ASSIGNED)</div>
+              <div style="padding:14px 16px; border-bottom:1px solid var(--gray-200); background:var(--gray-50);" class="flex-between">
+                <div class="font-bold text-xs text-muted">EVENT CLIENTS (ASSIGNED)</div>
+                <span class="badge" style="background:var(--primary); color:#fff; font-size:10px;"><?= count($customers) ?> Clients</span>
               </div>
               
               <?php if (empty($customers)): ?>
@@ -128,15 +148,23 @@ $chatMessages = $stmtMsgs->fetchAll();
               <?php else: foreach ($customers as $cust): 
                 $isActive = (int)$cust['id'] === $activeCustomerId;
                 $evTitle = !empty($cust['venue_name']) ? $cust['venue_name'] : 'Client Account';
+                $snippet = !empty($cust['last_message']) ? $cust['last_message'] : 'No messages yet';
+                $unreads = (int)($cust['unread_count'] ?? 0);
               ?>
               <a href="staff-chat.php?customer_id=<?= $cust['id'] ?>" class="chat-item <?= $isActive ? 'active' : '' ?>">
                 <div class="user-avatar" style="background:<?= e($cust['avatar_bg'] ?? '#2563eb') ?>;"><?= e($cust['avatar_text'] ?? 'CU') ?></div>
                 <div style="flex:1; overflow:hidden;">
                   <div class="flex-between">
-                    <span class="font-bold text-sm"><?= e($cust['name']) ?></span>
+                    <span class="font-bold text-sm" style="display:flex; align-items:center; gap:6px;">
+                      <?= e($cust['name']) ?>
+                      <?php if ($unreads > 0): ?>
+                        <span style="background:#dc2626; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px;"><?= $unreads ?> new</span>
+                      <?php endif; ?>
+                    </span>
                     <span class="text-xs text-muted"><?= $cust['booking_code'] ?? '' ?></span>
                   </div>
                   <div class="text-xs text-muted" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;"><?= e($evTitle) ?></div>
+                  <div class="text-xs" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden; color:var(--gray-500);"><?= e($snippet) ?></div>
                 </div>
               </a>
               <?php endforeach; endif; ?>
@@ -153,6 +181,7 @@ $chatMessages = $stmtMsgs->fetchAll();
                   </div>
                 </div>
                 <div class="flex gap-8">
+                  <span id="chat-status-indicator" class="text-xs" style="color:#059669; font-weight:600; display:flex; align-items:center; gap:4px;">● Live Channel Active</span>
                   <a href="staff-event-setup.php<?= !empty($activeCustomer['booking_id']) ? '?booking_id='.$activeCustomer['booking_id'] : '' ?>" class="btn btn-outline btn-sm">Inspect Setup Checklist</a>
                 </div>
               </div>
@@ -169,12 +198,28 @@ $chatMessages = $stmtMsgs->fetchAll();
                 </div>
                 <?php else: foreach ($chatMessages as $msg): 
                   $isMe = (int)$msg['sender_id'] === (int)$currentUser['id'];
+                  $isStaff = ($msg['sender_role'] ?? '') === 'staff';
                   $timeStr = date('g:i A', strtotime($msg['created_at']));
                 ?>
-                <div class="msg <?= $isMe ? 'msg-out' : 'msg-in' ?>">
-                  <?= nl2br(e($msg['message'])) ?>
-                  <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;"><?= $timeStr ?></div>
-                </div>
+                  <?php if ($isMe): ?>
+                    <div class="msg msg-out">
+                      <div class="text-xs" style="font-weight:600; opacity:0.85; margin-bottom:2px;">You (Staff)</div>
+                      <?= nl2br(e($msg['message'])) ?>
+                      <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;"><?= $timeStr ?></div>
+                    </div>
+                  <?php elseif ($isStaff): ?>
+                    <div class="msg msg-out" style="background:#6366f1;">
+                      <div class="text-xs" style="font-weight:600; opacity:0.9; margin-bottom:2px;"><?= e($msg['sender_name']) ?> (Staff Team)</div>
+                      <?= nl2br(e($msg['message'])) ?>
+                      <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;"><?= $timeStr ?></div>
+                    </div>
+                  <?php else: ?>
+                    <div class="msg msg-in">
+                      <div class="text-xs" style="font-weight:600; color:var(--primary); margin-bottom:2px;"><?= e($msg['sender_name']) ?> (Client)</div>
+                      <?= nl2br(e($msg['message'])) ?>
+                      <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;"><?= $timeStr ?></div>
+                    </div>
+                  <?php endif; ?>
                 <?php endforeach; endif; ?>
               </div>
 
@@ -194,32 +239,127 @@ $chatMessages = $stmtMsgs->fetchAll();
   </div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  const activeCustomerId = <?= (int)$activeCustomerId ?>;
+  const myUserId = <?= (int)$currentUser['id'] ?>;
   const input = document.getElementById('staff-chat-input');
   const btn = document.getElementById('staff-chat-send');
   const container = document.getElementById('staff-chat-container');
+  let lastMessageCount = <?= count($chatMessages) ?>;
+  let isSending = false;
+
+  // Auto-scroll to bottom
+  if (container) {
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderMessages(msgs) {
+    let html = `
+      <div style="text-align:center; margin-bottom:8px;">
+        <span class="text-xs text-muted" style="background:#e2e8f0; padding:3px 12px; border-radius:12px;">🛡️ Direct Customer Channel: Venue Staff &amp; Client Coordination</span>
+      </div>
+    `;
+
+    if (!msgs || msgs.length === 0) {
+      html += `
+        <div style="text-align:center; padding:40px; color:var(--gray-400);">
+          <div style="font-size:2.5rem; margin-bottom:8px;">💬</div>
+          <p class="text-sm">No messages yet with this client.<br>Send a greeting below!</p>
+        </div>
+      `;
+    } else {
+      msgs.forEach(m => {
+        const isMe = parseInt(m.sender_id) === myUserId;
+        const isStaff = m.sender_role === 'staff';
+        const timeStr = m.created_at ? new Date(m.created_at.replace(/-/g, '/')).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now';
+        const textSafe = escapeHtml(m.message).replace(/\n/g, '<br>');
+
+        if (isMe) {
+          html += `
+            <div class="msg msg-out">
+              <div class="text-xs" style="font-weight:600; opacity:0.85; margin-bottom:2px;">You (Staff)</div>
+              ${textSafe}
+              <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;">${timeStr}</div>
+            </div>
+          `;
+        } else if (isStaff) {
+          html += `
+            <div class="msg msg-out" style="background:#6366f1;">
+              <div class="text-xs" style="font-weight:600; opacity:0.9; margin-bottom:2px;">${escapeHtml(m.sender_name)} (Staff Team)</div>
+              ${textSafe}
+              <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;">${timeStr}</div>
+            </div>
+          `;
+        } else {
+          html += `
+            <div class="msg msg-in">
+              <div class="text-xs" style="font-weight:600; color:var(--primary); margin-bottom:2px;">${escapeHtml(m.sender_name)} (Client)</div>
+              ${textSafe}
+              <div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;">${timeStr}</div>
+            </div>
+          `;
+        }
+      });
+    }
+
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+  }
+
+  async function fetchLatestMessages() {
+    if (isSending || !activeCustomerId) return;
+    try {
+      const res = await fetch(`../api/chat.php?action=messages&receiver_id=${activeCustomerId}`);
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.data.messages)) {
+        const msgs = data.data.messages;
+        if (msgs.length !== lastMessageCount) {
+          lastMessageCount = msgs.length;
+          renderMessages(msgs);
+        }
+      }
+    } catch(err) {
+      console.warn('Chat poll warning:', err);
+    }
+  }
 
   async function sendMsg() {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text || isSending) return;
     
-    const b = document.createElement('div');
-    b.className = 'msg msg-out';
-    b.innerHTML = text.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '<div class="text-xs" style="text-align:right; margin-top:4px; opacity:0.75;">Just now</div>';
-    container.appendChild(b);
-    container.scrollTop = container.scrollHeight;
-    input.value = '';
+    isSending = true;
+    btn.disabled = true;
+    const origText = btn.innerHTML;
+    btn.innerHTML = 'Sending...';
 
     try {
-      await fetch('../api/chat.php?action=send', {
+      const res = await fetch('../api/chat.php?action=send', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-          receiver_id: <?= (int)$activeCustomerId ?>,
+          receiver_id: activeCustomerId,
           message: text
         })
       });
+      const d = await res.json();
+      if (d && d.success) {
+        input.value = '';
+        await fetchLatestMessages();
+      } else {
+        alert('⚠️ ' + (d.message || 'Failed to send message'));
+      }
     } catch(e) {
       console.error(e);
+      alert('⚠️ Connection error while sending message.');
+    } finally {
+      isSending = false;
+      btn.disabled = false;
+      btn.innerHTML = origText;
+      input.focus();
     }
   }
 
@@ -227,6 +367,9 @@ document.addEventListener('DOMContentLoaded', function() {
   input && input.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') { e.preventDefault(); sendMsg(); }
   });
+
+  // Polling every 3 seconds for live replies
+  setInterval(fetchLatestMessages, 3000);
 });
 </script>
 <script src="../js/app.js"></script>

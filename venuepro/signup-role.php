@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/helpers.php';
@@ -21,7 +21,7 @@ if (isLoggedIn()) {
 </head>
 <body class="auth-page">
   <div class="auth-logo">
-    <img src="assets/logo2.png" alt="VenuePro" class="auth-logo-img">
+    <img src="assets/logo.png" alt="VenuePro" class="auth-logo-img">
     <h1 style="font-size:2rem; font-weight:800;">Choose your role to get started</h1>
     <p>Select the profile that best describes your needs to tailor your VenuePro experience.</p>
   </div>

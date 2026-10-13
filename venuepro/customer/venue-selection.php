@@ -4,6 +4,9 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('customer', 'customer-login.php');
 $db = getDBConnection();
+
+$stmtVenues = $db->query("SELECT * FROM venues WHERE status = 'active' ORDER BY id ASC");
+$venuesList = $stmtVenues->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,7 +58,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
           <a href="customer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">3</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <a href="customer-chat.php" class="topbar-icon-btn" title="Contact Venue Staff">
@@ -79,44 +82,25 @@ $db = getDBConnection();
 </div>
 
 <div class="grid-3 gap-20">
-  <div class="venue-card" style="border:2px solid var(--primary);">
-    <div class="venue-card-img" style="background:url('https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=600&q=80') center/cover;"></div>
-    <div class="venue-card-body">
-      <div class="venue-card-name">Grand Emerald Ballroom</div>
-      <div class="venue-card-location">Downtown Business District</div>
-      <div class="venue-card-meta">
-        <span>👥 500 Guests</span>
-        <span class="venue-price">$1,200/day</span>
-      </div>
-      <a href="booking-date-guests.php" class="btn btn-primary btn-full mt-12">Select This Venue ✓</a>
-    </div>
-  </div>
-
+  <?php if (empty($venuesList)): ?>
+  <div style="grid-column:1/-1; text-align:center; padding:48px; color:var(--gray-400);">No active venues found.</div>
+  <?php else: foreach ($venuesList as $v):
+    $rawImg = !empty($v['image_url']) ? $v['image_url'] : '../assets/venues pic/images.jpg';
+    $img = str_starts_with($rawImg, 'http') ? $rawImg : (str_starts_with($rawImg, '../') ? $rawImg : ('../' . $rawImg));
+  ?>
   <div class="venue-card">
-    <div class="venue-card-img" style="background:url('https://images.unsplash.com/photo-1533105079780-92b9be482077?w=600&q=80') center/cover;"></div>
+    <div class="venue-card-img" style="background:url('<?= e($img) ?>') center/cover;"></div>
     <div class="venue-card-body">
-      <div class="venue-card-name">Skyline Vista Lounge</div>
-      <div class="venue-card-location">North Waterfront District</div>
+      <div class="venue-card-name"><?= e($v['name']) ?></div>
+      <div class="venue-card-location"><?= e($v['district'] ?? 'Prime Location') ?></div>
       <div class="venue-card-meta">
-        <span>👥 150 Guests</span>
-        <span class="venue-price">$2,450/day</span>
+        <span>👥 <?= number_format($v['capacity']) ?> Guests</span>
+        <span class="venue-price">$<?= number_format($v['base_rate'], 0) ?>/day</span>
       </div>
-      <a href="booking-date-guests.php" class="btn btn-outline btn-full mt-12">Select This Venue</a>
+      <a href="booking-date-guests.php?venue_id=<?= (int)$v['id'] ?>" class="btn btn-primary btn-full mt-12">Select This Venue →</a>
     </div>
   </div>
-
-  <div class="venue-card">
-    <div class="venue-card-img" style="background:url('https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&q=80') center/cover;"></div>
-    <div class="venue-card-body">
-      <div class="venue-card-name">The Brick & Steel Gallery</div>
-      <div class="venue-card-location">Arts District</div>
-      <div class="venue-card-meta">
-        <span>👥 300 Guests</span>
-        <span class="venue-price">$1,800/day</span>
-      </div>
-      <a href="booking-date-guests.php" class="btn btn-outline btn-full mt-12">Select This Venue</a>
-    </div>
-  </div>
+  <?php endforeach; endif; ?>
 </div>
 </main>
                         <footer class="page-footer">

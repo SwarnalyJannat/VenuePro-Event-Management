@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
@@ -59,7 +59,7 @@ $db = getDBConnection();
         </div>
         <div class="topbar-actions">
           <a href="caterer-notifications.php" class="topbar-icon-btn" title="Notifications">
-            <span class="badge">5</span>
+            <?= renderNotifBadge() ?>
             🔔
           </a>
           <div class="topbar-user">
@@ -167,6 +167,7 @@ document.addEventListener('DOMContentLoaded', function() {
       price_per_guest: parseFloat((form.querySelector('[name="price_per_guest"]') || {}).value) || 24,
       min_guests:      parseInt((form.querySelector('[name="min_guests"]') || {}).value) || 30,
       features:        featuresList,
+      courses:         courses,
       status:          'published'
     };
 

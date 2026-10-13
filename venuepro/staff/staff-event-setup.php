@@ -4,66 +4,183 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/helpers.php';
 $currentUser = requireRole('staff', 'staff-login.php');
 $db = getDBConnection();
-?>
-<?php
-$staffUser    = $currentUser;
-$bookingId    = (int)($_GET['booking_id'] ?? 0);
-$setupAssignment = null;
-$checklistItems  = [];
 
-if ($bookingId > 0) {
-    $stmtSA = $db->prepare(
-        "SELECT sa.*, b.event_name, b.event_date, b.start_time, b.end_time, b.guest_count, b.special_notes,
-         v.name AS venue_name, v.address AS venue_address,
-         u.name AS customer_name, u.email AS customer_email, u.phone AS customer_phone
-         FROM staff_assignments sa
-         JOIN bookings b ON sa.booking_id = b.id
-         JOIN venues v ON b.venue_id = v.id
-         JOIN users u ON b.customer_id = u.id
-         WHERE sa.booking_id = ? AND sa.staff_id = ?
-         LIMIT 1"
-    );
-    $stmtSA->execute([$bookingId, $staffUser['id']]);
-    $setupAssignment = $stmtSA->fetch();
-}
+$staffUser = $currentUser;
+$bookingId = (int)($_GET['booking_id'] ?? 0);
+$assignmentIdParam = (int)($_GET['assignment_id'] ?? 0);
 
-// Fallback: load latest assignment for this staff member
-if (!$setupAssignment) {
-    $stmtFB = $db->prepare(
-        "SELECT sa.*, b.event_name, b.event_date, b.start_time, b.end_time, b.guest_count, b.special_notes,
-         v.name AS venue_name, v.address AS venue_address,
-         u.name AS customer_name, u.email AS customer_email, u.phone AS customer_phone
-         FROM staff_assignments sa
-         JOIN bookings b ON sa.booking_id = b.id
-         JOIN venues v ON b.venue_id = v.id
-         JOIN users u ON b.customer_id = u.id
-         WHERE sa.staff_id = ?
-         ORDER BY b.event_date ASC LIMIT 1"
-    );
-    $stmtFB->execute([$staffUser['id']]);
-    $setupAssignment = $stmtFB->fetch();
-}
-
-// Default checklist (stored as JSON in checklist_json column if available)
-$defaultChecklist = [
-    ['id'=>'c1', 'label'=>'Venue walkthrough and area inspection',         'done'=>false],
-    ['id'=>'c2', 'label'=>'Tables, chairs, and linens arranged',           'done'=>false],
-    ['id'=>'c3', 'label'=>'AV equipment tested (mic, projector, lighting)','done'=>false],
-    ['id'=>'c4', 'label'=>'Catering team briefed on timeline',             'done'=>false],
-    ['id'=>'c5', 'label'=>'Security personnel briefed and positioned',     'done'=>false],
-    ['id'=>'c6', 'label'=>'Emergency exits clearly marked and accessible', 'done'=>false],
-    ['id'=>'c7', 'label'=>'Guest registration table set up at entrance',   'done'=>false],
-    ['id'=>'c8', 'label'=>'VIP/reserved seating clearly labeled',         'done'=>false],
-    ['id'=>'c9', 'label'=>'First aid kit and fire safety checked',         'done'=>false],
-    ['id'=>'c10','label'=>'Final sweep and event coordinator sign-off',    'done'=>false],
+// Base list of standard 10 setup tasks
+$baseTasks = [
+    "Floor layout and banquet table arrangement verified",
+    "Bose audio rig assembly and wireless mic array test",
+    "Catering prep station staging and bar glassware stocked",
+    "Valet parking cones and directional signage positioned",
+    "Security detail radio distribution and perimeter briefing",
+    "Guest registration desk setup (badges, lanyards, packets)",
+    "LED video wall and main projector presentation feed tested",
+    "Floral and decor delivery receipt sign-off with dock staff",
+    "ADA accessibility ramp and elevator clearances inspected",
+    "Emergency exits verified clear and fire safety sweep complete"
 ];
 
-// If checklist_json stored in assignment, use it
-if ($setupAssignment && !empty($setupAssignment['checklist_json'])) {
-    $saved = json_decode($setupAssignment['checklist_json'], true);
-    if (is_array($saved)) $defaultChecklist = $saved;
+// Helper to parse checklist_json in various formats into standardized array
+function parseAssignmentTasks($checklistJson, $baseTasks) {
+    $decoded = !empty($checklistJson) ? json_decode($checklistJson, true) : null;
+    $tasks = [];
+    foreach ($baseTasks as $i => $text) {
+        $isChecked = false;
+        if (is_array($decoded)) {
+            if (isset($decoded['task-' . $i])) {
+                $isChecked = (bool)$decoded['task-' . $i];
+            } else if (isset($decoded['c' . ($i + 1)])) {
+                $isChecked = (bool)$decoded['c' . ($i + 1)];
+            } else if (isset($decoded[$i]) && is_bool($decoded[$i])) {
+                $isChecked = (bool)$decoded[$i];
+            } else if (isset($decoded[$i]) && is_array($decoded[$i]) && isset($decoded[$i]['done'])) {
+                $isChecked = (bool)$decoded[$i]['done'];
+            } else if (isset($decoded[$i]) && is_array($decoded[$i]) && isset($decoded[$i]['checked'])) {
+                $isChecked = (bool)$decoded[$i]['checked'];
+            } else {
+                foreach ($decoded as $k => $v) {
+                    if (is_string($v) && (strpos($v, $text) !== false || strpos($text, substr($v, 0, 15)) !== false)) {
+                        $isChecked = (strpos($v, '✓') !== false);
+                        break;
+                    }
+                }
+            }
+        }
+        $tasks[] = [
+            'id' => 'task-' . $i,
+            'text' => $text,
+            'checked' => $isChecked
+        ];
+    }
+    return $tasks;
 }
-$checklistItems = $defaultChecklist;
+
+// Fetch staff profile and admin-assigned venues
+$staffId = (int)$staffUser['id'];
+$stmtProf = $db->prepare("SELECT sp.assigned_venues, sp.staff_code, sp.department FROM staff_profiles sp WHERE sp.user_id = ? LIMIT 1");
+$stmtProf->execute([$staffId]);
+$staffProfile = $stmtProf->fetch();
+
+$assignedVenueIds = [];
+if (!empty($staffProfile['assigned_venues'])) {
+    foreach (explode(',', $staffProfile['assigned_venues']) as $vId) {
+        $vId = (int)trim($vId);
+        if ($vId > 0) {
+            $assignedVenueIds[] = $vId;
+        }
+    }
+    $assignedVenueIds = array_values(array_unique($assignedVenueIds));
+}
+
+$assignedVenues = [];
+$staffAssignmentsList = [];
+
+if (!empty($assignedVenueIds)) {
+    $inPlaceholders = implode(',', array_fill(0, count($assignedVenueIds), '?'));
+
+    // Fetch assigned venues metadata
+    $stmtVenues = $db->prepare("SELECT id, name, address, capacity, district FROM venues WHERE id IN ($inPlaceholders) AND status = 'active' ORDER BY name ASC");
+    $stmtVenues->execute($assignedVenueIds);
+    $assignedVenues = $stmtVenues->fetchAll(PDO::FETCH_ASSOC);
+
+    // Fetch confirmed/completed bookings strictly for assigned venues
+    $stmtMyAll = $db->prepare(
+        "SELECT 
+            b.id AS booking_id, b.event_name, b.event_date, b.start_time, b.end_time, b.guest_count, b.special_notes, b.booking_status,
+            v.id AS venue_id, v.name AS venue_name, v.address AS venue_address,
+            u.name AS customer_name, u.email AS customer_email, u.phone AS customer_phone,
+            sa.id AS id, sa.staff_id, sa.setup_status, sa.completion_pct, sa.checklist_json, sa.completed_at, sa.reported_staff
+         FROM bookings b
+         JOIN venues v ON b.venue_id = v.id
+         JOIN users u ON b.customer_id = u.id
+         LEFT JOIN staff_assignments sa ON sa.booking_id = b.id
+         WHERE b.venue_id IN ($inPlaceholders)
+           AND b.booking_status IN ('confirmed', 'completed')
+         ORDER BY b.event_date ASC, b.id ASC"
+    );
+    $stmtMyAll->execute($assignedVenueIds);
+    $staffAssignmentsList = $stmtMyAll->fetchAll(PDO::FETCH_ASSOC);
+
+    // Auto-create assignment record if a confirmed booking doesn't have one yet
+    foreach ($staffAssignmentsList as &$asgn) {
+        if (empty($asgn['id'])) {
+            $shiftTime = (!empty($asgn['start_time']) ? substr($asgn['start_time'], 0, 5) : '10:00') . ' - ' . (!empty($asgn['end_time']) ? substr($asgn['end_time'], 0, 5) : '18:00');
+            $ins = $db->prepare("INSERT INTO staff_assignments (booking_id, staff_id, shift_time, setup_status, completion_pct, checklist_json) VALUES (?, ?, ?, 'pending', 0, '{}')");
+            $ins->execute([$asgn['booking_id'], $staffId, $shiftTime]);
+            $asgn['id'] = (int)$db->lastInsertId();
+            $asgn['staff_id'] = $staffId;
+            $asgn['setup_status'] = 'pending';
+            $asgn['completion_pct'] = 0;
+            $asgn['checklist_json'] = '{}';
+            $asgn['completed_at'] = null;
+            $asgn['reported_staff'] = $staffUser['name'];
+        }
+    }
+    unset($asgn);
+}
+
+// Determine active assignment
+$activeAssignment = null;
+if ($bookingId > 0) {
+    foreach ($staffAssignmentsList as $asgn) {
+        if ((int)$asgn['booking_id'] === $bookingId) {
+            $activeAssignment = $asgn;
+            break;
+        }
+    }
+}
+if (!$activeAssignment && $assignmentIdParam > 0) {
+    foreach ($staffAssignmentsList as $asgn) {
+        if ((int)$asgn['id'] === $assignmentIdParam) {
+            $activeAssignment = $asgn;
+            break;
+        }
+    }
+}
+if (!$activeAssignment && !empty($staffAssignmentsList)) {
+    $activeAssignment = $staffAssignmentsList[0];
+}
+
+// Build JSON data object for JavaScript
+$jsVenueData = [];
+foreach ($staffAssignmentsList as $asgn) {
+    $tasks = parseAssignmentTasks($asgn['checklist_json'] ?? '', $baseTasks);
+    $totalTasks = count($tasks);
+    $completedTasks = count(array_filter($tasks, fn($t) => $t['checked']));
+    $savedPct = !empty($asgn['completion_pct']) ? (int)$asgn['completion_pct'] : 0;
+    $computedPct = $totalTasks > 0 ? (int)round(($completedTasks / $totalTasks) * 100) : 0;
+    $pct = max($savedPct, $computedPct);
+    $isComplete = ($asgn['setup_status'] === 'completed' || $pct >= 100);
+    if ($isComplete) {
+        $pct = 100;
+        foreach ($tasks as &$t) {
+            $t['checked'] = true;
+        }
+        unset($t);
+    }
+
+    $jsVenueData[$asgn['id']] = [
+        'assignment_id'   => (int)$asgn['id'],
+        'booking_id'      => (int)$asgn['booking_id'],
+        'venue_name'      => $asgn['venue_name'],
+        'event_name'      => $asgn['event_name'],
+        'event_date'      => date('M j, Y', strtotime($asgn['event_date'])),
+        'guest_count'     => (int)$asgn['guest_count'],
+        'call_time'       => substr($asgn['start_time'], 0, 5),
+        'setup_status'    => $isComplete ? 'completed' : ($asgn['setup_status'] ?: 'in_progress'),
+        'status_label'    => $isComplete ? 'READY / COMPLETED' : ($asgn['setup_status'] === 'pending' ? 'UPCOMING' : 'IN SETUP'),
+        'pill_class'      => $isComplete ? 'pill-confirmed' : ($asgn['setup_status'] === 'pending' ? 'pill-pending' : 'pill-in-progress'),
+        'completion_pct'  => $pct,
+        'completed_at'    => $asgn['completed_at'] ? date('M j, Y g:i A', strtotime($asgn['completed_at'])) : null,
+        'reported_staff'  => $asgn['reported_staff'] ?: $staffUser['name'],
+        'tasks'           => $tasks
+    ];
+}
+
+$initialAssignmentId = $activeAssignment ? (int)$activeAssignment['id'] : (array_key_first($jsVenueData) ?? 0);
 ?>
 <!doctype html>
 <html lang="en">
@@ -127,8 +244,8 @@ $checklistItems = $defaultChecklist;
         transition: all 0.15s;
       }
       .task-item input[type="checkbox"]:checked + label .cb-box {
-        background: var(--primary);
-        border-color: var(--primary);
+        background: #16a34a;
+        border-color: #16a34a;
       }
       .task-item input[type="checkbox"]:checked + label .cb-box::after {
         content: "✓";
@@ -239,7 +356,7 @@ $checklistItems = $defaultChecklist;
               class="topbar-icon-btn"
               title="Notifications"
             >
-              <span class="badge">4</span>
+              <?= renderNotifBadge() ?>
               🔔
             </a>
             <a
@@ -281,13 +398,65 @@ $checklistItems = $defaultChecklist;
             </div>
           </div>
 
-          <!-- Assigned Venues Selection Bar -->
+          <!-- Assigned Venues Info Strip -->
+          <div class="card mb-24" style="padding: 16px 20px; background: linear-gradient(to right, #f8fafc, #eff6ff); border: 1.5px solid #bfdbfe;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-size:1.6rem;">🏛️</span>
+                <div>
+                  <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:700; color:var(--primary);">
+                    Your Admin-Assigned Operational Properties (<?= count($assignedVenues) ?>)
+                  </div>
+                  <div style="font-size:0.875rem; color:var(--navy-900); font-weight:600; margin-top:2px;">
+                    <?php if (empty($assignedVenues)): ?>
+                      <span style="color:#dc2626; font-weight:500;">No operational properties assigned by administrator yet.</span>
+                    <?php else: ?>
+                      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:4px;">
+                        <?php foreach ($assignedVenues as $av): ?>
+                          <span class="badge" style="background:#fff; border:1px solid #93c5fd; color:#1e40af; font-size:0.8rem; padding:4px 10px; border-radius:14px; font-weight:600;">
+                            📍 <?= e($av['name']) ?><?= !empty($av['district']) ? ' ('.e($av['district']).')' : '' ?>
+                          </span>
+                        <?php endforeach; ?>
+                      </div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              </div>
+              <div class="badge" style="background:var(--primary); color:#fff; font-size:12px; padding:6px 14px; border-radius:16px;">
+                <?= count($staffAssignmentsList) ?> Active Event Shifts
+              </div>
+            </div>
+          </div>
+
+          <?php if (empty($assignedVenueIds)): ?>
+          <div class="card mb-24" style="background:#fffbeb; border:1.5px solid #fde68a; padding:32px 24px; text-align:center; border-radius:var(--radius);">
+            <div style="font-size:2.5rem; margin-bottom:12px;">⚠️</div>
+            <h2 style="color:#b45309; margin-bottom:8px;">No Operational Venues Assigned</h2>
+            <p style="color:#92400e; max-width:600px; margin:0 auto 16px;">
+              An administrator has not assigned any operational venues to your staff profile yet. Your tasklists and setup checklists are strictly scoped to your assigned properties.
+            </p>
+            <p class="text-xs text-muted">Please contact your VenuePro system administrator to assign properties in the Staff Directory.</p>
+          </div>
+          <?php elseif (empty($staffAssignmentsList)): ?>
+          <div class="card mb-24" style="background:#f8fafc; border:1.5px solid var(--gray-200); padding:36px 24px; text-align:center; border-radius:var(--radius);">
+            <div style="font-size:2.5rem; margin-bottom:12px;">📋</div>
+            <h2 style="color:var(--navy-900); margin-bottom:8px;">No Active Event Shifts Scheduled</h2>
+            <p style="color:var(--gray-600); max-width:600px; margin:0 auto 16px;">
+              There are currently no confirmed event reservations scheduled for your assigned properties (<strong><?= implode(', ', array_map('e', array_column($assignedVenues, 'name'))) ?></strong>).
+            </p>
+            <div class="text-xs text-muted" style="background:#f1f5f9; display:inline-block; padding:8px 16px; border-radius:8px;">
+              All facilities at your assigned venues are currently in standby readiness. When a booking is confirmed by an administrator, its interactive 10-task setup checklist and client details will appear here automatically.
+            </div>
+          </div>
+          <?php else: ?>
+          <!-- Assigned Venues Selection Bar (Dynamic from Database) -->
           <div class="card mb-24" style="padding: 20px">
             <div
-              class="text-xs font-bold text-muted mb-12"
+              class="text-xs font-bold text-muted mb-12 flex-between"
               style="letter-spacing: 0.05em; text-transform: uppercase"
             >
-              Your Assigned Venues (Click to view tasks):
+              <span>Your Assigned Venues &amp; Scheduled Shifts (Click to view tasks):</span>
+              <span class="badge" style="background:var(--primary); color:#fff; font-size:11px;"><?= count($staffAssignmentsList) ?> Scheduled</span>
             </div>
             <div
               style="
@@ -296,63 +465,30 @@ $checklistItems = $defaultChecklist;
                 gap: 16px;
               "
             >
-              <!-- Venue 1 -->
+              <?php foreach ($staffAssignmentsList as $asgn): 
+                $aid = (int)$asgn['id'];
+                $isInitActive = ($aid === $initialAssignmentId);
+                $isComp = ($asgn['setup_status'] === 'completed' || (int)$asgn['completion_pct'] >= 100);
+                $pillCls = $isComp ? 'pill-confirmed' : (($asgn['setup_status'] === 'pending') ? 'pill-pending' : 'pill-in-progress');
+                $pillLbl = $isComp ? 'READY' : (($asgn['setup_status'] === 'pending') ? 'UPCOMING' : 'IN SETUP');
+              ?>
               <div
-                id="vcard-1"
-                class="venue-card-btn active"
-                onclick="selectVenue(1)"
+                id="vcard-<?= $aid ?>"
+                class="venue-card-btn <?= $isInitActive ? 'active' : '' ?>"
+                onclick="selectVenue(<?= $aid ?>)"
               >
                 <div class="flex-between mb-4">
-                  <span class="font-bold" style="color: var(--navy-900)"
-                    ><?= $setupAssignment ? e($setupAssignment['venue_name']) : 'Venue' ?></span
-                  >
-                  <span class="pill pill-in-progress" style="font-size: 0.68rem"
-                    >IN SETUP</span
-                  >
+                  <span class="font-bold" style="color: var(--navy-900)"><?= e($asgn['venue_name']) ?></span>
+                  <span id="vcard-pill-<?= $aid ?>" class="pill <?= $pillCls ?>" style="font-size: 0.68rem"><?= $pillLbl ?></span>
                 </div>
                 <div class="text-sm font-semibold text-primary mb-2">
-                  <?= $setupAssignment ? e($setupAssignment['event_name']) : 'Event Setup' ?>
+                  <?= e($asgn['event_name']) ?>
                 </div>
                 <div class="text-xs text-muted">
-                  Oct 14, 2026 · 150 Guests · Call Time: 14:00
+                  <?= date('M j, Y', strtotime($asgn['event_date'])) ?> · <?= (int)$asgn['guest_count'] ?> Guests · Call Time: <?= substr($asgn['start_time'], 0, 5) ?>
                 </div>
               </div>
-
-              <!-- Venue 2 -->
-              <div id="vcard-2" class="venue-card-btn" onclick="selectVenue(2)">
-                <div class="flex-between mb-4">
-                  <span class="font-bold" style="color: var(--navy-900)"
-                    >Skyline Vista Lounge</span
-                  >
-                  <span class="pill pill-pending" style="font-size: 0.68rem"
-                    >UPCOMING</span
-                  >
-                </div>
-                <div class="text-sm font-semibold text-primary mb-2">
-                  Tech Summit Keynote
-                </div>
-                <div class="text-xs text-muted">
-                  Oct 15, 2026 · 200 Guests · Call Time: 17:30
-                </div>
-              </div>
-
-              <!-- Venue 3 -->
-              <div id="vcard-3" class="venue-card-btn" onclick="selectVenue(3)">
-                <div class="flex-between mb-4">
-                  <span class="font-bold" style="color: var(--navy-900)"
-                    >Brick &amp; Steel Gallery</span
-                  >
-                  <span class="pill pill-pending" style="font-size: 0.68rem"
-                    >UPCOMING</span
-                  >
-                </div>
-                <div class="text-sm font-semibold text-primary mb-2">
-                  Art Gala Reception
-                </div>
-                <div class="text-xs text-muted">
-                  Oct 16, 2026 · 120 Guests · Call Time: 19:00
-                </div>
-              </div>
+              <?php endforeach; ?>
             </div>
           </div>
 
@@ -374,7 +510,7 @@ $checklistItems = $defaultChecklist;
                   style="align-items: center; margin-bottom: 4px"
                 >
                   <h2 id="venue-title" style="margin: 0; font-size: 1.3rem">
-                    <?= $setupAssignment ? e($setupAssignment['venue_name']) : 'Venue' ?>
+                    <?= e($activeAssignment['venue_name'] ?? 'Venue') ?>
                   </h2>
                   <span id="venue-pill" class="pill pill-in-progress"
                     >IN SETUP</span
@@ -385,8 +521,7 @@ $checklistItems = $defaultChecklist;
                   class="text-xs text-muted"
                   style="margin: 0"
                 >
-                  Event: <strong><?= $setupAssignment ? e($setupAssignment['event_name']) : 'Event Setup' ?></strong> · Oct 14,
-                  2026 · 150 Guests · Call Time: 14:00
+                  Loading event setup metadata...
                 </p>
               </div>
               <div>
@@ -403,7 +538,7 @@ $checklistItems = $defaultChecklist;
 
             <!-- Task Items Container -->
             <div id="task-list-container">
-              <!-- Injected via JavaScript based on selected venue -->
+              <!-- Dynamically rendered by JavaScript -->
             </div>
 
             <!-- Progress summary -->
@@ -417,7 +552,7 @@ $checklistItems = $defaultChecklist;
             >
               <div class="flex-between text-sm mb-6">
                 <span class="text-muted font-medium">Tasks Completed</span>
-                <span class="font-bold" id="task-progress-text">0 / 0</span>
+                <span class="font-bold" id="task-progress-text">0 / 0 (0%)</span>
               </div>
               <div class="progress-bar" style="height: 10px">
                 <div
@@ -432,23 +567,11 @@ $checklistItems = $defaultChecklist;
           <!-- Mark Event Complete Panel -->
           <div class="card complete-form">
             <div class="card-header">
-              <div class="card-title"> Event Completion Sign-Off </div>
+              <div class="card-title">Event Completion Sign-Off &amp; Report Submission</div>
             </div>
-            <!-- <label
-              for="confirm-check"
-              class="btn btn-primary btn-full"
-              style="
-                background: #16a34a;
-                border-color: #16a34a;
-                cursor: pointer;
-                margin-bottom: 0;
-              "
-            >
-              ✓ Mark Event as Completed
-            </label>
-             <input type="checkbox" id="confirm-check" />  -->
             <div class="confirm-panel">
               <div
+                id="completion-notice-card"
                 class="card mb-12"
                 style="
                   background: #f0fdf4;
@@ -458,214 +581,102 @@ $checklistItems = $defaultChecklist;
                 "
               >
                 <div
+                  id="completion-notice-title"
                   class="font-bold text-sm"
                   style="color: #16a34a; margin-bottom: 4px"
                 >
                   ⚠️ Confirm Event Completion
                 </div>
-                <p class="text-xs" style="color: #166534">
+                <p id="completion-notice-desc" class="text-xs" style="color: #166534">
                   By confirming, you verify that all setup requirements and
                   teardown checklists are fulfilled for this assigned space.
                 </p>
               </div>
-<!--               
-              <div class="form-group">
-                <label class="form-label"
-                  >Post-event operational notes (optional)</label
-                > 
-
-                 <textarea
-                  class="form-control"
-                  rows="2"
-                  placeholder="e.g. Venue setup verified, all AV lines checked and functioning..."
-                ></textarea>
-              </div> -->
-              
               
               <div class="flex gap-8 mt-8">
                 <button type="button" id="cancelReportBtn"
-                  class="btn btn-ghost" style="flex:1;">Cancel</button>
+                  class="btn btn-ghost" style="flex:1;">Cancel / Reset</button>
                 <button type="button" id="submitReportBtn"
                   class="btn btn-primary"
                   style="flex:2; background:#16a34a; border-color:#16a34a;">
                   Confirm completion &amp; Submit Report →
                 </button>
               </div>
-              <div id="reportAlert" style="display:none; margin-top:10px; padding:10px; border-radius:6px; font-size:0.85rem;"></div>
+              <div id="reportAlert" style="display:none; margin-top:10px; padding:12px; border-radius:6px; font-size:0.85rem; font-weight:600;"></div>
             </div>
-
           </div>
+          <?php endif; ?>
         </main>
 
-              <footer class="page-footer">
-        <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
-      </footer>
+        <footer class="page-footer">
+          <div>© 2026 VenuePro Enterprise Event Management. All rights reserved.</div>
+        </footer>
       </div>
     </div>
 
     <script>
-      const venueData = {
-        1: {
-          name: "<?= $setupAssignment ? e($setupAssignment['venue_name']) : 'Venue' ?>",
-          status: "IN SETUP",
-          pillClass: "pill-in-progress",
-          event: "<?= $setupAssignment ? e($setupAssignment['event_name']) : 'Event Setup' ?>",
-          meta: "Event: <strong><?= $setupAssignment ? e($setupAssignment['event_name']) : 'Event Setup' ?></strong> · Oct 14, 2026 · 150 Guests · Call Time: 14:00",
-          tasks: [
-            {
-              text: "Floor layout — 15 round tables of 10 guests each",
-              checked: true,
-            },
-            {
-              text: "Bose audio rig assembly and wireless mic array test (6 channels)",
-              checked: true,
-            },
-            {
-              text: "Catering prep station staging and bar glassware stocking (Artisan Catering)",
-              checked: false,
-            },
-            {
-              text: "Valet parking cone placement and signage at all three entrance points",
-              checked: false,
-            },
-            {
-              text: "Security detail radio distribution and perimeter briefing (4 officers)",
-              checked: false,
-            },
-            {
-              text: "Guest registration desk setup — name badges, lanyards, welcome packets",
-              checked: false,
-            },
-            {
-              text: "LED video wall and projector feed test from main AV control room",
-              checked: false,
-            },
-            {
-              text: "Floral and décor delivery receipt sign-off with venue dock staff",
-              checked: false,
-            },
-            {
-              text: "ADA elevator and accessibility ramp inspection at main entrance",
-              checked: false,
-            },
-            {
-              text: "Emergency exits verified clear and fire marshal walk-through complete",
-              checked: false,
-            },
-          ],
-        },
-        2: {
-          name: "Skyline Vista Lounge",
-          status: "UPCOMING",
-          pillClass: "pill-pending",
-          event: "Tech Summit Keynote",
-          meta: "Event: <strong>Tech Summit Keynote</strong> · Oct 15, 2026 · 200 Guests · Call Time: 17:30",
-          tasks: [
-            {
-              text: "Stage riser assembly and keynote speaker podium placement",
-              checked: false,
-            },
-            {
-              text: "Dual 4K laser projector alignment and confidence monitor setup",
-              checked: false,
-            },
-            {
-              text: "High-density WiFi access point testing for 200 concurrent devices",
-              checked: false,
-            },
-            {
-              text: "Livestream broadcast encoder feed and audio sync test with production van",
-              checked: false,
-            },
-            {
-              text: "Executive VIP lounge staging and premium beverage refreshment station",
-              checked: false,
-            },
-            {
-              text: "Sponsor exhibition booth partition layout and AC power routing",
-              checked: false,
-            },
-            {
-              text: "Q&A handheld audience microphones battery check and RF frequency scan",
-              checked: false,
-            },
-            {
-              text: "Digital registration badge scanners configured, tested, and docked",
-              checked: false,
-            },
-          ],
-        },
-        3: {
-          name: "Brick & Steel Gallery",
-          status: "UPCOMING",
-          pillClass: "pill-pending",
-          event: "Art Gala Reception",
-          meta: "Event: <strong>Art Gala Reception</strong> · Oct 16, 2026 · 120 Guests · Call Time: 19:00",
-          tasks: [
-            {
-              text: "Gallery track lighting dimming profile and sculpture spotlight positioning",
-              checked: false,
-            },
-            {
-              text: "High-top timber cocktail table distribution and black linen draping",
-              checked: false,
-            },
-            {
-              text: "Champagne bar mobile chilling bins and glassware staging",
-              checked: false,
-            },
-            {
-              text: "Acoustic fabric baffles deployment along north brick wall for speech clarity",
-              checked: false,
-            },
-            {
-              text: "Attended coat check ticketing station and garment rail setup",
-              checked: false,
-            },
-            {
-              text: "Background ambient sound system playlist levels balanced",
-              checked: false,
-            },
-            {
-              text: "Curbside drop-off stanchions and velvet rope placement",
-              checked: false,
-            },
-            {
-              text: "Restroom amenity check and concierge hospitality basket stocked",
-              checked: false,
-            },
-          ],
-        },
-      };
+      // Live database data loaded seamlessly from PHP
+      const venueData = <?= json_encode($jsVenueData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+      let currentAssignmentId = <?= (int)$initialAssignmentId ?>;
 
-      let currentVenueId = 1;
+      function selectVenue(assignmentId) {
+        currentAssignmentId = assignmentId;
+        const data = venueData[assignmentId];
+        if (!data) return;
 
-      function selectVenue(id) {
-        currentVenueId = id;
-        // Update cards
-        for (let i = 1; i <= 3; i++) {
-          const card = document.getElementById("vcard-" + i);
+        // Update cards active states
+        Object.keys(venueData).forEach(function(aid) {
+          const card = document.getElementById("vcard-" + aid);
           if (card) {
-            if (i === id) {
+            if (parseInt(aid) === assignmentId) {
               card.classList.add("active");
             } else {
               card.classList.remove("active");
             }
           }
-        }
+        });
 
-        const data = venueData[id];
-        document.getElementById("venue-title").innerText = data.name;
+        // Update header details
+        document.getElementById("venue-title").innerText = data.venue_name;
         const pill = document.getElementById("venue-pill");
-        pill.innerText = data.status;
-        pill.className = "pill " + data.pillClass;
-        document.getElementById("venue-event-meta").innerHTML = data.meta;
+        pill.innerText = data.status_label;
+        pill.className = "pill " + data.pill_class;
+
+        document.getElementById("venue-event-meta").innerHTML = 
+          `Event: <strong>${escapeHtml(data.event_name)}</strong> · ${data.event_date} · ${data.guest_count} Guests · Call Time: ${data.call_time}`;
+
+        // Update completion notice card
+        const noticeTitle = document.getElementById("completion-notice-title");
+        const noticeDesc = document.getElementById("completion-notice-desc");
+        const submitBtn = document.getElementById("submitReportBtn");
+
+        if (data.setup_status === 'completed') {
+          noticeTitle.innerText = "✓ Event Setup Verified & Signed Off";
+          noticeTitle.style.color = "#15803d";
+          noticeDesc.innerHTML = `Completed and certified by <strong>${escapeHtml(data.reported_staff)}</strong> ${data.completed_at ? 'on ' + data.completed_at : ''}. All logistics permanently recorded in system.`;
+          if (submitBtn) {
+            submitBtn.innerHTML = "✓ Re-verify &amp; Update Setup Report →";
+          }
+        } else {
+          noticeTitle.innerText = "⚠️ Confirm Event Completion";
+          noticeTitle.style.color = "#16a34a";
+          noticeDesc.innerText = "By confirming, you verify that all setup requirements and teardown checklists are fulfilled for this assigned space.";
+          if (submitBtn) {
+            submitBtn.innerHTML = "Confirm completion &amp; Submit Report →";
+          }
+        }
 
         renderTasks();
       }
 
+      function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
       function renderTasks() {
-        const data = venueData[currentVenueId];
+        const data = venueData[currentAssignmentId];
+        if (!data) return;
         const container = document.getElementById("task-list-container");
         container.innerHTML = "";
 
@@ -673,37 +684,82 @@ $checklistItems = $defaultChecklist;
           const item = document.createElement("div");
           item.className = "task-item";
           item.innerHTML = `
-          <input type="checkbox" id="task-${index}" ${task.checked ? "checked" : ""} onchange="toggleTask(${index}, this.checked)">
-          <label for="task-${index}">
-            <span class="cb-box"></span>
-            <span class="task-text">${task.text}</span>
-          </label>
-        `;
+            <input type="checkbox" id="task-${index}" ${task.checked ? "checked" : ""} onchange="toggleTask(${index}, this.checked)">
+            <label for="task-${index}">
+              <span class="cb-box"></span>
+              <span class="task-text">${escapeHtml(task.text)}</span>
+            </label>
+          `;
           container.appendChild(item);
         });
 
         updateProgress();
       }
 
-      function toggleTask(index, isChecked) {
-        venueData[currentVenueId].tasks[index].checked = isChecked;
+      async function toggleTask(index, isChecked) {
+        const data = venueData[currentAssignmentId];
+        if (!data) return;
+        data.tasks[index].checked = isChecked;
         updateProgress();
+
+        // Auto-save checkbox states to database in real time
+        const total = data.tasks.length;
+        const completed = data.tasks.filter(t => t.checked).length;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const checklistObj = data.tasks.reduce(function(acc, t, i) { acc['task-' + i] = t.checked; return acc; }, {});
+
+        try {
+          await fetch('../api/staff.php?action=update_checklist', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              assignment_id: data.assignment_id,
+              checklist: checklistObj,
+              completion_pct: pct,
+              setup_status: (pct === 100 ? 'completed' : (pct > 0 ? 'in_progress' : 'pending'))
+            })
+          });
+        } catch (e) {
+          console.warn('Auto-save error:', e);
+        }
       }
 
       function toggleMarkAll() {
-        const tasks = venueData[currentVenueId].tasks;
+        const data = venueData[currentAssignmentId];
+        if (!data) return;
+        const tasks = data.tasks;
         const allChecked = tasks.every((t) => t.checked);
         const targetState = !allChecked;
 
         tasks.forEach((t) => (t.checked = targetState));
         renderTasks();
+
+        // Save batch mark
+        const total = tasks.length;
+        const completed = tasks.filter(t => t.checked).length;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const checklistObj = tasks.reduce(function(acc, t, i) { acc['task-' + i] = t.checked; return acc; }, {});
+
+        fetch('../api/staff.php?action=update_checklist', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            assignment_id: data.assignment_id,
+            checklist: checklistObj,
+            completion_pct: pct,
+            setup_status: (pct === 100 ? 'completed' : 'in_progress')
+          })
+        }).catch(err => console.warn(err));
       }
 
       function updateProgress() {
-        const tasks = venueData[currentVenueId].tasks;
+        const data = venueData[currentAssignmentId];
+        if (!data) return;
+        const tasks = data.tasks;
         const total = tasks.length;
         const completed = tasks.filter((t) => t.checked).length;
         const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+        data.completion_pct = percent;
 
         document.getElementById("task-progress-text").innerText =
           `${completed} / ${total} (${percent}%)`;
@@ -720,81 +776,135 @@ $checklistItems = $defaultChecklist;
 
       // Initialize on load
       document.addEventListener("DOMContentLoaded", () => {
-        selectVenue(1);
+        if (currentAssignmentId > 0 && typeof venueData !== 'undefined' && venueData[currentAssignmentId]) {
+          selectVenue(currentAssignmentId);
+        }
       });
     </script>
-<script src="../js/app.js"></script>
-<script>
-// ----- Submit Report -----
-var submitBtn = document.getElementById('submitReportBtn');
-var cancelBtn = document.getElementById('cancelReportBtn');
-var reportAlert = document.getElementById('reportAlert');
+    <script src="../js/app.js"></script>
+    <script>
+      // ----- Submit Report -----
+      const submitBtn = document.getElementById('submitReportBtn');
+      const cancelBtn = document.getElementById('cancelReportBtn');
+      const reportAlert = document.getElementById('reportAlert');
 
-if (submitBtn) {
-  submitBtn.addEventListener('click', async function() {
-    var tasks = venueData[currentVenueId] ? venueData[currentVenueId].tasks : [];
-    var total = tasks.length;
-    var completed = tasks.filter(function(t) { return t.checked; }).length;
-    var pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      if (submitBtn) {
+        submitBtn.addEventListener('click', async function() {
+          const data = venueData[currentAssignmentId];
+          if (!data) return;
 
-    if (pct < 100 && !confirm('Only ' + pct + '% of tasks completed. Submit report anyway?')) return;
+          // Mark all tasks checked upon confirming completion
+          data.tasks.forEach(t => t.checked = true);
+          renderTasks();
+          updateProgress();
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Submitting...';
-    reportAlert.style.display = 'none';
+          submitBtn.disabled = true;
+          const origText = submitBtn.textContent;
+          submitBtn.textContent = 'Submitting & Finalizing...';
+          reportAlert.style.display = 'none';
 
-    var payload = {
-      assignment_id: <?= $setupAssignment ? (int)$setupAssignment['id'] : 0 ?>,
-      completion_pct: pct,
-      venue_name: '<?= $setupAssignment ? addslashes(e($setupAssignment['venue_name'])) : '' ?>',
-      staff_name: '<?= addslashes(e($currentUser['name'] ?? '')) ?>',
-      checklist: tasks.reduce(function(acc, t, i) { acc['task-' + i] = t.checked; return acc; }, {})
-    };
+          const checklistObj = data.tasks.reduce(function(acc, t, i) { acc['task-' + i] = true; return acc; }, {});
 
-    try {
-      var res = await fetch('../api/staff.php?action=submit_report', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
-      var d = await res.json();
-      if (d.success) {
-        reportAlert.style.display = 'block';
-        reportAlert.style.background = '#dcfce7';
-        reportAlert.style.color = '#166534';
-        reportAlert.textContent = '✓ Report submitted successfully! Completion: ' + pct + '%. Redirecting...';
-        setTimeout(function() { window.location.href = 'staff-dashboard.php'; }, 1500);
-      } else {
-        reportAlert.style.display = 'block';
-        reportAlert.style.background = '#fee2e2';
-        reportAlert.style.color = '#991b1b';
-        reportAlert.textContent = '⚠️ ' + (d.message || 'Could not submit report.');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Confirm completion & Submit Report →';
+          const payload = {
+            assignment_id: data.assignment_id,
+            completion_pct: 100,
+            venue_name: data.venue_name,
+            staff_name: '<?= addslashes(e($currentUser['name'] ?? 'Staff Coordinator')) ?>',
+            checklist: checklistObj
+          };
+
+          try {
+            const res = await fetch('../api/staff.php?action=submit_report', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify(payload)
+            });
+            const d = await res.json();
+            if (d && d.success) {
+              // Update local state permanently
+              data.setup_status = 'completed';
+              data.status_label = 'READY / COMPLETED';
+              data.pill_class = 'pill-confirmed';
+              data.completion_pct = 100;
+              data.reported_staff = '<?= addslashes(e($currentUser['name'] ?? 'Staff Coordinator')) ?>';
+              data.completed_at = 'Just now';
+
+              // Update top selector badge
+              const topPill = document.getElementById("vcard-pill-" + data.assignment_id);
+              if (topPill) {
+                topPill.className = "pill pill-confirmed";
+                topPill.innerText = "READY";
+              }
+
+              // Update main card pill
+              const mainPill = document.getElementById("venue-pill");
+              if (mainPill) {
+                mainPill.className = "pill pill-confirmed";
+                mainPill.innerText = "READY / COMPLETED";
+              }
+
+              // Update completion notice card
+              const noticeTitle = document.getElementById("completion-notice-title");
+              const noticeDesc = document.getElementById("completion-notice-desc");
+              if (noticeTitle) {
+                noticeTitle.innerText = "✓ Event Setup Verified & Signed Off";
+                noticeTitle.style.color = "#15803d";
+              }
+              if (noticeDesc) {
+                noticeDesc.innerHTML = `Completed and certified by <strong>${escapeHtml(data.reported_staff)}</strong> Just now. All logistics permanently recorded in system.`;
+              }
+
+              reportAlert.style.display = 'block';
+              reportAlert.style.background = '#dcfce7';
+              reportAlert.style.color = '#166534';
+              reportAlert.innerHTML = `✓ Event Setup Report confirmed &amp; submitted successfully!<br>Status permanently updated to <strong>READY / COMPLETED (100%)</strong> across project. Redirecting to Staff Dashboard...`;
+              
+              setTimeout(function() { 
+                window.location.href = 'staff-dashboard.php'; 
+              }, 1200);
+            } else {
+              reportAlert.style.display = 'block';
+              reportAlert.style.background = '#fee2e2';
+              reportAlert.style.color = '#991b1b';
+              reportAlert.textContent = '⚠️ ' + (d.message || 'Could not submit report.');
+              submitBtn.disabled = false;
+              submitBtn.textContent = origText;
+            }
+          } catch(e) {
+            console.error(e);
+            reportAlert.style.display = 'block';
+            reportAlert.style.background = '#fee2e2';
+            reportAlert.style.color = '#991b1b';
+            reportAlert.textContent = '⚠️ Connection error. Please try again.';
+            submitBtn.disabled = false;
+            submitBtn.textContent = origText;
+          }
+        });
       }
-    } catch(e) {
-      reportAlert.style.display = 'block';
-      reportAlert.style.background = '#fee2e2';
-      reportAlert.style.color = '#991b1b';
-      reportAlert.textContent = '⚠️ Connection error. Please try again.';
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Confirm completion & Submit Report →';
-    }
-  });
-}
 
-// ----- Cancel: reset all checkboxes & progress bar -----
-if (cancelBtn) {
-  cancelBtn.addEventListener('click', function() {
-    if (!confirm('Reset all task checkboxes? Unsaved progress will be lost.')) return;
-    if (venueData[currentVenueId]) {
-      venueData[currentVenueId].tasks.forEach(function(t) { t.checked = false; });
-      renderTasks();
-    }
-    if (reportAlert) { reportAlert.style.display = 'none'; }
-  });
-}
-</script>
-</body>
+      // ----- Cancel / Reset all checkboxes -----
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+          const data = venueData[currentAssignmentId];
+          if (!data) return;
+          if (!confirm('Reset all checkboxes for ' + data.venue_name + '?')) return;
+          data.tasks.forEach(function(t) { t.checked = false; });
+          renderTasks();
+
+          // Save reset to DB
+          const checklistObj = data.tasks.reduce(function(acc, t, i) { acc['task-' + i] = false; return acc; }, {});
+          fetch('../api/staff.php?action=update_checklist', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              assignment_id: data.assignment_id,
+              checklist: checklistObj,
+              completion_pct: 0,
+              setup_status: 'in_progress'
+            })
+          }).catch(err => console.warn(err));
+        });
+      }
+    </script>
+  </body>
 </html>
-
